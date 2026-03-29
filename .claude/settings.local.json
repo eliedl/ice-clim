@@ -1,0 +1,40 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(wc -l c:/Users/dumas/Documents/perso/ice-clim/docs/*.md)",
+      "Bash(python scripts/daily_coverage_scorecard.py)",
+      "Bash(python -m venv .venv)",
+      "Bash(.venv/Scripts/pip install:*)",
+      "Bash(.venv/Scripts/python scripts/daily_coverage_scorecard.py)",
+      "Bash(python -c \":*)",
+      "Bash(while read:*)",
+      "Bash(do echo:*)",
+      "Read(//c/Users/dumas/Documents/archive/ice-raw-data-MPO/**)",
+      "Bash(done)",
+      "Bash(python3 -c \":*)",
+      "Bash(c:/Users/dumas/Documents/perso/ice-clim/Scripts/python.exe -c \"import sys; print\\(sys.version\\)\")",
+      "Bash(c:/Users/dumas/Documents/perso/ice-clim/Scripts/pip.exe list:*)",
+      "Bash(\"c:/Users/dumas/Documents/perso/ice-clim/.venv/Scripts/python.exe\" -c \"import sys; print\\(sys.version\\)\")",
+      "Bash(\"c:/Users/dumas/Documents/perso/ice-clim/.venv/Scripts/pip.exe\" list:*)",
+      "Bash(docker --version)",
+      "Bash(pg_isready)",
+      "Bash(psql --version)",
+      "Bash(docker ps:*)",
+      "Bash(docker images:*)",
+      "Bash(\"c:/Users/dumas/Documents/perso/ice-clim/.venv/Scripts/pip.exe\" install:*)",
+      "Bash(docker compose:*)",
+      "Bash(docker exec:*)",
+      "Bash(source .env)",
+      "Bash(export POSTGRES_PASSWORD POSTGRES_PORT POSTGRES_DB POSTGRES_USER)",
+      "Bash(.venv/Scripts/python.exe scripts/ingest_gec_d.py)",
+      "Bash(.venv/Scripts/python.exe -:*)",
+      "Bash(\"c:/Users/dumas/Documents/perso/ice-clim/.venv/Scripts/pip.exe\" show:*)",
+      "Bash(.venv/Scripts/python.exe -c \":*)",
+      "Bash(cd \"c:/Users/dumas/Documents/perso/ice-clim\" && .venv/Scripts/python.exe:*)",
+      "Bash(.venv/Scripts/python.exe scripts/first_ice_climatology.py)",
+      "mcp__claude_ai_Notion__notion-create-pages",
+      "mcp__claude_ai_Notion__notion-fetch",
+      "mcp__claude_ai_Notion__notion-update-page"
+    ]
+  }
+}
