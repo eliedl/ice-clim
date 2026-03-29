@@ -39,9 +39,9 @@ log = logging.getLogger(__name__)
 # ─────────────────────────────────────────────────────────────────────────────
 
 BBOX_SHP   = Path("D:/professionnel/bbox_sept-iles")
-GRID_RES   = 100            # metres
+GRID_RES   = 25            # metres
 GRID_CRS   = 26919          # NAD83 / UTM Zone 19N
-CT_MIN     = 50             # SIGRID3 code for > 4/10 concentration
+CT_MIN     = 80             # SIGRID3 code for > 4/10 concentration
 SEASON_MIN = "2010-09-01"   # first season_start — winter 2011
 SEASON_MAX = "2019-09-01"   # last season_start  — winter 2020
 OUTPUT     = Path(__file__).parent.parent / "docs" / "first_ice_sept-iles.png"
@@ -173,21 +173,70 @@ def run():
 # Visualization
 # ─────────────────────────────────────────────────────────────────────────────
 
-def _plot(median_days, n_seasons, xmin, ymin, xmax, ymax):
-    tick_days   = [0,  31,  61,  92, 122, 153, 184, 212]
-    tick_labels = ["Sep 1", "Oct 1", "Nov 1", "Dec 1",
-                   "Jan 1", "Feb 1", "Mar 1", "Apr 1"]
+def _make_monthly_cmap():
+    """
+    Five-month sequential colormap (Nov → Mar), one colour per month.
 
-    vmin = 0
-    vmax = tick_days[-1]
+    Within each month the alpha fades linearly from 1.0 (month start) to
+    0.3 (month end), creating visible band boundaries without hard edges.
+
+    Palette:
+        #007191  deep teal    — Nov
+        #62c8d3  light cyan   — Dec
+        #f5c84a  golden amber — Jan  [bridge: CIELAB midpoint between the
+                                       cyan and orange groups; L=62 for
+                                       accessibility; safe for deuteranopia]
+        #f47a00  orange       — Feb
+        #d31f11  deep red     — Mar
+
+    Returns (cmap, vmin, vmax, bounds) where bounds are the day-of-season
+    values [61, 91, 122, 153, 181, 212] at each month boundary (from Sep 1):
+        Sep(30) + Oct(31) = 61  → Nov 1
+        + Nov(30)          = 91  → Dec 1
+        + Dec(31)          = 122 → Jan 1
+        + Jan(31)          = 153 → Feb 1
+        + Feb(28)          = 181 → Mar 1
+        + Mar(31)          = 212 → Apr 1
+    """
+    COLORS = ["#007191", "#62c8d3", "#f5c84a", "#f47a00", "#d31f11"]
+    BOUNDS = [61, 91, 122, 153, 181, 212]
+    VMIN, VMAX = BOUNDS[0], BOUNDS[-1]
+    total = VMAX - VMIN  # 151 days
+
+    EPS = 1e-6
+    stops = []
+    for i, col in enumerate(COLORS):
+        p0 = (BOUNDS[i]     - VMIN) / total
+        p1 = (BOUNDS[i + 1] - VMIN) / total
+        r, g, b = mcolors.to_rgb(col)
+        if i == 0:
+            stops.append((p0, (r, g, b, 1.0)))        # Nov 1: full opacity
+        stops.append((p1 - EPS, (r, g, b, 0.3)))      # end of month: 30 %
+        if i < len(COLORS) - 1:
+            r2, g2, b2 = mcolors.to_rgb(COLORS[i + 1])
+            stops.append((p1, (r2, g2, b2, 1.0)))     # next month: full opacity
+    stops.append((1.0, (*mcolors.to_rgb(COLORS[-1]), 0.3)))  # Mar 31
+
+    cmap = mcolors.LinearSegmentedColormap.from_list("monthly_ice", stops, N=1024)
+    cmap.set_under(mcolors.to_rgba(COLORS[0], 1.0))   # pre-Nov ice → full teal
+    cmap.set_bad("none")                               # NaN → transparent
+    return cmap, VMIN, VMAX, BOUNDS
+
+
+def _plot(median_days, n_seasons, xmin, ymin, xmax, ymax):
+    cmap, vmin, vmax, bounds = _make_monthly_cmap()
+
+    tick_days   = bounds
+    tick_labels = ["Nov 1", "Dec 1", "Jan 1", "Feb 1", "Mar 1", "Apr 1"]
 
     fig, ax = plt.subplots(figsize=(10, 9))
+    ax.set_facecolor("white")
 
     im = ax.imshow(
         median_days,
         origin="lower",
         extent=[xmin, xmax, ymin, ymax],
-        cmap="YlOrRd",
+        cmap=cmap,
         vmin=vmin,
         vmax=vmax,
         interpolation="none",
@@ -195,12 +244,12 @@ def _plot(median_days, n_seasons, xmin, ymin, xmax, ymax):
 
     cbar = fig.colorbar(im, ax=ax, orientation="horizontal",
                         fraction=0.046, pad=0.06,
-                        label="Median day of first ice (CT > 4/10)")
+                        label="Median day of first ice (CT >= 8/10)")
     cbar.set_ticks(tick_days)
     cbar.set_ticklabels(tick_labels, fontsize=8)
 
     ax.set_title(
-        "Median day of first ice (CT > 4/10)\nSept-Îles region — winters 2011–2020",
+        "Median day of first ice (CT >= 8/10)\nSept-Îles region — winters 2011–2020",
         fontsize=12, pad=10,
     )
     ax.set_xlabel("Easting (m, NAD83 UTM 19N)")
@@ -209,7 +258,7 @@ def _plot(median_days, n_seasons, xmin, ymin, xmax, ymax):
 
     fig.text(
         0.01, 0.01,
-        "Source: CIS SIGRID3 daily charts (GEC_D) | Grid: 100 m EPSG:26919 | "
+        "Source: CIS SIGRID3 daily charts (GEC_D) | Grid: 25 m EPSG:26919 | "
         "[NEEDS REVIEW] spatial resolution reflects CIS polygon scale",
         fontsize=6, color="grey",
     )

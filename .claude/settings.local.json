@@ -34,7 +34,8 @@
       "Bash(.venv/Scripts/python.exe scripts/first_ice_climatology.py)",
       "mcp__claude_ai_Notion__notion-create-pages",
       "mcp__claude_ai_Notion__notion-fetch",
-      "mcp__claude_ai_Notion__notion-update-page"
+      "mcp__claude_ai_Notion__notion-update-page",
+      "mcp__claude_ai_Notion__notion-search"
     ]
   }
 }
