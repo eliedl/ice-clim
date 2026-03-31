@@ -35,7 +35,8 @@
       "mcp__claude_ai_Notion__notion-create-pages",
       "mcp__claude_ai_Notion__notion-fetch",
       "mcp__claude_ai_Notion__notion-update-page",
-      "mcp__claude_ai_Notion__notion-search"
+      "mcp__claude_ai_Notion__notion-search",
+      "Bash(MSYS_NO_PATHCONV=1 docker exec ice-clim-db pg_restore --list /var/tmp/ice_clim.dump)"
     ]
   }
 }
