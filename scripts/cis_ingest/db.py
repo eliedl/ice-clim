@@ -1,6 +1,5 @@
 import os
 import sys
-from datetime import timezone
 from pathlib import Path
 
 from dotenv import load_dotenv
@@ -25,6 +24,4 @@ def get_ingested(engine, table: str) -> set[tuple]:
         rows = conn.execute(
             text(f'SELECT DISTINCT "T1", region FROM {table}')
         ).fetchall()
-    # psycopg2 returns naive datetimes for TIMESTAMPTZ — normalise to UTC-aware.
-    # See smoke_test_ingest.py for validation of this assumption.
-    return {(row[0].replace(tzinfo=timezone.utc), row[1]) for row in rows}
+    return {(row[0], row[1]) for row in rows}

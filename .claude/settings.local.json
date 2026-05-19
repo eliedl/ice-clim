@@ -64,7 +64,8 @@
       "Bash(awk '/3\\\\.6.*ITEMS TO KEEP/,/^4\\\\.|^REFERENCES/')",
       "WebFetch(domain:iceweb1.cis.ec.gc.ca)",
       "Bash(awk -F'\\\\t' 'NR>=300')",
-      "Bash(grep -v \"^--$\")"
+      "Bash(grep -v \"^--$\")",
+      "Bash(python scripts/smoke_test_ingest.py --n 10)"
     ]
   }
 }

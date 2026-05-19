@@ -72,15 +72,9 @@ def main():
     n_naive = sum(1 for r in rows if r[0].tzinfo is None)
     log.info("Driver returns: %d aware, %d naive datetimes for TIMESTAMPTZ.", n_aware, n_naive)
     if n_naive:
-        log.warning(
-            "psycopg2 returns naive datetimes — "
-            "get_ingested() .replace(tzinfo=utc) workaround is REQUIRED."
-        )
+        log.warning("psycopg2 returns naive datetimes — get_ingested() must normalise to UTC.")
     else:
-        log.warning(
-            "psycopg2 returns aware datetimes — "
-            "get_ingested() .replace(tzinfo=utc) is INCORRECT, update it."
-        )
+        log.info("psycopg2 returns UTC-aware datetimes — no normalisation needed in get_ingested().")
 
     found = {(_to_utc(r[0]), r[1]) for r in rows}
     missing = {
