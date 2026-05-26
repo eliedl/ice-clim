@@ -414,4 +414,17 @@ Decisions DEC-003, DEC-007, DEC-008, DEC-010, DEC-012, DEC-015, DEC-019, DEC-020
 
 ---
 
+## DEC-025 — CT Threshold for Freeze-Up and Break-Up Date Climatologies
+
+- **Context**: The freeze-up date and break-up date metrics each reduce to a per-cell "first/last date of observed ice" computation. Two plausible thresholds exist for what counts as "ice present": (a) any ice at all (CT >= 1), or (b) a meaningful concentration (CT >= 4/10, i.e. CT_MIN = 40 in SIGRID3 encoding).
+- **Options considered**:
+  1. **CT >= 1 — first/last occurrence of any ice.** Captures the full extent of ice presence including transient slush and isolated polygons.
+  2. **CT >= 40 — first/last occurrence of >= 4/10 concentration.** Filters out transient low-concentration events and aligns with the CIS production convention.
+- **Choice made**: Option 2 (CT >= 40 / CT_MIN = 40).
+- **Rationale**: CIS uses CT >= 40 to define freeze-up and break-up dates. The "first/last occurrence at CT >= 1" definition is rejected because ice presence at CT < 40 is not guaranteed to persist; using it would produce climatology dates that depend on individual transient observations rather than the establishment of a stable ice cover. User-confirmed convention per CIS practice; written source citation pending the Wilson/CIS outreach (see WORK_TASKS clim-001).
+- **Validation status**: APPROVED (2026-05-26) — pending written CIS source citation for the file record.
+- **References**: scripts/climatology_metrics.py:FreezeUpDateMetric.ct_min; clim-001 outreach.
+
+---
+
 *All decisions logged as PENDING. No scientific assumption has been finalized. This log will be updated as decisions are validated.*
