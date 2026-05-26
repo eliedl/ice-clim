@@ -38,13 +38,13 @@ log = logging.getLogger(__name__)
 # Configuration
 # ─────────────────────────────────────────────────────────────────────────────
 
-BBOX_SHP   = Path("D:/professionnel/bbox_sept-iles")
+BBOX_SHP   = Path("/home/eliedl/data/reference/climatology_bbox/sept-iles/bbox_sept-iles.geojson")
 GRID_RES   = 25            # metres
 GRID_CRS   = 26919          # NAD83 / UTM Zone 19N
-CT_MIN     = 80             # SIGRID3 code for > 4/10 concentration
+CT_MIN     = 40             # SIGRID3 code for > 4/10 concentration
 SEASON_MIN = "2010-09-01"   # first season_start — winter 2011
 SEASON_MAX = "2019-09-01"   # last season_start  — winter 2020
-OUTPUT     = Path(__file__).parent.parent / "docs" / "first_ice_sept-iles.png"
+OUTPUT     = Path(__file__).parent.parent / "output" / "first_ice_sept-iles.png"
 
 
 # ─────────────────────────────────────────────────────────────────────────────
@@ -104,20 +104,20 @@ def run():
     SQL = f"""
         SELECT
             ST_AsText(ST_Transform(geometry, {GRID_CRS})) AS geom_wkt,
-            t1::date AS obs_date,
+            "T1"::date AS obs_date,
             CASE
-                WHEN EXTRACT(MONTH FROM t1) >= 9
-                THEN (EXTRACT(YEAR FROM t1)::text || '-09-01')::date
-                ELSE ((EXTRACT(YEAR FROM t1)::int - 1)::text || '-09-01')::date
+                WHEN EXTRACT(MONTH FROM "T1") >= 9
+                THEN (EXTRACT(YEAR FROM "T1")::text || '-09-01')::date
+                ELSE ((EXTRACT(YEAR FROM "T1")::int - 1)::text || '-09-01')::date
             END AS season_start
         FROM sgrda
-        WHERE ct::int >= {CT_MIN}
-          AND (poly_type IS NULL OR poly_type != 'L')
+        WHERE "CT"::int >= {CT_MIN}
+          AND ("POLY_TYPE" IS NULL OR "POLY_TYPE" != 'L')
           AND ST_Intersects(geometry, ST_GeomFromText(:bbox_wkt, 4326))
           AND CASE
-                  WHEN EXTRACT(MONTH FROM t1) >= 9
-                  THEN (EXTRACT(YEAR FROM t1)::text || '-09-01')::date
-                  ELSE ((EXTRACT(YEAR FROM t1)::int - 1)::text || '-09-01')::date
+                  WHEN EXTRACT(MONTH FROM "T1") >= 9
+                  THEN (EXTRACT(YEAR FROM "T1")::text || '-09-01')::date
+                  ELSE ((EXTRACT(YEAR FROM "T1")::int - 1)::text || '-09-01')::date
               END BETWEEN '{SEASON_MIN}' AND '{SEASON_MAX}'
         ORDER BY season_start, obs_date;
     """
@@ -234,7 +234,7 @@ def _plot(median_days, n_seasons, xmin, ymin, xmax, ymax):
 
     im = ax.imshow(
         median_days,
-        origin="lower",
+        origin="upper",
         extent=[xmin, xmax, ymin, ymax],
         cmap=cmap,
         vmin=vmin,

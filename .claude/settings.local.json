@@ -65,7 +65,15 @@
       "WebFetch(domain:iceweb1.cis.ec.gc.ca)",
       "Bash(awk -F'\\\\t' 'NR>=300')",
       "Bash(grep -v \"^--$\")",
-      "Bash(python scripts/smoke_test_ingest.py --n 10)"
+      "Bash(python scripts/smoke_test_ingest.py --n 10)",
+      "Bash(find /home/eliedl/data -type d | grep -i sgrdr | head -20)",
+      "Read(//home/eliedl/data/**)",
+      "Read(//tmp/**)",
+      "Bash(tar xf *)",
+      "Bash(ogrinfo -al -so /tmp/cis_SGRDREC_20260209T1800Z_pl_a.shp)",
+      "Bash(ogrinfo -al -so /tmp/sgrdr_old/CIS_EC_19690108_pl_a.shp)",
+      "Bash(ogrinfo /tmp/sgrdr_old/CIS_EC_19690108_pl_a.shp -al -q)",
+      "Read(//home/eliedl/dotfiles/**)"
     ]
   }
 }
