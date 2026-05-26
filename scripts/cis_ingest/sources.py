@@ -1,6 +1,5 @@
 import logging
 import re
-from abc import ABC, abstractmethod
 from collections import defaultdict
 from dataclasses import dataclass
 from datetime import datetime, timezone
@@ -12,12 +11,14 @@ DATA_ROOT = Path("/home/eliedl/data")
 
 _REV_RANK = {"a": 0, "b": 1, "c": 2}
 
+# --- SGRDA ---
+
 _SGRDA_CLEAN_RE = re.compile(
-    r"^cis_SGRDA(GULF|WIS28)_(\d{8})(T(\d{2})(\d{2})Z)?_pl_([abc])\.tar$",
+    r"^cis_SGRDA(?P<region>GULF|WIS28)_(?P<date>\d{8})(T(?P<hour>\d{2})(?P<minute>\d{2})Z)?_pl_(?P<rev>[abc])\.tar$",
     re.IGNORECASE,
 )
 _SGRDA_SUFFIX_RE = re.compile(
-    r"^cis_SGRDA(GULF|WIS28)_(\d{8})(T(\d{2})(\d{2})Z)?_pl_([abc])_(\d{14})\.tar$",
+    r"^cis_SGRDA(?P<region>GULF|WIS28)_(?P<date>\d{8})(T(?P<hour>\d{2})(?P<minute>\d{2})Z)?_pl_(?P<rev>[abc])_(?P<ts>\d{14})\.tar$",
     re.IGNORECASE,
 )
 
@@ -29,72 +30,98 @@ SGRDA_KEEP = frozenset({
     "geometry",
 })
 
+# --- SGRDREC ---
+
+# Era 1 (1968–2019): ZIP, date-only, pl_a only, NAD27 → reproject on ingest
+_SGRDREC_OLD_CLEAN_RE = re.compile(
+    r"^CIS_(?P<region>EC)_(?P<date>\d{8})_pl_(?P<rev>a)\.zip$",
+    re.IGNORECASE,
+)
+# Era 2 (2020–present): TAR, optional timestamp, pl_a/b/c, WGS84 → reproject on ingest
+_SGRDREC_NEW_CLEAN_RE = re.compile(
+    r"^cis_SGRDR(?P<region>EC)_(?P<date>\d{8})(T(?P<hour>\d{2})(?P<minute>\d{2})Z)?_pl_(?P<rev>[abc])\.tar$",
+    re.IGNORECASE,
+)
+_SGRDREC_NEW_SUFFIX_RE = re.compile(
+    r"^cis_SGRDR(?P<region>EC)_(?P<date>\d{8})(T(?P<hour>\d{2})(?P<minute>\d{2})Z)?_pl_(?P<rev>[abc])_(?P<ts>\d{14})\.tar$",
+    re.IGNORECASE,
+)
+
+SGRDREC_KEEP = frozenset({
+    "POLY_TYPE",
+    "CT", "CA", "CB", "CC", "CN",
+    "SA", "SB", "SC", "CD",
+    "FA", "FB", "FC", "CF",
+    "geometry",
+})
+
 
 @dataclass
-class ChartSource(ABC):
+class ChartSource:
+    """
+    Discovers archives for one chart type.
+
+    clean_res:         patterns for final-published archives (c > b > a revision ranking).
+                       Tried in order; first match wins.
+    suffix_res:        patterns for timestamped-suffix production saves (fallback only when
+                       no clean archive exists for that date).
+    file_globs:        shell globs used to enumerate candidates in each directory.
+    region_label_map:  maps regex-captured region code (uppercase) to the DB label string.
+    """
     label: str
     table: str
     keep_fields: frozenset
-
-    @abstractmethod
-    def discover(self) -> list[tuple[Path, datetime, str]]:
-        ...
-
-
-@dataclass
-class SGRDASource(ChartSource):
-    """
-    SGRDA chart source (Gulf and WIS28 regions, co-located in one directory).
-
-    Revision selection: highest-revision clean archive (c > b > a) per chart date.
-    Fallback: most-recent timestamped-suffix archive, only when no clean version
-    exists for that date (2 known cases in the full dataset).
-    """
-    directory: Path
-    clean_re: re.Pattern
-    suffix_re: re.Pattern
+    directories: list[Path]
+    clean_res: list[re.Pattern]
+    suffix_res: list[re.Pattern]
+    region_label_map: dict[str, str]
+    file_globs: tuple[str, ...] = ("*.tar",)
 
     def discover(self) -> list[tuple[Path, datetime, str]]:
         best_clean: dict = {}
         suffix_by_date: dict = defaultdict(list)
 
-        for tar_path in self.directory.glob("*.tar"):
-            m = self.clean_re.match(tar_path.name)
-            if m:
-                region_code = m.group(1).upper()
-                date_str    = m.group(2)
-                hour        = int(m.group(4)) if m.group(4) else 18
-                minute      = int(m.group(5)) if m.group(5) else 0
-                rev         = _REV_RANK[m.group(6).lower()]
-                key = (region_code, date_str)
-                if key not in best_clean or rev > best_clean[key][0]:
-                    best_clean[key] = (rev, hour, minute, tar_path)
-                continue
-
-            m = self.suffix_re.match(tar_path.name)
-            if m:
-                region_code = m.group(1).upper()
-                date_str    = m.group(2)
-                hour        = int(m.group(4)) if m.group(4) else 18
-                minute      = int(m.group(5)) if m.group(5) else 0
-                rev         = _REV_RANK[m.group(6).lower()]
-                ts          = m.group(7)
-                suffix_by_date[(region_code, date_str)].append(
-                    (rev, ts, hour, minute, tar_path)
-                )
+        for directory in self.directories:
+            for glob_pat in self.file_globs:
+                for path in directory.glob(glob_pat):
+                    for clean_re in self.clean_res:
+                        m = clean_re.match(path.name)
+                        if m:
+                            region_code = m.group("region").upper()
+                            date_str    = m.group("date")
+                            hour        = int(m.group("hour"))   if m.group("hour")   else 18
+                            minute      = int(m.group("minute")) if m.group("minute") else 0
+                            rev         = _REV_RANK[m.group("rev").lower()]
+                            key = (region_code, date_str)
+                            if key not in best_clean or rev > best_clean[key][0]:
+                                best_clean[key] = (rev, hour, minute, path)
+                            break
+                    else:
+                        for suffix_re in self.suffix_res:
+                            m = suffix_re.match(path.name)
+                            if m:
+                                region_code = m.group("region").upper()
+                                date_str    = m.group("date")
+                                hour        = int(m.group("hour"))   if m.group("hour")   else 18
+                                minute      = int(m.group("minute")) if m.group("minute") else 0
+                                rev         = _REV_RANK[m.group("rev").lower()]
+                                ts          = m.group("ts")
+                                suffix_by_date[(region_code, date_str)].append(
+                                    (rev, ts, hour, minute, path)
+                                )
+                                break
 
         results = []
 
-        for (region_code, date_str), (_, hour, minute, tar_path) in best_clean.items():
-            results.append((tar_path, _parse_t1(date_str, hour, minute), _label(region_code)))
+        for (region_code, date_str), (_, hour, minute, path) in best_clean.items():
+            results.append((path, _parse_t1(date_str, hour, minute), self.region_label_map[region_code]))
 
         for (region_code, date_str), sfx_list in suffix_by_date.items():
             if (region_code, date_str) in best_clean:
                 continue
-            _, ts, hour, minute, tar_path = max(sfx_list, key=lambda x: (x[0], x[1]))
-            t1 = _parse_t1(date_str, hour, minute)
-            results.append((tar_path, t1, _label(region_code)))
-            log.warning("Suffix fallback for %s %s: %s", region_code, date_str, tar_path.name)
+            _, ts, hour, minute, path = max(sfx_list, key=lambda x: (x[0], x[1]))
+            results.append((path, _parse_t1(date_str, hour, minute), self.region_label_map[region_code]))
+            log.warning("Suffix fallback for %s %s: %s", region_code, date_str, path.name)
 
         results.sort(key=lambda x: x[1])
         return results
@@ -107,15 +134,23 @@ def _parse_t1(date_str: str, hour: int, minute: int) -> datetime:
     )
 
 
-def _label(region_code: str) -> str:
-    return "gulf" if region_code == "GULF" else "wis28"
-
-
-SGRDA_SOURCE = SGRDASource(
+SGRDA_SOURCE = ChartSource(
     label="SGRDA",
     table="sgrda",
     keep_fields=SGRDA_KEEP,
-    directory=DATA_ROOT / "SGRDA" / "wis28",
-    clean_re=_SGRDA_CLEAN_RE,
-    suffix_re=_SGRDA_SUFFIX_RE,
+    directories=[DATA_ROOT / "SGRDA" / "GULF", DATA_ROOT / "SGRDA" / "wis28"],
+    clean_res=[_SGRDA_CLEAN_RE],
+    suffix_res=[_SGRDA_SUFFIX_RE],
+    region_label_map={"GULF": "gulf", "WIS28": "wis28"},
+)
+
+SGRDREC_SOURCE = ChartSource(
+    label="SGRDREC",
+    table="sgrdrec",
+    keep_fields=SGRDREC_KEEP,
+    directories=[DATA_ROOT / "SGRDR" / "EC"],
+    clean_res=[_SGRDREC_OLD_CLEAN_RE, _SGRDREC_NEW_CLEAN_RE],
+    suffix_res=[_SGRDREC_NEW_SUFFIX_RE],
+    region_label_map={"EC": "rec"},
+    file_globs=("*.tar", "*.zip"),
 )
