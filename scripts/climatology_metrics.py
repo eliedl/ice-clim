@@ -115,3 +115,63 @@ class FreezeUpDateMetric(Metric):
             (SEASON_ORIGIN + timedelta(days=int(round(d)))).strftime("%b %d")
             for d in tick_values
         ]
+
+
+class BreakupDateMetric(Metric):
+    """Median day-of-season at which a cell was last observed with CT >= ct_min.
+
+    CIS convention: break-up is defined as the last observation of total
+    concentration >= 4/10 (CT_MIN = 40), symmetric with freeze-up. The
+    "last occurrence at CT >= 1" definition is rejected for the same
+    persistence reason — see docs/DECISIONS.md DEC-025.
+
+    Note on mid-season melt-refreeze: this metric returns the latest date of
+    presence across the season, with no persistence rule. A cell that has
+    ice in Dec, no ice in Jan, then ice again in Feb will yield break-up =
+    Feb, not Jan. Adding a persistence rule is deferred pending Wilson/CIS
+    methodology feedback (WORK_TASKS clim-001).
+    """
+
+    slug = "breakup_date"
+    display_label = "Median date of break-up (CT >= 4/10)"
+    ct_min = 40
+
+    def sql(self, *, grid_crs, season_min, season_max):
+        sql = f"""
+            SELECT
+                ST_AsText(ST_Transform(geometry, {grid_crs})) AS geom_wkt,
+                "T1"::date AS obs_date,
+                CASE
+                    WHEN EXTRACT(MONTH FROM "T1") >= 9
+                    THEN (EXTRACT(YEAR FROM "T1")::text || '-09-01')::date
+                    ELSE ((EXTRACT(YEAR FROM "T1")::int - 1)::text || '-09-01')::date
+                END AS season_start
+            FROM sgrda
+            WHERE "CT"::int >= {self.ct_min}
+              AND ("POLY_TYPE" IS NULL OR "POLY_TYPE" != 'L')
+              AND ST_Intersects(geometry, ST_GeomFromText(:bbox_wkt, 4326))
+              AND CASE
+                      WHEN EXTRACT(MONTH FROM "T1") >= 9
+                      THEN (EXTRACT(YEAR FROM "T1")::text || '-09-01')::date
+                      ELSE ((EXTRACT(YEAR FROM "T1")::int - 1)::text || '-09-01')::date
+                  END BETWEEN '{season_min}' AND '{season_max}'
+            ORDER BY season_start, obs_date;
+        """
+        return sql, {}
+
+    def reduce_season(self, season_df, *, transform, height, width, burn):
+        season_start = season_df["season_start"].iloc[0]
+        dates = sorted(season_df["obs_date"].unique())
+        last = np.full((height, width), np.nan, dtype=np.float32)
+        for obs_date in dates:
+            geoms = season_df.loc[season_df["obs_date"] == obs_date, "geometry"].tolist()
+            mask = burn(geoms, transform, height, width).astype(bool)
+            days = (obs_date - season_start).days
+            last = np.where(mask, days, last)
+        return last
+
+    def format_ticks(self, tick_values):
+        return [
+            (SEASON_ORIGIN + timedelta(days=int(round(d)))).strftime("%b %d")
+            for d in tick_values
+        ]
