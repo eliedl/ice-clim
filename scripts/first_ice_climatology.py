@@ -17,16 +17,20 @@ import sys
 import logging
 from pathlib import Path
 
+from datetime import date, timedelta
+
 import numpy as np
 import geopandas as gpd
 import pandas as pd
 import matplotlib.pyplot as plt
-import matplotlib.colors as mcolors
 from dotenv import load_dotenv
 from rasterio.features import rasterize as rio_rasterize
 from rasterio.transform import from_bounds
 from shapely import wkt
 from sqlalchemy import create_engine, text
+
+from colormaps import build_cmap, percentile_range
+from raster_to_vector import bands_to_shapefile
 
 load_dotenv(Path(__file__).parent.parent / ".env")
 
@@ -45,6 +49,8 @@ CT_MIN     = 40             # SIGRID3 code for > 4/10 concentration
 SEASON_MIN = "2010-09-01"   # first season_start — winter 2011
 SEASON_MAX = "2019-09-01"   # last season_start  — winter 2020
 OUTPUT     = Path(__file__).parent.parent / "output" / "first_ice_sept-iles.png"
+OUTPUT_SHP = Path(__file__).parent.parent / "output" / "first_ice_sept-iles_isochrones.shp"
+SMOOTH_SIGMA = 1.5          # px — NaN-aware Gaussian sigma before vectorizing
 
 
 # ─────────────────────────────────────────────────────────────────────────────
@@ -165,6 +171,34 @@ def run():
     log.info("Cells with at least 1 season of ice: %s / %s",
              f"{int(np.sum(~np.isnan(median_days))):,}", f"{width * height:,}")
 
+    # --- Log of the distribution of the median days of freeze up
+    finite = median_days[np.isfinite(median_days)]
+    if finite.size:
+        pcts = np.percentile(finite, [1, 5, 25, 50, 75, 95, 99])
+        log.info("median_days distribution (days from Sep 1):")
+        log.info("  min=%.0f  max=%.0f  mean=%.1f  std=%.1f",
+                finite.min(), finite.max(), finite.mean(), finite.std())
+        log.info("  p01=%.0f p05=%.0f p25=%.0f p50=%.0f p75=%.0f p95=%.0f p99=%.0f",
+                *pcts)
+        # Per-month occupancy (Nov..Apr buckets)
+        edges = [0, 61, 91, 122, 153, 181, 212, 365]
+        labels = ["<Nov", "Nov", "Dec", "Jan", "Feb", "Mar", ">=Apr"]
+        counts, _ = np.histogram(finite, bins=edges)
+        for lab, c in zip(labels, counts):
+            log.info("  %-6s : %6d cells (%.1f%%)", lab, c, 100*c/finite.size)
+
+    # --- Vector product: isochrone polygons -------------------------------
+    log.info("Vectorizing isochrones to %s ...", OUTPUT_SHP)
+    gdf = bands_to_shapefile(
+        median_days,
+        n_seasons_per_cell,
+        transform=transform,
+        crs=f"EPSG:{GRID_CRS}",
+        out_path=OUTPUT_SHP,
+        smooth_sigma=SMOOTH_SIGMA,
+    )
+    log.info("Wrote %d isochrone polygons (one per integer day-of-season).", len(gdf))
+
     # --- Plot -------------------------------------------------------------
     _plot(median_days, n_seasons_per_cell, xmin, ymin, xmax, ymax)
 
@@ -173,61 +207,19 @@ def run():
 # Visualization
 # ─────────────────────────────────────────────────────────────────────────────
 
-def _make_monthly_cmap():
-    """
-    Five-month sequential colormap (Nov → Mar), one colour per month.
+SEASON_ORIGIN = date(2000, 9, 1)  # any Sep-1; used only to format day-of-season as a calendar label
 
-    Within each month the alpha fades linearly from 1.0 (month start) to
-    0.3 (month end), creating visible band boundaries without hard edges.
 
-    Palette:
-        #007191  deep teal    — Nov
-        #62c8d3  light cyan   — Dec
-        #f5c84a  golden amber — Jan  [bridge: CIELAB midpoint between the
-                                       cyan and orange groups; L=62 for
-                                       accessibility; safe for deuteranopia]
-        #f47a00  orange       — Feb
-        #d31f11  deep red     — Mar
-
-    Returns (cmap, vmin, vmax, bounds) where bounds are the day-of-season
-    values [61, 91, 122, 153, 181, 212] at each month boundary (from Sep 1):
-        Sep(30) + Oct(31) = 61  → Nov 1
-        + Nov(30)          = 91  → Dec 1
-        + Dec(31)          = 122 → Jan 1
-        + Jan(31)          = 153 → Feb 1
-        + Feb(28)          = 181 → Mar 1
-        + Mar(31)          = 212 → Apr 1
-    """
-    COLORS = ["#007191", "#62c8d3", "#f5c84a", "#f47a00", "#d31f11"]
-    BOUNDS = [61, 91, 122, 153, 181, 212]
-    VMIN, VMAX = BOUNDS[0], BOUNDS[-1]
-    total = VMAX - VMIN  # 151 days
-
-    EPS = 1e-6
-    stops = []
-    for i, col in enumerate(COLORS):
-        p0 = (BOUNDS[i]     - VMIN) / total
-        p1 = (BOUNDS[i + 1] - VMIN) / total
-        r, g, b = mcolors.to_rgb(col)
-        if i == 0:
-            stops.append((p0, (r, g, b, 1.0)))        # Nov 1: full opacity
-        stops.append((p1 - EPS, (r, g, b, 0.3)))      # end of month: 30 %
-        if i < len(COLORS) - 1:
-            r2, g2, b2 = mcolors.to_rgb(COLORS[i + 1])
-            stops.append((p1, (r2, g2, b2, 1.0)))     # next month: full opacity
-    stops.append((1.0, (*mcolors.to_rgb(COLORS[-1]), 0.3)))  # Mar 31
-
-    cmap = mcolors.LinearSegmentedColormap.from_list("monthly_ice", stops, N=1024)
-    cmap.set_under(mcolors.to_rgba(COLORS[0], 1.0))   # pre-Nov ice → full teal
-    cmap.set_bad("none")                               # NaN → transparent
-    return cmap, VMIN, VMAX, BOUNDS
+def _day_label(d: float) -> str:
+    return (SEASON_ORIGIN + timedelta(days=int(round(d)))).strftime("%b %d")
 
 
 def _plot(median_days, n_seasons, xmin, ymin, xmax, ymax):
-    cmap, vmin, vmax, bounds = _make_monthly_cmap()
+    vmin, vmax = percentile_range(median_days, low=2, high=98)
+    cmap, norm = build_cmap("cool_to_warm_7", vmin=vmin, vmax=vmax)
 
-    tick_days   = bounds
-    tick_labels = ["Nov 1", "Dec 1", "Jan 1", "Feb 1", "Mar 1", "Apr 1"]
+    tick_days = np.linspace(vmin, vmax, 6)
+    tick_labels = [_day_label(d) for d in tick_days]
 
     fig, ax = plt.subplots(figsize=(10, 9))
     ax.set_facecolor("white")
@@ -237,19 +229,18 @@ def _plot(median_days, n_seasons, xmin, ymin, xmax, ymax):
         origin="upper",
         extent=[xmin, xmax, ymin, ymax],
         cmap=cmap,
-        vmin=vmin,
-        vmax=vmax,
+        norm=norm,
         interpolation="none",
     )
 
     cbar = fig.colorbar(im, ax=ax, orientation="horizontal",
-                        fraction=0.046, pad=0.06,
-                        label="Median day of first ice (CT >= 8/10)")
+                        fraction=0.046, pad=0.06, extend="both",
+                        label="Median date of first ice (CT >= 4/10)")
     cbar.set_ticks(tick_days)
     cbar.set_ticklabels(tick_labels, fontsize=8)
 
     ax.set_title(
-        "Median day of first ice (CT >= 8/10)\nSept-Îles region — winters 2011–2020",
+        "Median date of first ice (CT >= 4/10)\nSept-Îles region — winters 2011–2020",
         fontsize=12, pad=10,
     )
     ax.set_xlabel("Easting (m, NAD83 UTM 19N)")

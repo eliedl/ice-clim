@@ -73,7 +73,9 @@
       "Bash(ogrinfo -al -so /tmp/cis_SGRDREC_20260209T1800Z_pl_a.shp)",
       "Bash(ogrinfo -al -so /tmp/sgrdr_old/CIS_EC_19690108_pl_a.shp)",
       "Bash(ogrinfo /tmp/sgrdr_old/CIS_EC_19690108_pl_a.shp -al -q)",
-      "Read(//home/eliedl/dotfiles/**)"
+      "Read(//home/eliedl/dotfiles/**)",
+      "Bash(grep -rn \"layer-legend\" /media/eliedl/SSD_work/backup_DELL/projets/nautilo/ui 2>/dev/null | head -50)",
+      "Read(//media/eliedl/SSD_work/backup_DELL/projets/nautilo/ui/**)"
     ]
   }
 }
