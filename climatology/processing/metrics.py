@@ -19,17 +19,35 @@ from typing import Any
 import numpy as np
 import pandas as pd
 
+from climatology.services.units_conversion_maps import CONCENTRATION_FRACTION
+
 SEASON_ORIGIN = date(2000, 9, 1)  # any Sep-1; used only to format day-of-season as a calendar label
 
 
-def _ct_threshold_sql(*, ct_min: int, grid_crs: int, season_min: str, season_max: str) -> str:
-    """SIGRID3 polygons whose total concentration is at least ``ct_min``,
+def _ct_codes_above(threshold: float) -> list[str]:
+    """Return SIGRID-3 concentration codes whose fraction value is >= threshold.
+
+    Single source of truth: the CONCENTRATION_FRACTION map. Codes never observed
+    in the local archive are absent from the map and therefore never selected,
+    surfacing as a no-match rather than a silent inclusion.
+    """
+    return sorted(code for code, frac in CONCENTRATION_FRACTION.items() if frac >= threshold)
+
+
+def _ct_threshold_sql(*, threshold: float, grid_crs: int, season_min: str, season_max: str) -> str:
+    """SIGRID3 polygons whose total concentration fraction is at least ``threshold``,
     inside the bbox, with season_start in [season_min, season_max].
 
-    Shared by all CT-threshold-based metrics (freeze-up, break-up, season
-    duration) to keep the SIGRID3 filter and the season-window definition
-    in one place.
+    The CT filter uses the SIGRID-3 code list derived from CONCENTRATION_FRACTION
+    (see climatology.services.units_conversion_maps) rather than a raw integer
+    cast on ``CT``. This keeps the parser and the SQL filter on the same source
+    of truth and avoids InvalidTextRepresentation errors for non-numeric codes
+    (e.g. ``9-``).
     """
+    codes = _ct_codes_above(threshold)
+    if not codes:
+        raise ValueError(f"No SIGRID-3 codes satisfy concentration fraction >= {threshold}")
+    codes_sql = ", ".join(f"'{c}'" for c in codes)
     return f"""
         SELECT
             ST_AsText(ST_Transform(geometry, {grid_crs})) AS geom_wkt,
@@ -40,7 +58,7 @@ def _ct_threshold_sql(*, ct_min: int, grid_crs: int, season_min: str, season_max
                 ELSE ((EXTRACT(YEAR FROM "T1")::int - 1)::text || '-09-01')::date
             END AS season_start
         FROM sgrda
-        WHERE "CT"::int >= {ct_min}
+        WHERE "CT" IN ({codes_sql})
           AND ("POLY_TYPE" IS NULL OR "POLY_TYPE" != 'L')
           AND ST_Intersects(geometry, ST_GeomFromText(:bbox_wkt, 4326))
           AND CASE
@@ -94,7 +112,7 @@ class Metric(ABC):
 
 
 class FreezeUpDateMetric(Metric):
-    """Median day-of-season at which a cell first reaches CT >= ct_min.
+    """Median day-of-season at which a cell first reaches CT fraction >= ct_threshold.
 
     CIS convention: freeze-up is defined as the first observation of total
     concentration >= 4/10 (CT_MIN = 40 in SIGRID3 encoding). The "first
@@ -104,11 +122,11 @@ class FreezeUpDateMetric(Metric):
 
     slug = "freeze_up_date"
     display_label = "Median date of freeze-up (CT >= 4/10)"
-    ct_min = 40
+    ct_threshold = 0.4
 
     def sql(self, *, grid_crs, season_min, season_max):
         return _ct_threshold_sql(
-            ct_min=self.ct_min, grid_crs=grid_crs,
+            threshold=self.ct_threshold, grid_crs=grid_crs,
             season_min=season_min, season_max=season_max,
         ), {}
 
@@ -131,7 +149,7 @@ class FreezeUpDateMetric(Metric):
 
 
 class BreakupDateMetric(Metric):
-    """Median day-of-season at which a cell was last observed with CT >= ct_min.
+    """Median day-of-season at which a cell was last observed with CT fraction >= ct_threshold.
 
     CIS convention: break-up is defined as the last observation of total
     concentration >= 4/10 (CT_MIN = 40), symmetric with freeze-up. The
@@ -147,11 +165,11 @@ class BreakupDateMetric(Metric):
 
     slug = "breakup_date"
     display_label = "Median date of break-up (CT >= 4/10)"
-    ct_min = 40
+    ct_threshold = 0.4
 
     def sql(self, *, grid_crs, season_min, season_max):
         return _ct_threshold_sql(
-            ct_min=self.ct_min, grid_crs=grid_crs,
+            threshold=self.ct_threshold, grid_crs=grid_crs,
             season_min=season_min, season_max=season_max,
         ), {}
 
@@ -174,7 +192,7 @@ class BreakupDateMetric(Metric):
 
 
 class SeasonDurationMetric(Metric):
-    """Median count of observation-days with CT >= ct_min, per cell across seasons.
+    """Median count of observation-days with CT fraction >= ct_threshold, per cell across seasons.
 
     Cumulative definition: the per-season value is the number of distinct
     observation dates on which the cell was covered by an ice polygon at
@@ -194,11 +212,11 @@ class SeasonDurationMetric(Metric):
 
     slug = "season_duration"
     display_label = "Median ice presence (observation-days, CT >= 4/10)"
-    ct_min = 40
+    ct_threshold = 0.4
 
     def sql(self, *, grid_crs, season_min, season_max):
         return _ct_threshold_sql(
-            ct_min=self.ct_min, grid_crs=grid_crs,
+            threshold=self.ct_threshold, grid_crs=grid_crs,
             season_min=season_min, season_max=season_max,
         ), {}
 

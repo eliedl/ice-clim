@@ -75,7 +75,14 @@
       "Bash(ogrinfo /tmp/sgrdr_old/CIS_EC_19690108_pl_a.shp -al -q)",
       "Read(//home/eliedl/dotfiles/**)",
       "Bash(grep -rn \"layer-legend\" /media/eliedl/SSD_work/backup_DELL/projets/nautilo/ui 2>/dev/null | head -50)",
-      "Read(//media/eliedl/SSD_work/backup_DELL/projets/nautilo/ui/**)"
+      "Read(//media/eliedl/SSD_work/backup_DELL/projets/nautilo/ui/**)",
+      "Bash(.venv/bin/python probes/002_stage_of_development_census/probe.py)",
+      "Bash(.venv/bin/python probes/003_concentration_census/probe.py)",
+      "Bash(mkdir -p /home/eliedl/Documents/ice-clim/climatology/services)",
+      "Bash(.venv/bin/python backend/probes/001_sd_residual/probe.py)"
+    ],
+    "additionalDirectories": [
+      "/home/eliedl/Documents/ice-clim/climatology"
     ]
   }
 }

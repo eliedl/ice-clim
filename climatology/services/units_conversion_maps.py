@@ -1,0 +1,141 @@
+"""SIGRID-3 unit conversion maps for CIS sea-ice data.
+
+Encoding tables and parsers that convert categorical SIGRID-3 codes to
+numeric values. The internal representation across the project is
+**fraction** (range [0, 1]) for concentrations; display layers handle
+percentage formatting where appropriate.
+
+Source: SIGRID-3 v3.1 documentation (2010) and the 2004 CIS convention.
+Tables are intentionally restricted to codes actually observed in the
+local SGRDA archive (backend/probes/003_concentration_census). Spec
+codes never seen in the data are omitted so that any future encounter
+surfaces as a loud KeyError rather than being silently mapped.
+"""
+
+from __future__ import annotations
+
+# Concentration code -> fraction in [0, 1].
+# Includes only codes observed in probe 003.
+CONCENTRATION_FRACTION: dict[str, float] = {
+    "00": 0.00,   # ice-free (2004 convention; 2010 code "55" not observed)
+    "01": 0.05,   # bergy water / <1/10 — per "Open water/bergy water < 1 tenth"
+    "02": 0.05,   # bergy water variant — [NEEDS CIS VALIDATION via clim-001]
+    "10": 0.10,
+    "20": 0.20,
+    "30": 0.30,
+    "40": 0.40,
+    "50": 0.50,
+    "60": 0.60,
+    "70": 0.70,
+    "80": 0.80,
+    "90": 0.90,
+    "91": 1.00,   # "9+/10" — observed to mean compact coverage in SGRDA: when partials
+                  # are fully encoded alongside CT='91' they sum to 1.0 every time (probe 001
+                  # sub-analysis, 20 613 rows), and when partials sum to <1.0 alongside CT='91'
+                  # CD is present in 99.6% of cases so SD carries the 1−partial_sum remainder.
+    "92": 1.00,   # compact (10/10)
+}
+
+# Codes treated as missing data (SIGRID-3 dummy variable convention).
+# '9-' is treated as a typo of '-9' (12 occurrences in CB/CC per probe 003).
+MISSING_CODES: frozenset[str] = frozenset({"-9", "9-"})
+
+# Documented data-entry typos with silent substitution.
+# Probe 003: 4 rows of "8" and 2 rows of "9" in CA. Assumed to be typos
+# of "80" and "90" respectively, consistent with the 2-digit SIGRID-3
+# encoding and the surrounding-row context.
+_TYPO_SUBSTITUTIONS: dict[str, str] = {
+    "8": "80",
+    "9": "90",
+}
+
+
+def parse_concentration(code: str | None) -> float | None:
+    """Parse a SIGRID-3 concentration code to a fraction in [0, 1].
+
+    Returns
+    -------
+    float in [0, 1] for known codes.
+    None for missing/dummy values (``-9``, ``9-``, empty, ``None``).
+
+    Raises
+    ------
+    KeyError for codes that are neither in the table nor recognised as
+    missing or typo. This is intentional: novel codes should surface as
+    failures rather than being silently coerced.
+    """
+    if code is None or code == "" or code in MISSING_CODES:
+        return None
+    canonical = _TYPO_SUBSTITUTIONS.get(code, code)
+    try:
+        return CONCENTRATION_FRACTION[canonical]
+    except KeyError as e:
+        raise KeyError(f"Unrecognised SIGRID-3 concentration code: {code!r}") from e
+
+
+# Stage-of-development code -> midpoint ice thickness in metres.
+# Data-driven: only codes observed in probe 002 are encoded.
+# - Range codes use the midpoint of the SIGRID-3 v3.1 thickness range.
+# - Code 93 ("Thick First Year Ice, >=120 cm") uses 160 cm (midpoint of 120-200,
+#   bounded by First Year Ice's broad 30-200 cm upper limit).
+# - Codes 95-99 are stages observed in the data for which the SIGRID-3 v3.1
+#   spec does not provide a thickness range. Set to None pending CIS reply
+#   (planned clim-001 outreach follow-up). The volume formula must skip
+#   polygons attributed to these stages or apply a separately-validated
+#   convention.
+STAGE_OF_DEVELOPMENT_THICKNESS: dict[str, float | None] = {
+    # Stages with defined thickness ranges
+    "81": 0.050,   # New Ice                       (<10 cm)
+    "84": 0.125,   # Grey Ice                      (10-15 cm)
+    "85": 0.225,   # Grey-White Ice                (15-30 cm)
+    "86": 1.150,   # First Year Ice (broad)        (30-200 cm)
+    "87": 0.500,   # Thin First Year Ice           (30-70 cm)
+    "91": 0.950,   # Medium First Year Ice         (70-120 cm)
+    "93": 1.600,   # Thick First Year Ice          (>=120 cm; midpoint 120-200)
+    # Observed but no SIGRID-3 v3.1 thickness — pending CIS validation
+    "95": None,    # Old Ice
+    "96": None,    # Second Year Ice
+    "97": None,    # Multi-Year Ice
+    "98": None,    # Glacier Ice
+    "99": None,    # Undetermined / Unknown
+}
+
+# Stage codes treated as encoding errors. Observed in <10 rows total across
+# the local SGRDA archive (probe 002), all outside the SIGRID-3 v3.1 valid
+# code set. Silently mapped to None to avoid log noise on a static DB.
+# Their occurrence is tracked in probe 002 output for future audit.
+INVALID_STAGE_CODES: frozenset[str] = frozenset({"7C", "9C", "5-", "6-", "10", "50"})
+
+
+def parse_stage_thickness(code: str | None) -> float | None:
+    """Parse a SIGRID-3 stage-of-development code to ice thickness in metres.
+
+    Returns
+    -------
+    float (metres) for known stages with a defined thickness range.
+    None for: missing/dummy values (``-9``, ``9-``, empty, ``None``),
+    encoding errors in :data:`INVALID_STAGE_CODES`, and observed-but-
+    undefined-thickness stages (`95` Old Ice, `96` Second Year, `97`
+    Multi-Year, `98` Glacier Ice, `99` Undetermined).
+
+    Raises
+    ------
+    KeyError for codes that are neither in the table nor recognised as
+    missing or invalid. Surfacing novelty loudly is intentional on a
+    static archive: any new code is information.
+    """
+    if code is None or code == "" or code in MISSING_CODES:
+        return None
+    if code in INVALID_STAGE_CODES:
+        return None
+    try:
+        return STAGE_OF_DEVELOPMENT_THICKNESS[code]
+    except KeyError as e:
+        raise KeyError(f"Unrecognised SIGRID-3 stage-of-development code: {code!r}") from e
+
+
+# Convenience: subset of stages observed in data that have no defined thickness.
+# Useful for downstream "volume loss" estimates and explicit skipping rules.
+NO_THICKNESS_STAGE_CODES: frozenset[str] = frozenset(
+    code for code, t in STAGE_OF_DEVELOPMENT_THICKNESS.items() if t is None
+)

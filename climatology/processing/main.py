@@ -10,18 +10,25 @@ from __future__ import annotations
 
 import argparse
 import logging
+import sys
 from pathlib import Path
+
+# Allow running as a script (`python climatology/processing/main.py ...`) by
+# putting the project root on sys.path before importing project modules.
+# Running as a module (`python -m climatology.processing.main ...`) is also
+# supported and doesn't depend on this insertion.
+sys.path.insert(0, str(Path(__file__).parents[2]))
 
 import numpy as np
 from dotenv import load_dotenv
 
-from climatology_metrics import (
+from climatology.processing.metrics import (
     BreakupDateMetric,
     FreezeUpDateMetric,
     Metric,
     SeasonDurationMetric,
 )
-from climatology_pipeline import (
+from climatology.processing.pipeline import (
     build_grid,
     load_polygons,
     log_distribution,
@@ -31,7 +38,7 @@ from climatology_pipeline import (
     REGION_DISPLAY,
 )
 
-load_dotenv(Path(__file__).parent.parent / ".env")
+load_dotenv(Path(__file__).parents[2] / ".env")
 
 logging.basicConfig(
     level=logging.INFO,

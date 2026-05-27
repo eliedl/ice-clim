@@ -21,13 +21,13 @@ from rasterio.transform import from_bounds
 from shapely import wkt
 from sqlalchemy import create_engine, text
 
-from colormaps import build_cmap, percentile_range
-from climatology_metrics import Metric
+from climatology.processing.metrics import Metric
+from climatology.viz.colormaps import build_cmap, percentile_range
 
 log = logging.getLogger(__name__)
 
 BBOX_ROOT  = Path("/home/eliedl/data/reference/climatology_bbox")
-OUTPUT_DIR = Path(__file__).parent.parent / "output"
+OUTPUT_DIR = Path(__file__).parents[2] / "output"
 
 GRID_RES   = 25
 GRID_CRS   = 26919          # NAD83 / UTM Zone 19N

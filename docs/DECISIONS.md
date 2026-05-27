@@ -427,4 +427,18 @@ Decisions DEC-003, DEC-007, DEC-008, DEC-010, DEC-012, DEC-015, DEC-019, DEC-020
 
 ---
 
+## DEC-026 — Treatment of `orphan_ct` Rows in Volume Computation
+
+- **Context**: Probe 004 surfaced **4 183 SGRDA rows (1.04% of the archive)** with signature `100000000` — `CT` populated but every stage-of-development field (`SA, SB, SC, CN, CD`) is missing (`-9` or NULL). These polygons have a recorded total concentration but no information about which stages of ice are present, so the volume formula has no thickness to attribute the concentration to.
+- **Options considered**:
+  1. **Skip silently** — drop the row from both numerator and denominator of any volume / share calculation. Loses 1% of concentration unconditionally; honest but biases the denominator low and hides the population from no-thickness-share diagnostics.
+  2. **Treat as Undetermined (stage `99`)** — count the concentration in the total ice denominator, but contribute zero volume (since stage `99` has no thickness in `STAGE_OF_DEVELOPMENT_THICKNESS`). Equivalent to treating these rows as if `SA = '99'` were filled in.
+  3. **Default thickness** — assign a typical first-year thickness (e.g. `T(87) = 0.50 m`) as a fallback. Best-guess attribution; arbitrary and not validatable against the CIS encoding.
+- **Choice made**: Option 2 (treat as Undetermined / stage `99`).
+- **Rationale**: Preserves the polygon's concentration in the total ice denominator (so per-region totals are not biased low by ~1%), while honestly contributing zero volume (no thickness information is available). Aligns with the existing handling of stage `99` when it appears in a stage slot directly — surfacing the volume gap rather than papering over it. Default-thickness attribution (option 3) was rejected because it would silently inflate volume with unjustified values.
+- **Validation status**: APPROVED (2026-05-27) — user-confirmed during clim-003 volume formula design.
+- **References**: backend/probes/004_column_configuration_census/ — Outcome; climatology/services/units_conversion_maps.py — `STAGE_OF_DEVELOPMENT_THICKNESS['99'] = None`.
+
+---
+
 *All decisions logged as PENDING. No scientific assumption has been finalized. This log will be updated as decisions are validated.*

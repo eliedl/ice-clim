@@ -14,9 +14,9 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).parent))
 
-from cis_ingest.db import get_engine
-from cis_ingest.pipeline import run_source
-from cis_ingest.sources import SGRDA_SOURCE
+from ingestion.db import get_engine
+from ingestion.pipeline import run_source
+from ingestion.sources import SGRDA_SOURCE
 
 logging.basicConfig(
     level=logging.INFO,

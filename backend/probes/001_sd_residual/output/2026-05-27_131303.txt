@@ -1,0 +1,80 @@
+=== Probe 001 — SD Residual Validation (parse_concentration-based) ===
+Generated: 2026-05-27_131303
+
+Summary:
+  rows_analysed...........................    393,556
+  rows_ct_missing_excluded................      9,049
+  cd_present..............................     10,009
+  cd_absent...............................    383,547
+  cd_present_residual_positive............      6,201
+  cd_present_residual_zero................      2,165
+  cd_present_residual_negative............      1,643
+  cd_absent_residual_positive.............    309,328
+  cd_absent_residual_zero.................     55,243
+  cd_absent_residual_negative.............     18,976
+
+Histogram of residual (fraction) for rows with CD present, bucket=0.05:
+residual
+-0.70       1
+-0.60       2
+-0.05    1640
+-0.00    2165
+ 0.05    1633
+ 0.10    1636
+ 0.15     552
+ 0.20    1089
+ 0.25     242
+ 0.30     295
+ 0.35     117
+ 0.40     148
+ 0.45      67
+ 0.50     160
+ 0.55      10
+ 0.60      27
+ 0.65       2
+ 0.70      17
+ 0.80     127
+ 0.90      64
+ 0.95      15
+
+--- Sub-analysis: CT='91' partial-sum interpretation ---
+Validates whether the midpoint convention (91 -> 0.95) is correct.
+If CA+CB+CC always sums to 1.0 when CT='91', the parser should re-encode 91 as 1.0.
+
+  rows_ct_eq_91...........................     24,880
+  partial_sum_eq_1.0......................     20,613
+  partial_sum_eq_0.95.....................          0
+  partial_sum_lt_0.95.....................      4,267
+  partial_sum_between_0.95_1.0............          0
+  partial_sum_gt_1.0......................          0
+
+Histogram of CA+CB+CC sum for CT='91' rows, bucket=0.05:
+partial_sum
+0.0     1634
+0.3        2
+0.4       10
+0.5       67
+0.6      117
+0.7      243
+0.8      553
+0.9     1641
+1.0    20613
+
+Validation: for CT='91' with partial_sum in (0, 1), CD should be present
+(so SD picks up the 1 - partial_sum remainder):
+  rows_ct_eq_91_partial_in_(0,1)..........      2,633
+  of_those_CD_present.....................      2,623
+  of_those_CD_absent......................         10
+
+Cross-tabulation: CT='91' partial_sum bucket x CD presence:
+cd_present          cd_absent  cd_present
+partial_sum_bucket                       
+0.0                      1619          15
+0.3                         0           2
+0.4                         0          10
+0.5                         0          67
+0.6                         0         117
+0.7                         1         242
+0.8                         1         552
+0.9                         8        1633
+1.0                     18973        1640

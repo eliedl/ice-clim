@@ -1,0 +1,56 @@
+=== Probe 004 — Column Configuration Census ===
+Generated: 2026-05-27_154135
+Total SGRDA rows (POLY_TYPE != 'L'): 402,605
+Distinct signatures observed: 34
+Signature bit order: ['CT', 'CA', 'CB', 'CC', 'CN', 'CD', 'SA', 'SB', 'SC']
+
+Diagnostic summary:
+diagnostic      n    pct
+ canonical 389309 96.698
+     empty   8992  2.233
+ orphan_ct   4183  1.039
+     other     64  0.016
+stage_only     57  0.014
+
+POLY_TYPE distribution for 'empty' signature rows:
+POLY_TYPE    n
+        N 7450
+      NaN 1532
+        I   10
+
+All signatures, sorted by count (signature | n | pct | cum_pct | diagnostic | fields_set):
+signature      n    pct  cum_pct                         fields_set diagnostic
+100000100 307322 76.333   76.333                             CT, SA  canonical
+111000110  42511 10.559   86.892                 CT, CA, CB, SA, SB  canonical
+111100111  17567  4.363   91.255         CT, CA, CB, CC, SA, SB, SC  canonical
+000000000   8992  2.233   93.488                             (none)      empty
+111101111   6317  1.569   95.057     CT, CA, CB, CC, CD, SA, SB, SC  canonical
+111010110   5873  1.459   96.516             CT, CA, CB, CN, SA, SB  canonical
+111110111   4198  1.043   97.559     CT, CA, CB, CC, CN, SA, SB, SC  canonical
+100000000   4183  1.039   98.598                                 CT  orphan_ct
+100010100   1839  0.457   99.055                         CT, CN, SA  canonical
+111111111   1569  0.390   99.445 CT, CA, CB, CC, CN, CD, SA, SB, SC  canonical
+111001110   1327  0.330   99.775             CT, CA, CB, CD, SA, SB  canonical
+100001100    399  0.099   99.874                         CT, CD, SA  canonical
+111011110    350  0.087   99.961         CT, CA, CB, CN, CD, SA, SB  canonical
+011000000     39  0.010   99.971                             CA, CB stage_only
+100011100     31  0.008   99.979                     CT, CN, CD, SA  canonical
+111000000     25  0.006   99.985                         CT, CA, CB      other
+000000100     10  0.002   99.987                                 SA stage_only
+111000111      9  0.002   99.989             CT, CA, CB, SA, SB, SC      other
+111001111      6  0.001   99.990         CT, CA, CB, CD, SA, SB, SC      other
+110011100      6  0.001   99.991                 CT, CA, CN, CD, SA  canonical
+111100000      6  0.001   99.992                     CT, CA, CB, CC      other
+011000110      4  0.001   99.993                     CA, CB, SA, SB stage_only
+101101111      4  0.001   99.994         CT, CB, CC, CD, SA, SB, SC      other
+101000000      3  0.001   99.995                             CT, CB      other
+011110111      3  0.001   99.996         CA, CB, CC, CN, SA, SB, SC stage_only
+101010110      2  0.000   99.996                 CT, CB, CN, SA, SB      other
+101100111      2  0.000   99.996             CT, CB, CC, SA, SB, SC      other
+110010110      2  0.000   99.996                 CT, CA, CN, SA, SB      other
+111110000      1  0.000   99.996                 CT, CA, CB, CC, CN      other
+101000110      1  0.000   99.996                     CT, CB, SA, SB      other
+110000110      1  0.000   99.996                     CT, CA, SA, SB      other
+111110001      1  0.000   99.996             CT, CA, CB, CC, CN, SC      other
+111010000      1  0.000   99.996                     CT, CA, CB, CN      other
+011010110      1  0.000   99.996                 CA, CB, CN, SA, SB stage_only
