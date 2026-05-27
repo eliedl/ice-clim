@@ -15,7 +15,12 @@ from pathlib import Path
 import numpy as np
 from dotenv import load_dotenv
 
-from climatology_metrics import BreakupDateMetric, FreezeUpDateMetric, Metric
+from climatology_metrics import (
+    BreakupDateMetric,
+    FreezeUpDateMetric,
+    Metric,
+    SeasonDurationMetric,
+)
 from climatology_pipeline import (
     build_grid,
     load_polygons,
@@ -37,8 +42,9 @@ log = logging.getLogger(__name__)
 
 
 METRICS: dict[str, Metric] = {
-    FreezeUpDateMetric.slug: FreezeUpDateMetric(),
-    BreakupDateMetric.slug:  BreakupDateMetric(),
+    FreezeUpDateMetric.slug:   FreezeUpDateMetric(),
+    BreakupDateMetric.slug:    BreakupDateMetric(),
+    SeasonDurationMetric.slug: SeasonDurationMetric(),
 }
 
 

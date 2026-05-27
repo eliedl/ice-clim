@@ -22,6 +22,36 @@ import pandas as pd
 SEASON_ORIGIN = date(2000, 9, 1)  # any Sep-1; used only to format day-of-season as a calendar label
 
 
+def _ct_threshold_sql(*, ct_min: int, grid_crs: int, season_min: str, season_max: str) -> str:
+    """SIGRID3 polygons whose total concentration is at least ``ct_min``,
+    inside the bbox, with season_start in [season_min, season_max].
+
+    Shared by all CT-threshold-based metrics (freeze-up, break-up, season
+    duration) to keep the SIGRID3 filter and the season-window definition
+    in one place.
+    """
+    return f"""
+        SELECT
+            ST_AsText(ST_Transform(geometry, {grid_crs})) AS geom_wkt,
+            "T1"::date AS obs_date,
+            CASE
+                WHEN EXTRACT(MONTH FROM "T1") >= 9
+                THEN (EXTRACT(YEAR FROM "T1")::text || '-09-01')::date
+                ELSE ((EXTRACT(YEAR FROM "T1")::int - 1)::text || '-09-01')::date
+            END AS season_start
+        FROM sgrda
+        WHERE "CT"::int >= {ct_min}
+          AND ("POLY_TYPE" IS NULL OR "POLY_TYPE" != 'L')
+          AND ST_Intersects(geometry, ST_GeomFromText(:bbox_wkt, 4326))
+          AND CASE
+                  WHEN EXTRACT(MONTH FROM "T1") >= 9
+                  THEN (EXTRACT(YEAR FROM "T1")::text || '-09-01')::date
+                  ELSE ((EXTRACT(YEAR FROM "T1")::int - 1)::text || '-09-01')::date
+              END BETWEEN '{season_min}' AND '{season_max}'
+        ORDER BY season_start, obs_date;
+    """
+
+
 class Metric(ABC):
     """Strategy interface for a region-scale climatology metric."""
 
@@ -77,27 +107,10 @@ class FreezeUpDateMetric(Metric):
     ct_min = 40
 
     def sql(self, *, grid_crs, season_min, season_max):
-        sql = f"""
-            SELECT
-                ST_AsText(ST_Transform(geometry, {grid_crs})) AS geom_wkt,
-                "T1"::date AS obs_date,
-                CASE
-                    WHEN EXTRACT(MONTH FROM "T1") >= 9
-                    THEN (EXTRACT(YEAR FROM "T1")::text || '-09-01')::date
-                    ELSE ((EXTRACT(YEAR FROM "T1")::int - 1)::text || '-09-01')::date
-                END AS season_start
-            FROM sgrda
-            WHERE "CT"::int >= {self.ct_min}
-              AND ("POLY_TYPE" IS NULL OR "POLY_TYPE" != 'L')
-              AND ST_Intersects(geometry, ST_GeomFromText(:bbox_wkt, 4326))
-              AND CASE
-                      WHEN EXTRACT(MONTH FROM "T1") >= 9
-                      THEN (EXTRACT(YEAR FROM "T1")::text || '-09-01')::date
-                      ELSE ((EXTRACT(YEAR FROM "T1")::int - 1)::text || '-09-01')::date
-                  END BETWEEN '{season_min}' AND '{season_max}'
-            ORDER BY season_start, obs_date;
-        """
-        return sql, {}
+        return _ct_threshold_sql(
+            ct_min=self.ct_min, grid_crs=grid_crs,
+            season_min=season_min, season_max=season_max,
+        ), {}
 
     def reduce_season(self, season_df, *, transform, height, width, burn):
         season_start = season_df["season_start"].iloc[0]
@@ -137,27 +150,10 @@ class BreakupDateMetric(Metric):
     ct_min = 40
 
     def sql(self, *, grid_crs, season_min, season_max):
-        sql = f"""
-            SELECT
-                ST_AsText(ST_Transform(geometry, {grid_crs})) AS geom_wkt,
-                "T1"::date AS obs_date,
-                CASE
-                    WHEN EXTRACT(MONTH FROM "T1") >= 9
-                    THEN (EXTRACT(YEAR FROM "T1")::text || '-09-01')::date
-                    ELSE ((EXTRACT(YEAR FROM "T1")::int - 1)::text || '-09-01')::date
-                END AS season_start
-            FROM sgrda
-            WHERE "CT"::int >= {self.ct_min}
-              AND ("POLY_TYPE" IS NULL OR "POLY_TYPE" != 'L')
-              AND ST_Intersects(geometry, ST_GeomFromText(:bbox_wkt, 4326))
-              AND CASE
-                      WHEN EXTRACT(MONTH FROM "T1") >= 9
-                      THEN (EXTRACT(YEAR FROM "T1")::text || '-09-01')::date
-                      ELSE ((EXTRACT(YEAR FROM "T1")::int - 1)::text || '-09-01')::date
-                  END BETWEEN '{season_min}' AND '{season_max}'
-            ORDER BY season_start, obs_date;
-        """
-        return sql, {}
+        return _ct_threshold_sql(
+            ct_min=self.ct_min, grid_crs=grid_crs,
+            season_min=season_min, season_max=season_max,
+        ), {}
 
     def reduce_season(self, season_df, *, transform, height, width, burn):
         season_start = season_df["season_start"].iloc[0]
@@ -175,3 +171,48 @@ class BreakupDateMetric(Metric):
             (SEASON_ORIGIN + timedelta(days=int(round(d)))).strftime("%b %d")
             for d in tick_values
         ]
+
+
+class SeasonDurationMetric(Metric):
+    """Median count of observation-days with CT >= ct_min, per cell across seasons.
+
+    Cumulative definition: the per-season value is the number of distinct
+    observation dates on which the cell was covered by an ice polygon at
+    CT >= 4/10. The cross-season reduction is the nan-aware median.
+
+    Units are *observation-days*, not calendar-days. SGRDA daily charts are
+    issued on operational days (~5-7 per week), so the count is a slight
+    undercount of calendar days. Within the same observational regime
+    (consistent chart cadence across seasons) the count is comparable
+    year-to-year and spatially.
+
+    Diverges from a naive "break-up minus freeze-up" definition when the
+    season contains mid-winter melt-refreeze events: cumulative counts
+    only the days ice was actually present, while bracket duration would
+    include the melt interval.
+    """
+
+    slug = "season_duration"
+    display_label = "Median ice presence (observation-days, CT >= 4/10)"
+    ct_min = 40
+
+    def sql(self, *, grid_crs, season_min, season_max):
+        return _ct_threshold_sql(
+            ct_min=self.ct_min, grid_crs=grid_crs,
+            season_min=season_min, season_max=season_max,
+        ), {}
+
+    def reduce_season(self, season_df, *, transform, height, width, burn):
+        dates = sorted(season_df["obs_date"].unique())
+        count = np.zeros((height, width), dtype=np.float32)
+        ever = np.zeros((height, width), dtype=bool)
+        for obs_date in dates:
+            geoms = season_df.loc[season_df["obs_date"] == obs_date, "geometry"].tolist()
+            mask = burn(geoms, transform, height, width).astype(bool)
+            count += mask.astype(np.float32)
+            ever |= mask
+        count[~ever] = np.nan
+        return count
+
+    def format_ticks(self, tick_values):
+        return [f"{int(round(d))}" for d in tick_values]
