@@ -27,7 +27,7 @@ from climatology.viz.colormaps import build_cmap, percentile_range
 log = logging.getLogger(__name__)
 
 BBOX_ROOT  = Path("/home/eliedl/data/reference/climatology_bbox")
-OUTPUT_DIR = Path(__file__).parents[2] / "output"
+OUTPUT_DIR = Path(__file__).parents[1] / "output"
 
 GRID_RES   = 25
 GRID_CRS   = 26919          # NAD83 / UTM Zone 19N
@@ -95,14 +95,19 @@ def load_polygons(metric: Metric, bbox_path: Path) -> pd.DataFrame:
     return df.drop(columns="geom_wkt")
 
 
-def reduce_seasons(
+def reduce_seasons_stack(
     metric: Metric,
     df: pd.DataFrame,
     transform,
     height: int,
     width: int,
 ) -> np.ndarray:
-    """Apply ``metric.reduce_season`` to each season; stack into (n_seasons, H, W)."""
+    """Apply ``metric.reduce_season`` to each season; stack into (n_seasons, H, W).
+
+    Internal helper used by the default ``Metric.compute_climatology``. Metrics
+    that override ``compute_climatology`` (CIS-aligned median-then-threshold)
+    bypass this entirely.
+    """
     seasons = sorted(df["season_start"].unique())
     log.info("Processing %d seasons...", len(seasons))
     arrays = []

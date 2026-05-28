@@ -106,6 +106,33 @@ class Metric(ABC):
         """Cross-season reduction. Default: nan-aware median."""
         return np.nanmedian(stack, axis=0)
 
+    def compute_climatology(
+        self,
+        df: pd.DataFrame,
+        *,
+        transform,
+        height: int,
+        width: int,
+        burn,
+        burn_values=None,
+    ) -> np.ndarray:
+        """End-to-end climatology computation: rows -> (H, W) result raster.
+
+        Default implementation: per-season reduction stacked, then cross-season
+        reduction. Subclasses whose methodology does not factor into
+        per-season + cross-season (e.g. CIS-aligned median-then-threshold,
+        which medians across years per calendar-day before thresholding) may
+        override this method directly and ignore ``reduce_season`` /
+        ``reduce_cross_season``.
+
+        ``burn_values`` is provided for metrics that rasterize value-keyed
+        polygons (e.g. CT-valued fields). Per-season metrics typically only
+        need the binary ``burn``.
+        """
+        from climatology.processing.pipeline import reduce_seasons_stack
+        stack = reduce_seasons_stack(self, df, transform, height, width)
+        return self.reduce_cross_season(stack)
+
     @abstractmethod
     def format_ticks(self, tick_values: list[float]) -> list[str]:
         """Colorbar tick labels in the metric's natural units."""

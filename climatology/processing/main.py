@@ -30,10 +30,10 @@ from climatology.processing.metrics import (
 )
 from climatology.processing.pipeline import (
     build_grid,
+    burn,
     load_polygons,
     log_distribution,
     plot_metric,
-    reduce_seasons,
     region_paths,
     REGION_DISPLAY,
 )
@@ -69,8 +69,9 @@ def run(metric_slug: str, region: str) -> None:
         log.error("No rows returned — check metric SQL, bbox, season range.")
         return
 
-    stack = reduce_seasons(metric, df, transform, h, w)
-    values = metric.reduce_cross_season(stack)
+    values = metric.compute_climatology(
+        df, transform=transform, height=h, width=w, burn=burn,
+    )
     log.info("Cells with data: %s / %s",
              f"{int((~np.isnan(values)).sum()):,}", f"{h * w:,}")
     log_distribution(values)
