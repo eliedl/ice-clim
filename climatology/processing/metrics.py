@@ -253,18 +253,36 @@ class FreezeUpDateMetric(Metric):
 
 
 class BreakupDateMetric(Metric):
-    """Median day-of-season at which a cell was last observed with CT fraction >= ct_threshold.
+    """Climatological break-up date per cell, by the CIS protocol applied at
+    native daily SGRDA cadence.
 
-    CIS convention: break-up is defined as the last observation of total
-    concentration >= 4/10 (CT_MIN = 40), symmetric with freeze-up. The
-    "last occurrence at CT >= 1" definition is rejected for the same
-    persistence reason — see docs/DECISIONS.md DEC-025.
+    Methodology (DEC-027, median-then-threshold, mirror of FreezeUpDateMetric):
+      1. For each calendar day in the admissible window (WMO 80% data-
+         availability rule per day), build the median CT fraction across
+         years.
+      2. For each cell, the break-up date is the *last* day in ice-season
+         order where this medianed field still satisfies >= ct_threshold
+         (4/10). Cells whose median never reaches threshold remain NaN
+         naturally — no precondition mask needed.
 
-    Note on mid-season melt-refreeze: this metric returns the latest date of
-    presence across the season, with no persistence rule. A cell that has
-    ice in Dec, no ice in Jan, then ice again in Feb will yield break-up =
-    Feb, not Jan. Adding a persistence rule is deferred pending Wilson/CIS
-    methodology feedback (WORK_TASKS clim-001).
+    Symmetric with the FreezeUpDateMetric's first_above semantics:
+    'first_above' for freeze-up (when did the climatological state first
+    cross 4/10?), 'last_above' for break-up (when did the climatological
+    state last hold 4/10 before melt?). Equivalent to CIS's literal
+    "first day median < 4/10" in monotone seasons; the last_above
+    formulation also naturally handles ice-free cells (NaN, not the
+    degenerate window-floor that "first day below" would produce under
+    unified scan).
+
+    The legacy threshold-then-median semantic from the previous
+    implementation ("latest date of presence across the season") is
+    preserved at the cell-day level — only the timing of the median
+    moves from per-season to per-calendar-day across years.
+
+    See:
+      - docs/DECISIONS.md DEC-027 for the full rationale
+      - backend/probes/005_sgrda_chart_cadence/ for the WMO mask
+        validation
     """
 
     slug = "breakup_date"
@@ -272,21 +290,39 @@ class BreakupDateMetric(Metric):
     ct_threshold = 0.4
 
     def sql(self, *, grid_crs, season_min, season_max):
-        return _ct_threshold_sql(
-            threshold=self.ct_threshold, grid_crs=grid_crs,
-            season_min=season_min, season_max=season_max,
+        return _all_ct_sql(
+            grid_crs=grid_crs, season_min=season_min, season_max=season_max,
         ), {}
 
     def reduce_season(self, season_df, *, transform, height, width, burn):
-        season_start = season_df["season_start"].iloc[0]
-        dates = sorted(season_df["obs_date"].unique())
-        last = np.full((height, width), np.nan, dtype=np.float32)
-        for obs_date in dates:
-            geoms = season_df.loc[season_df["obs_date"] == obs_date, "geometry"].tolist()
-            mask = burn(geoms, transform, height, width).astype(bool)
-            days = (obs_date - season_start).days
-            last = np.where(mask, days, last)
-        return last
+        raise NotImplementedError(
+            "BreakupDateMetric overrides compute_climatology directly "
+            "(median-then-threshold per DEC-027); reduce_season is not used."
+        )
+
+    def compute_climatology(self, df, *, transform, height, width, burn, burn_values=None):
+        if burn_values is None:
+            raise ValueError(
+                "BreakupDateMetric.compute_climatology requires burn_values "
+                "(value-keyed rasterizer) from the pipeline."
+            )
+        from climatology.processing.event_detection import (
+            admissible_calendar_days,
+            build_daily_median_ct_cube,
+            day_of_season,
+            extract_event_date,
+        )
+        days = admissible_calendar_days(df)
+        cube = build_daily_median_ct_cube(
+            df, admissible_days=days,
+            transform=transform, height=height, width=width,
+            burn_values=burn_values,
+        )
+        bool_cube = cube >= self.ct_threshold
+        day_ordinals = [day_of_season(d) for d in days]
+        return extract_event_date(
+            bool_cube, day_ordinals=day_ordinals, mode="last_above",
+        )
 
     def format_ticks(self, tick_values):
         return [
