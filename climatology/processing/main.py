@@ -31,6 +31,7 @@ from climatology.processing.metrics import (
 from climatology.processing.pipeline import (
     build_grid,
     burn,
+    burn_values,
     load_polygons,
     log_distribution,
     plot_metric,
@@ -70,7 +71,8 @@ def run(metric_slug: str, region: str) -> None:
         return
 
     values = metric.compute_climatology(
-        df, transform=transform, height=h, width=w, burn=burn,
+        df, transform=transform, height=h, width=w,
+        burn=burn, burn_values=burn_values,
     )
     log.info("Cells with data: %s / %s",
              f"{int((~np.isnan(values)).sum()):,}", f"{h * w:,}")

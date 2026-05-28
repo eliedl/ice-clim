@@ -34,6 +34,43 @@ def _ct_codes_above(threshold: float) -> list[str]:
     return sorted(code for code, frac in CONCENTRATION_FRACTION.items() if frac >= threshold)
 
 
+def _all_ct_sql(*, grid_crs: int, season_min: str, season_max: str) -> str:
+    """All ice and water SIGRID3 polygons inside the bbox over the climatology period.
+
+    No CT pre-filter — the median-then-threshold methodology needs every
+    observed CT value (including 0 from water polygons) to compute an
+    unbiased median across years. CT is returned as the raw SIGRID3 code;
+    parsing to a fraction happens in Python via CONCENTRATION_FRACTION
+    (single source of truth, parallel to the IN-filter derivation in
+    ``_ct_threshold_sql``).
+
+    POLY_TYPE filter:
+      - 'I' (ice)   -> CT > 0
+      - 'W' (water) -> CT = 0  (must contribute to the median, else upward bias)
+      - 'N' (no data), 'L' (land), NULL -> excluded
+    """
+    return f"""
+        SELECT
+            ST_AsText(ST_Transform(geometry, {grid_crs})) AS geom_wkt,
+            "T1"::date AS obs_date,
+            "CT" AS ct_code,
+            CASE
+                WHEN EXTRACT(MONTH FROM "T1") >= 9
+                THEN (EXTRACT(YEAR FROM "T1")::text || '-09-01')::date
+                ELSE ((EXTRACT(YEAR FROM "T1")::int - 1)::text || '-09-01')::date
+            END AS season_start
+        FROM sgrda
+        WHERE "POLY_TYPE" IN ('I', 'W')
+          AND ST_Intersects(geometry, ST_GeomFromText(:bbox_wkt, 4326))
+          AND CASE
+                  WHEN EXTRACT(MONTH FROM "T1") >= 9
+                  THEN (EXTRACT(YEAR FROM "T1")::text || '-09-01')::date
+                  ELSE ((EXTRACT(YEAR FROM "T1")::int - 1)::text || '-09-01')::date
+              END BETWEEN '{season_min}' AND '{season_max}'
+        ORDER BY season_start, obs_date;
+    """
+
+
 def _ct_threshold_sql(*, threshold: float, grid_crs: int, season_min: str, season_max: str) -> str:
     """SIGRID3 polygons whose total concentration fraction is at least ``threshold``,
     inside the bbox, with season_start in [season_min, season_max].
@@ -139,12 +176,34 @@ class Metric(ABC):
 
 
 class FreezeUpDateMetric(Metric):
-    """Median day-of-season at which a cell first reaches CT fraction >= ct_threshold.
+    """Climatological freeze-up date per cell, by the CIS protocol applied at
+    native daily SGRDA cadence.
 
-    CIS convention: freeze-up is defined as the first observation of total
-    concentration >= 4/10 (CT_MIN = 40 in SIGRID3 encoding). The "first
-    occurrence at CT >= 1" definition is rejected because persistence is
-    not guaranteed at such low concentrations. See docs/DECISIONS.md.
+    Methodology (DEC-027, median-then-threshold):
+      1. For each calendar day in the admissible window (WMO 80% data-
+         availability rule per day, derived from the climatology period),
+         build the median CT fraction across years.
+      2. For each cell, the freeze-up date is the first day in ice-season
+         order where this medianed field reaches >= ct_threshold (4/10,
+         CIS convention).
+
+    Diverges from the legacy threshold-then-median scheme: there, a per-year
+    freeze-up date was computed per cell and then medianed across years.
+    Cells that never crossed the threshold in some years had ill-defined
+    per-year dates, biasing the median sample. The CIS methodology operates
+    on the medianed CT field directly, which always admits a defined date
+    (or NaN if the median never crosses).
+
+    Known censoring: cells whose true climatological freeze-up precedes the
+    admissible window floor (e.g. estuary tip in cold years) report the
+    floor date — a WMO-defined censoring boundary documented in DEC-027,
+    not a measurement.
+
+    See:
+      - docs/DECISIONS.md DEC-027 for the full rationale
+      - backend/probes/005_sgrda_chart_cadence/ for the WMO-mask-derived
+        effective scan window (Dec 11 -> May 17 observed for 2011-2020;
+        emerges from the data for any other climatology period)
     """
 
     slug = "freeze_up_date"
@@ -152,21 +211,39 @@ class FreezeUpDateMetric(Metric):
     ct_threshold = 0.4
 
     def sql(self, *, grid_crs, season_min, season_max):
-        return _ct_threshold_sql(
-            threshold=self.ct_threshold, grid_crs=grid_crs,
-            season_min=season_min, season_max=season_max,
+        return _all_ct_sql(
+            grid_crs=grid_crs, season_min=season_min, season_max=season_max,
         ), {}
 
     def reduce_season(self, season_df, *, transform, height, width, burn):
-        season_start = season_df["season_start"].iloc[0]
-        dates = sorted(season_df["obs_date"].unique())
-        first = np.full((height, width), np.nan, dtype=np.float32)
-        for obs_date in dates:
-            geoms = season_df.loc[season_df["obs_date"] == obs_date, "geometry"].tolist()
-            mask = burn(geoms, transform, height, width).astype(bool)
-            days = (obs_date - season_start).days
-            first = np.where(np.isnan(first) & mask, days, first)
-        return first
+        raise NotImplementedError(
+            "FreezeUpDateMetric overrides compute_climatology directly "
+            "(median-then-threshold per DEC-027); reduce_season is not used."
+        )
+
+    def compute_climatology(self, df, *, transform, height, width, burn, burn_values=None):
+        if burn_values is None:
+            raise ValueError(
+                "FreezeUpDateMetric.compute_climatology requires burn_values "
+                "(value-keyed rasterizer) from the pipeline."
+            )
+        from climatology.processing.event_detection import (
+            admissible_calendar_days,
+            build_daily_median_ct_cube,
+            day_of_season,
+            extract_event_date,
+        )
+        days = admissible_calendar_days(df)
+        cube = build_daily_median_ct_cube(
+            df, admissible_days=days,
+            transform=transform, height=height, width=width,
+            burn_values=burn_values,
+        )
+        bool_cube = cube >= self.ct_threshold
+        day_ordinals = [day_of_season(d) for d in days]
+        return extract_event_date(
+            bool_cube, day_ordinals=day_ordinals, mode="first_above",
+        )
 
     def format_ticks(self, tick_values):
         return [

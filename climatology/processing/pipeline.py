@@ -83,6 +83,21 @@ def burn(geoms, transform, height: int, width: int) -> np.ndarray:
                          transform=transform, fill=0, dtype=np.uint8)
 
 
+def burn_values(geom_value_pairs, transform, height: int, width: int) -> np.ndarray:
+    """Rasterize (geom, value) pairs to a float32 array; NaN where no polygon covers.
+
+    Sibling of ``burn`` for metrics that need a value-keyed field (e.g. CT
+    fractions) rather than a binary coverage mask. Used by median-then-
+    threshold metrics that build a daily median field across years before
+    extracting event dates (DEC-027).
+    """
+    if not geom_value_pairs:
+        return np.full((height, width), np.nan, dtype=np.float32)
+    shapes = [(g.__geo_interface__, float(v)) for g, v in geom_value_pairs]
+    return rio_rasterize(shapes, out_shape=(height, width),
+                         transform=transform, fill=np.nan, dtype=np.float32)
+
+
 def load_polygons(metric: Metric, bbox_path: Path) -> pd.DataFrame:
     """Pull rows from the DB per the metric's SQL; attach shapely geometries."""
     bbox_wkt_str = gpd.read_file(bbox_path).to_crs(epsg=4326).union_all().wkt
