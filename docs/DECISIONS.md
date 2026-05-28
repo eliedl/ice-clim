@@ -441,4 +441,24 @@ Decisions DEC-003, DEC-007, DEC-008, DEC-010, DEC-012, DEC-015, DEC-019, DEC-020
 
 ---
 
+## DEC-027 — Median-then-Threshold Methodology for Freeze-Up / Break-Up Date Climatologies
+
+- **Context**: The current `FreezupDateMetric` and `BreakupDateMetric` implement a *threshold-then-median* scheme: at each cell, per year, find the first/last date where `CT` crosses 4/10, then median those per-year dates across the 10-year climatology period. The CIS production methodology is the inverse — *median-then-threshold*: at each (cell, time-step), median `CT` across years first, then identify the first/last time-step where the medianed field crosses 4/10. The two operations do not commute and produce materially different climatological dates. Concrete failure mode: a cell that freezes in 6 of 10 years has a defined CIS climatology (median crosses 4/10 at some date) but no defined date under threshold-then-median for the 4 years that never froze. CIS operates this scheme on weekly Historical Date bins over a 30-year normal; our archive (daily SGRDA, 2011–2020) supports a finer time axis.
+- **Options considered**:
+  1. **Strict CIS replication** — bin daily SGRDA charts to weekly Historical Dates per the CIS HD calendar (52 HDs/year + leap-year and Nov 26–Dec 4 exceptions); evaluate every second HD within CIS's freeze-up [Dec 4 – Mar 12] and breakup [Mar 19 – Jun 25] windows. Output resolution: biweekly. Loses the temporal detail our daily archive provides.
+  2. **Native-daily adaptation (median-then-threshold at calendar-day resolution)** — for each (cell, calendar-day), median `CT` across the 10 years; scan for first-crossing along the calendar-day axis. Output resolution: daily. Same logical operation as CIS, applied at our archive's native cadence.
+  3. **Keep existing threshold-then-median** — produces a per-year distribution of freeze-up / breakup dates per cell. Answers a different question ("when does a typical year freeze at this cell") than the CIS product ("when does the typical ice field cross 4/10 at this cell").
+- **Choice made**: Option 2 (native-daily median-then-threshold).
+- **Rationale**: Preserves the CIS methodological logic while respecting the temporal resolution of our archive. Option 1 throws away ~7× temporal information needlessly. Option 3 answers a distinct (and not necessarily wrong) question, but cannot be compared apples-to-apples with CIS climatologies; retained as a possible separate per-year-distribution product if needed downstream.
+- **Sub-decisions** (all informed by probe 005, 2026-05-28):
+  - **Cross-year alignment**: strict-match (one observed chart per calendar day per year, no interpolation or forward-fill). Justified by probe 005: 99.0% of consecutive chart gaps are 1 day, and all 158 days in the effective climatology window clear the WMO 80% rule with coverage ratio ≥ 0.8.
+  - **Missing-data mask**: WMO 80% rule applied per calendar day. Days with `n_years_with_chart < 8` are excluded from both the median computation and the threshold-detection scan. Feb 29 excluded a priori (3/10 years contributing).
+  - **Effective scan window**: Dec 11 → May 17 (158 days), defined by WMO 80% admissibility. Threshold scans nominally targeting wider windows (e.g. Nov 1 – Mar 12 for freeze-up to address the Gulf early-onset caveat) are truncated to the admissible interval.
+  - **Crossing detector**: first-crossing (no consecutive-day persistence rule). The 10-year median already provides the smoothing a persistence rule would impose; CIS itself uses first-crossing on its HD grid.
+- **Known censoring (Gulf early-onset caveat)**: Cells where the *true* climatological freeze-up precedes Dec 11 (estuary tip, exposed cold-source bays) will report freeze-up = Dec 11 — a known WMO-defined floor, not a measurement. Mirror at May 17 ceiling for breakup. To be flagged in climatology product metadata; pile-up at the mask boundary is the empirical signature to look for once the refactor is implemented.
+- **Validation status**: APPROVED (2026-05-28) — user-confirmed after probe 005 outcome review.
+- **References**: backend/probes/005_sgrda_chart_cadence/ — Outcome; CIS Climatic Ice Atlas methodology section ("Date of First Ice / Last Ice, Freeze-up / Break-up Dates"); WMO-No. 1203 (80% data-availability rule); `FreezupDateMetric` and `BreakupDateMetric` — refactor target.
+
+---
+
 *All decisions logged as PENDING. No scientific assumption has been finalized. This log will be updated as decisions are validated.*

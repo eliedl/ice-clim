@@ -79,7 +79,8 @@
       "Bash(.venv/bin/python probes/002_stage_of_development_census/probe.py)",
       "Bash(.venv/bin/python probes/003_concentration_census/probe.py)",
       "Bash(mkdir -p /home/eliedl/Documents/ice-clim/climatology/services)",
-      "Bash(.venv/bin/python backend/probes/001_sd_residual/probe.py)"
+      "Bash(.venv/bin/python backend/probes/001_sd_residual/probe.py)",
+      "Bash(.venv/bin/python backend/probes/005_sgrda_chart_cadence/probe.py)"
     ],
     "additionalDirectories": [
       "/home/eliedl/Documents/ice-clim/climatology"
