@@ -30,6 +30,7 @@ from climatology.processing.metrics import (
 )
 from climatology.processing.pipeline import (
     build_grid,
+    build_land_mask,
     burn,
     burn_values,
     load_polygons,
@@ -64,6 +65,8 @@ def run(metric_slug: str, region: str) -> None:
     transform, h, w, bounds = build_grid(bbox)
     log.info("Raster grid: %d × %d cells (%d total)", w, h, w * h)
 
+    land_mask = build_land_mask(transform, h, w)
+
     df = load_polygons(metric, bbox)
     log.info("Fetched %s rows.", f"{len(df):,}")
     if df.empty:
@@ -72,7 +75,7 @@ def run(metric_slug: str, region: str) -> None:
 
     values = metric.compute_climatology(
         df, transform=transform, height=h, width=w,
-        burn=burn, burn_values=burn_values,
+        burn=burn, burn_values=burn_values, land_mask=land_mask,
     )
     log.info("Cells with data: %s / %s",
              f"{int((~np.isnan(values)).sum()):,}", f"{h * w:,}")

@@ -80,7 +80,10 @@
       "Bash(.venv/bin/python probes/003_concentration_census/probe.py)",
       "Bash(mkdir -p /home/eliedl/Documents/ice-clim/climatology/services)",
       "Bash(.venv/bin/python backend/probes/001_sd_residual/probe.py)",
-      "Bash(.venv/bin/python backend/probes/005_sgrda_chart_cadence/probe.py)"
+      "Bash(.venv/bin/python backend/probes/005_sgrda_chart_cadence/probe.py)",
+      "Bash(.venv/bin/python backend/probes/006_sgrda_l_vs_global_coastline/probe.py)",
+      "Bash(git add *)",
+      "Bash(git commit -m ' *)"
     ],
     "additionalDirectories": [
       "/home/eliedl/Documents/ice-clim/climatology"

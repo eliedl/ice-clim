@@ -28,6 +28,7 @@ log = logging.getLogger(__name__)
 
 BBOX_ROOT  = Path("/home/eliedl/data/reference/climatology_bbox")
 OUTPUT_DIR = Path(__file__).parents[1] / "output"
+LAND_MASK_PATH = Path("/home/eliedl/data/reference/cis_landmasks/global_coastline.shp")
 
 GRID_RES   = 25
 GRID_CRS   = 26919          # NAD83 / UTM Zone 19N
@@ -108,6 +109,42 @@ def load_polygons(metric: Metric, bbox_path: Path) -> pd.DataFrame:
         df = pd.read_sql(text(sql), conn, params=params)
     df["geometry"] = df["geom_wkt"].apply(wkt.loads)
     return df.drop(columns="geom_wkt")
+
+
+def build_land_mask(transform, height: int, width: int) -> np.ndarray:
+    """Binary land mask within the grid; True where land covers the cell.
+
+    Uses the CIS standard land mask file (`global_coastline.shp`, LCC100
+    projection, ~1200 land polygons over the Northern hemisphere). The
+    file is the same coastline CIS uses to produce their own
+    climatologies — validated as operationally identical to SGRDA
+    `POLY_TYPE='L'` for our climatology period (probe 006: ~0.0001%
+    symmetric difference for 2008–2023).
+
+    The whole shapefile is loaded and reprojected to GRID_CRS; rasterio's
+    `transform`-driven spatial filtering bbox-rejects out-of-grid
+    polygons at the rasterize step (the bbox lives in `transform`). Pre-
+    filtering the load via bbox would speed up the load slightly — see
+    TODO.
+
+    Used by median-then-threshold metrics to:
+      - skip land cells from the nan-median computation (reduces nanmedian
+        cost by the land fraction; for sept-iles ≈ 60% of cells),
+      - distinguish land from "observable water with no climatological
+        ice" in the final output.
+
+    Returns an all-False mask if no land polygon intersects the grid
+    (fully-pelagic region).
+    """
+    # TODO (perf): pre-filter the shapefile read with a bbox in the file's
+    # native CRS (LCC100) to avoid loading ~1200 global polygons when only
+    # a few intersect any single region.
+    land_gdf = gpd.read_file(LAND_MASK_PATH).to_crs(epsg=GRID_CRS)
+    mask = burn(land_gdf.geometry.tolist(), transform, height, width).astype(bool)
+    log.info("Land mask: %s / %s cells (%.1f%%)",
+             f"{int(mask.sum()):,}", f"{height * width:,}",
+             100.0 * mask.sum() / (height * width))
+    return mask
 
 
 def reduce_seasons_stack(

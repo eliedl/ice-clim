@@ -152,6 +152,7 @@ class Metric(ABC):
         width: int,
         burn,
         burn_values=None,
+        land_mask=None,
     ) -> np.ndarray:
         """End-to-end climatology computation: rows -> (H, W) result raster.
 
@@ -165,6 +166,10 @@ class Metric(ABC):
         ``burn_values`` is provided for metrics that rasterize value-keyed
         polygons (e.g. CT-valued fields). Per-season metrics typically only
         need the binary ``burn``.
+
+        ``land_mask`` (H, W bool, True on land) is provided by the pipeline
+        for metrics that benefit from skipping land cells from intermediate
+        aggregations (median-then-threshold). Per-season metrics ignore it.
         """
         from climatology.processing.pipeline import reduce_seasons_stack
         stack = reduce_seasons_stack(self, df, transform, height, width)
@@ -221,7 +226,7 @@ class FreezeUpDateMetric(Metric):
             "(median-then-threshold per DEC-027); reduce_season is not used."
         )
 
-    def compute_climatology(self, df, *, transform, height, width, burn, burn_values=None):
+    def compute_climatology(self, df, *, transform, height, width, burn, burn_values=None, land_mask=None):
         if burn_values is None:
             raise ValueError(
                 "FreezeUpDateMetric.compute_climatology requires burn_values "
@@ -237,7 +242,7 @@ class FreezeUpDateMetric(Metric):
         cube = build_daily_median_ct_cube(
             df, admissible_days=days,
             transform=transform, height=height, width=width,
-            burn_values=burn_values,
+            burn_values=burn_values, land_mask=land_mask,
         )
         bool_cube = cube >= self.ct_threshold
         day_ordinals = [day_of_season(d) for d in days]
@@ -300,7 +305,7 @@ class BreakupDateMetric(Metric):
             "(median-then-threshold per DEC-027); reduce_season is not used."
         )
 
-    def compute_climatology(self, df, *, transform, height, width, burn, burn_values=None):
+    def compute_climatology(self, df, *, transform, height, width, burn, burn_values=None, land_mask=None):
         if burn_values is None:
             raise ValueError(
                 "BreakupDateMetric.compute_climatology requires burn_values "
@@ -316,7 +321,7 @@ class BreakupDateMetric(Metric):
         cube = build_daily_median_ct_cube(
             df, admissible_days=days,
             transform=transform, height=height, width=width,
-            burn_values=burn_values,
+            burn_values=burn_values, land_mask=land_mask,
         )
         bool_cube = cube >= self.ct_threshold
         day_ordinals = [day_of_season(d) for d in days]

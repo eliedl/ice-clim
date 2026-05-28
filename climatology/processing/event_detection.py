@@ -17,6 +17,7 @@ See:
 
 from __future__ import annotations
 
+import warnings
 from datetime import date
 from typing import Literal
 
@@ -74,6 +75,7 @@ def build_daily_median_ct_cube(
     height: int,
     width: int,
     burn_values,
+    land_mask: np.ndarray | None = None,
 ) -> np.ndarray:
     """Build (n_admissible_days, H, W) median CT cube.
 
@@ -85,6 +87,12 @@ def build_daily_median_ct_cube(
     of truth, parallel to the legacy _ct_threshold_sql IN-filter derivation).
     Unmapped codes drop out as NaN and are excluded from the year's
     contribution to the median.
+
+    If ``land_mask`` is provided, the nan-median is computed only over the
+    water (non-land) subset of cells, and land cells are initialized to NaN.
+    Reduces nan-median cost by the land fraction and suppresses the
+    "All-NaN slice" warnings from land cells (which are unobservable by
+    construction — POLY_TYPE='L' is excluded from the metric's SQL).
     """
     df = df.copy()
     df["obs_date_dt"] = pd.to_datetime(df["obs_date"])
@@ -93,19 +101,33 @@ def build_daily_median_ct_cube(
     df["ct"] = df["ct_code"].map(CONCENTRATION_FRACTION)
     df = df.dropna(subset=["ct"])
 
+    not_land = ~land_mask if land_mask is not None else None
+
     cube_slices = []
-    for md in admissible_days:
-        day_df = df[df["month_day"] == md]
-        years = sorted(day_df["year"].unique())
-        year_rasters = [
-            burn_values(
-                list(zip(day_df.loc[day_df["year"] == y, "geometry"],
-                         day_df.loc[day_df["year"] == y, "ct"])),
-                transform, height, width,
-            )
-            for y in years
-        ]
-        cube_slices.append(np.nanmedian(np.stack(year_rasters, axis=0), axis=0))
+    with warnings.catch_warnings():
+        # Residual All-NaN slices can occur at chart-coverage edges even
+        # outside land; they correctly produce NaN. Silence the noise.
+        warnings.filterwarnings(
+            "ignore", message="All-NaN slice encountered", category=RuntimeWarning,
+        )
+        for md in admissible_days:
+            day_df = df[df["month_day"] == md]
+            years = sorted(day_df["year"].unique())
+            year_rasters = [
+                burn_values(
+                    list(zip(day_df.loc[day_df["year"] == y, "geometry"],
+                             day_df.loc[day_df["year"] == y, "ct"])),
+                    transform, height, width,
+                )
+                for y in years
+            ]
+            stack = np.stack(year_rasters, axis=0)
+            if not_land is not None:
+                median_slice = np.full((height, width), np.nan, dtype=np.float32)
+                median_slice[not_land] = np.nanmedian(stack[:, not_land], axis=0)
+            else:
+                median_slice = np.nanmedian(stack, axis=0)
+            cube_slices.append(median_slice)
     return np.stack(cube_slices, axis=0)
 
 
