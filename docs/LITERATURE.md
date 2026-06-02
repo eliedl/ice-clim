@@ -28,7 +28,6 @@ Sources consulted (from training data): Google Scholar, Web of Science, Semantic
 
 **Citation:** Tivy, A., Howell, S.E.L., Alt, B., McCourt, S., Chagnon, R., Crocker, G., Carrieres, T., & Yackel, J.J. (2011). Changes in sea ice cover across Canada (1968–2008). *Journal of Geophysical Research: Oceans*, 116(C6), C06021.
 **DOI:** 10.1029/2010JC006453
-**[FROM TRAINING KNOWLEDGE]**
 
 **Methodological Summary:**
 This is the foundational peer-reviewed study using CIS SIGRID-3 (and pre-SIGRID-3) chart data to compute long-term trends in sea ice for all Canadian regions including the Gulf of St. Lawrence. The authors compute **area-weighted weekly mean ice concentration** by aggregating polygon CA values (thickest ice type) to fixed geographic regions. They use the CIS archive from 1968–2008, representing approximately 40 years of weekly charts. Missing charts are handled by exclusion (no infilling), with a minimum annual coverage threshold applied. The study reports trends in total ice extent, concentration, and ice season length (ice-on and ice-off dates).
@@ -63,28 +62,19 @@ Galbraith and colleagues at DFO/IML have published extensively on Gulf of St. La
 
 ---
 
-### [L03] Galbraith et al. (2021) — Annual overview, Gulf of St. Lawrence oceanographic conditions
+### [L03] Galbraith et al. (2025) — Annual overview, Gulf of St. Lawrence oceanographic conditions
 
-**Citation:** Galbraith, P.S., Chassé, J., Nicot, P., Caverhill, C., Gilbert, D., Pettigrew, B., Lefaivre, D., Brickman, D., Devine, L., & Lafleur, C. (annual series, most recent ~2021–2024). *Oceanographic conditions in the Gulf of St. Lawrence during [year]*. DFO Canadian Science Advisory Secretariat Research Document.
-**[FROM TRAINING KNOWLEDGE — this is an annual DFO series; exact citation year needs verification]** [NEEDS REVIEW]
+**Citation:** Galbraith, P.S., Chassé, J., Nicot, P., Caverhill, C., Gilbert, D., Pettigrew, B., Lefaivre, D., Brickman, D., Devine, L., & Lafleur, C. (annual series, most recent ~2021–2024). *Oceanographic conditions in the Gulf of St. Lawrence during 2024. DFO Canadian Science Advisory Secretariat Research Document.
 
 **Methodological Summary:**
 This annual DFO series routinely reports sea ice conditions in the Gulf of St. Lawrence as part of broader oceanographic monitoring. The ice section uses CIS data processed to compute seasonal mean ice cover and compares each year to a reference climatology (typically based on the most recent WMO normal period available). Methods are not always fully described but typically use area-weighted polygon concentration, with anomalies expressed relative to the 1981–2010 or 1991–2020 climatological mean.
 
 **Key Methodological Choices:**
 - **Reference period:** 1981–2010 or 1991–2020 (transitioning)
-- **Spatial method:** Area-weighted mean over defined Gulf sub-regions
-- **Anomaly calculation:** Absolute deviation from climatological mean, sometimes standardized (Z-score)
-- **Reporting:** Winter (Jan–Apr) seasonal mean as primary metric
+- **Spatial method:** Area-weighted mean over defined Gulf sub-regions or the Gulf itself
+- **Anomaly calculation:** Absolute deviation from climatological mean
 
-**Relevance to this project:** High. Provides a template for the type of climatological output this project should produce. The reference period transition is directly relevant to DEC-002.
-
----
-
-### [L04] Dumas et al. (forthcoming or in progress) [NEEDS REVIEW — placeholder]
-
-**[FROM TRAINING KNOWLEDGE — no specific citation available; placeholder for any publications by the project operator]**
-If Élie Dumas has prior publications using CIS data, these should be incorporated here for methodological continuity.
+**Relevance to this project:** High. Provides a template for the type of climatological output this project should produce.
 
 ---
 
@@ -147,26 +137,8 @@ This paper uses CIS and US NIC (National Ice Center) chart data to compute long-
 
 ---
 
-### [L08] Howell et al. (2009) — Sea Ice in the Canadian Arctic Archipelago
 
-**Citation:** Howell, S.E.L., Duguay, C.R., & Markus, T. (2009). Sea ice conditions in the Canadian Arctic Archipelago and associated anomalies in atmospheric circulation, 1981–2008. *Journal of Geophysical Research: Oceans*, 114(C6), C06027.
-**DOI:** 10.1029/2008JC005175
-**[FROM TRAINING KNOWLEDGE]**
-
-**Methodological Summary:**
-This study uses CIS chart data with explicit attention to ice type (stage of development), computing **area-weighted means of ice stage** as a proxy for ice thickness and age. The authors assign numerical thickness values to Egg Code stage categories using lookup tables derived from WMO-No. 259 physical definitions (e.g., new ice ≈ 5 cm, nilas ≈ 8 cm, grey ice ≈ 15 cm, grey-white ≈ 25 cm, etc.), then compute weighted means. This is the primary published example of converting categorical Egg Code stage to a continuous thickness estimate.
-
-**Key Methodological Choices:**
-- **Encoding method:** Physical thickness lookup (cm), not ordinal rank
-- **Source for thickness values:** WMO-No. 259 physical definitions
-- **Aggregation:** Area-weighted mean thickness per region per week
-- **Uncertainty:** Thickness ranges within each category are wide; authors use midpoint values
-
-**Relevance to this project:** Very high. This is the closest published precedent for converting E_SA/SB/SC to a continuous variable. The "physical thickness" approach is an alternative to the "ordinal rank" encoding in CLAUDE.md. [NEEDS REVIEW — see DEC-004]
-
----
-
-### [L09] Dumas (in prep.) / Lavergne et al. (2019) — Sea Ice Products Comparison
+### [L09] Lavergne et al. (2019) — Sea Ice Products Comparison
 
 **Citation:** Lavergne, T., Sørensen, A.M., Kern, S., Tonboe, R., Notz, D., Aaboe, S., ... & Pedersen, L.T. (2019). Version 2 of the EUMETSAT OSI SAF and ESA CCI sea-ice concentration climate data records. *The Cryosphere*, 13(1), 49–78.
 **DOI:** 10.5194/tc-13-49-2019
@@ -185,42 +157,7 @@ This paper, while focused on satellite-derived passive microwave sea ice concent
 
 ---
 
-### [L10] Bélanger et al. (2007) — Sea Ice in Relation to NAO
-
-**Citation:** Bélanger, S., Carrière, M., & Tremblay, L.B. (2007). [Specific title to be confirmed]. [NEEDS REVIEW — this citation is uncertain; inserting as placeholder for DFO/UQAM work on Gulf ice]
-**[FROM TRAINING KNOWLEDGE — citation details uncertain]** [NEEDS REVIEW]
-
-**Methodological Summary (placeholder):**
-Several DFO and UQAM research groups have published on Gulf of St. Lawrence sea ice variability in relation to atmospheric forcing (NAO, AO). These papers typically use CIS chart data with area-weighted concentration as the primary variable, and explore teleconnections with large-scale climate indices. They generally use the 1969–present archive and report results in terms of seasonal mean ice cover anomalies.
-
-**Relevance to this project:** Medium. Provides context for the climate drivers of Gulf ice variability.
-
----
-
 ## Part D — Gulf of St. Lawrence Sea Ice Variability
-
----
-
-### [L11] Galbraith & Larouche (2016) — GSL Temperature and Ice Trends
-
-**Citation:** Galbraith, P.S., & Larouche, P. (2016). [Annual DFO report or specific paper]. [NEEDS REVIEW]
-**[FROM TRAINING KNOWLEDGE — citation uncertain]**
-
-**Methodological Summary:**
-This work (or related annual DFO CSAS series) documents multi-decadal trends in Gulf of St. Lawrence sea ice cover, showing a general decline in maximum ice extent since the 1970s with high interannual variability driven by winter atmospheric circulation anomalies. Key finding: the Gulf of St. Lawrence has among the most variable sea ice covers of any seasonally ice-covered sea globally, with standard deviation of winter ice cover approximately 30–40% of the mean. This high variability has direct implications for the required length of the climatological reference period. [NEEDS REVIEW — see DEC-002]
-
----
-
-### [L12] Cyr & Galbraith (2021) — Gulf of St. Lawrence Oceanographic Conditions
-
-**Citation:** Cyr, F., & Galbraith, P.S. (2021). A climate index for the Gulf of St. Lawrence based on observed bottom temperatures. *Frontiers in Marine Science*, 8, 612.
-**DOI:** 10.3389/fmars.2021.668166
-**[FROM TRAINING KNOWLEDGE — DOI may be imprecise]** [NEEDS REVIEW]
-
-**Methodological Summary:**
-While focused on ocean temperature, this paper provides context for the physical oceanography of the Gulf of St. Lawrence as a coupled sea ice–ocean–atmosphere system. It documents the role of winter ice cover in setting summer ocean temperature anomalies through stratification effects. The methodology for constructing climate indices from irregular observational series (with missing data, changing observation methods) is relevant. The authors use anomaly time series with explicit reference periods and document the sensitivity of trend estimates to period choice.
-
-**Relevance to this project:** Medium. Context for Gulf physical environment; methodology for climate index construction from irregular data.
 
 ---
 
@@ -284,26 +221,3 @@ This paper demonstrates how multi-class categorical ice type data (from passive 
 
 **Relevance to this project:** Medium-High. Methodological argument for class-wise analysis over ordinal encoding.
 
----
-
-## Summary Assessment
-
-### Convergent Methodological Choices Across Literature
-
-1. **Area-weighting is universal** for polygon/grid-cell aggregation of sea ice concentration.
-2. **Missing data is excluded** (not infilled) in essentially all peer-reviewed CIS climatology work.
-3. **Total concentration (E_CT) as primary variable** — all major CIS-based studies focus on CT; stage and form are secondary.
-4. **Equal-area projection required** for accurate area calculations — critical issue for EPSG:4326 data.
-5. **Frequency distributions** are preferred over ordinal means for categorical ice type variables.
-
-### Points of Divergence or Uncertainty
-
-1. **Reference period:** Literature uses 1968–2008, 1981–2010, and 1991–2020 — no convergence specific to Gulf of St. Lawrence climatology.
-2. **Encoding of stage/form:** Physical thickness lookup (Howell 2009) vs. ordinal rank (project CLAUDE.md) vs. frequency distribution (Maslanik 2011) — no consensus.
-3. **Minimum coverage threshold:** 70–80% (WMO) is cited but not consistently applied in literature.
-4. **Treatment of open-water polygons (E_CT = 0):** Included as zero in some studies, excluded in others.
-5. **Sub-regional resolution:** Gulf treated as a whole in some studies, divided into northern/southern/estuary sub-regions in others.
-
----
-
-*All citations FROM TRAINING KNOWLEDGE (knowledge cutoff August 2025). DOIs require independent verification. Post-August 2025 publications not covered.*

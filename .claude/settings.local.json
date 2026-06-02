@@ -83,7 +83,9 @@
       "Bash(.venv/bin/python backend/probes/005_sgrda_chart_cadence/probe.py)",
       "Bash(.venv/bin/python backend/probes/006_sgrda_l_vs_global_coastline/probe.py)",
       "Bash(git add *)",
-      "Bash(git commit -m ' *)"
+      "Bash(git commit -m ' *)",
+      "Bash(git -C /home/eliedl/Documents/ice-clim log --since=\"2026-05-26\" --until=\"2026-05-29\" --pretty=format:\"%h %ad %s\" --date=short)",
+      "Bash(git -C /home/eliedl/Documents/ice-clim log --since=\"2026-05-27\" --until=\"2026-05-29\" --name-status --pretty=format:\"COMMIT %h %ad %s\" --date=short)"
     ],
     "additionalDirectories": [
       "/home/eliedl/Documents/ice-clim/climatology"

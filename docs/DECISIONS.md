@@ -12,53 +12,7 @@
 
 This log records all scientific decisions, assumptions, and edge-case choices identified during Phase 1A (scientific review and documentation). Each entry describes the decision context, options considered, the current (PENDING) choice, and the rationale. No decision in this log has been finalized; all require validation by Élie Dumas before implementation.
 
----
 
-## DEC-001 — Coordinate Reference System for Area Calculation
-
-- **Context**: The CIS SIGRID-3 archive uses EPSG:4326 (WGS84 geographic coordinates, latitude/longitude). Area calculations performed on geographic coordinates are inaccurate because degrees of longitude shrink toward the poles — at 47°N (Gulf of St. Lawrence), a square degree of longitude is approximately 15% smaller than a square degree of latitude. All area-weighted climatological aggregations depend on accurate polygon areas.
-- **Options considered**:
-  1. Reproject all polygons to an equal-area projection before computing areas (e.g., Lambert Azimuthal Equal-Area centered on the Gulf, EPSG:3573 or a custom CRS; or Statistics Canada Lambert, EPSG:3347).
-  2. Compute approximate areas in EPSG:4326 using the geodesic area formula (e.g., via `pyproj.Geod.geometry_area_perimeter`) — exact for the ellipsoid, no reprojection needed.
-  3. Use a fixed equal-area grid (e.g., EASE-2 or NSIDC polar stereographic) and rasterize polygons before analysis.
-  4. Ignore the error and compute planar areas in geographic coordinates (not acceptable for scientific output).
-- **Choice made**: PENDING
-- **Rationale**: Options 1 and 2 are both scientifically defensible. Option 2 (geodesic area via pyproj) avoids reprojection artifacts and is exact; Option 1 is more conventional in GIS workflows and easier to audit. Option 3 would change the spatial representation fundamentally. Option 4 is unacceptable.
-- **Validation status**: PENDING
-- **References**: Parkinson & Cavalieri (2008); standard GIS practice
-
----
-
-## DEC-002 — Reference Period for Climate Normals
-
-- **Context**: The WMO standard reference period is 1991–2020 (updated at the 18th Congress, 2019). The CIS archive for the Gulf of St. Lawrence begins ~1969, providing data from 1969–present (approximately 55+ years as of 2024). The project goal is described as computing "regional sea ice climatologies" without specifying operational vs. research orientation.
-- **Options considered**:
-  1. **1991–2020** — WMO standard period; directly comparable to international climate normals; 30 years; fully covered by CIS SIGRID-3 data.
-  2. **1981–2010** — Previous WMO standard; used in the most recent CIS Climatic Atlas (if published); 30 years.
-  3. **1971–2000** — Earlier standard; 30 years; captures more pre-trend baseline.
-  4. **Full archive (1969–2020 or 1969–2024)** — Maximum data; not a WMO standard period; appropriate for trend analysis rather than normals.
-  5. **Multiple periods** — Report normals for 1981–2010, 1991–2020, and full record; allows comparison.
-- **Choice made**: PENDING
-- **Rationale**: For operational comparability, 1991–2020 is appropriate. For research purposes tracking long-term change, the full archive is more informative. The Gulf of St. Lawrence has high interannual variability (σ ≈ 30–40% of mean), so a 30-year period may insufficiently characterize the climatological baseline. Option 5 (multiple periods) provides maximum scientific value but increases complexity.
-- **Validation status**: PENDING
-- **References**: WMO-No. 49, WMO-No. 1203, Galbraith & Larouche (2016)
-
----
-
-## DEC-003 — Minimum Data Coverage Threshold for Normals
-
-- **Context**: WMO-No. 1203 recommends that a normal be computed only when ≥ 80% of years in the reference period have valid data for the period in question. For weekly data, the equivalent threshold is not explicitly specified. CIS charts have occasional missing weeks due to operational gaps, weather, or digitization issues.
-- **Options considered**:
-  1. **WMO threshold: ≥ 80% of years** have a valid chart for that calendar week — i.e., at least 24 of 30 years for a 30-year period.
-  2. **Relaxed threshold: ≥ 70% of years** — allows more weeks to have a valid normal; used in some national practices.
-  3. **No threshold** — compute normals for all weeks, document the coverage rate alongside each normal value.
-  4. **Per-region threshold** — apply threshold at the polygon-region level rather than the chart level, since missing charts differ from missing regions within a chart.
-- **Choice made**: PENDING
-- **Rationale**: The 80% WMO threshold is appropriate for a scientifically rigorous product. However, if the archive has high coverage (e.g., > 95% of weeks present), this threshold may be moot. A data audit is needed before this decision can be resolved. [NEEDS REVIEW — pending DEC-012 and DATA_AUDIT.md]
-- **Validation status**: PENDING
-- **References**: WMO-No. 1203
-
----
 
 ## DEC-004 — Ordinal Encoding of Stage of Development (E_SA/SB/SC)
 
@@ -66,73 +20,26 @@ This log records all scientific decisions, assumptions, and edge-case choices id
 - **Options considered**:
   1. **CLAUDE.md ordinal encoding** — maps codes to ranks 0–11 by ice development sequence; allows computation of weighted mean stage.
   2. **Physical thickness encoding** — assigns midpoint thickness in cm to each stage based on WMO-No. 259 definitions (e.g., new ice = 5 cm, nilas = 8 cm, grey ice = 15 cm, etc.); allows computation of weighted mean thickness.
-  3. **Frequency distribution only** — no encoding; compute proportion of area in each stage class per time period; most conservative and avoids encoding assumptions.
-  4. **Binary simplification** — collapse to thin ice (codes 0,1,2,4) vs. thick ice (codes 5,3,7,8,9,6) for Gulf-specific climatology where multi-year ice is absent.
-  5. **Hybrid** — use frequency distributions as primary output, provide ordinal encoding as a convenience index for trend analysis.
-- **Choice made**: PENDING
-- **Rationale**: The Gulf of St. Lawrence predominantly has young and first-year ice; codes 8, 9, 6, and 1. are rare. This limits the practical impact of the encoding choice but does not eliminate the need for scientific justification. The physical thickness approach (Option 2) is most defensible physically (Howell et al. 2009) but introduces midpoint assignment uncertainty. The frequency distribution approach (Option 3) is most rigorous statistically (Maslanik et al. 2011). The CLAUDE.md ordinal encoding (Option 1) is a pragmatic compromise requiring explicit validation.
-- **Validation status**: PENDING
+  3. **Frequency distribution only** — no encoding; compute proportion of area in each stage class per time period; most conservative and avoids encoding assumptions, fits with WMO standards.
+- **Choice made**: hybrid approach using 1, 2 and 3.
+- **Rationale**: The physical thickness approach (Option 2) is most defensible physically (Howell et al. 2009) but introduces midpoint assignment uncertainty. The frequency distribution approach (Option 3) is most rigorous statistically (Maslanik et al. 2011). The CLAUDE.md ordinal encoding (Option 1) is a pragmatic compromise requiring explicit validation.
+- **Validation status**: Approved
 - **References**: WMO-No. 259, Howell et al. (2009), Maslanik et al. (2011), MANICE 9th ed.
+- **Implementation status**: Not implemented yet
 
 ---
 
 ## DEC-005 — Ordinal Encoding of Form of Ice (E_FA/FB/FC)
 
-- **Context**: The Egg Code form of ice uses WMO codes 0–9 (pancake ice through giant floe, plus fast ice and growlers). CLAUDE.md specifies an ordinal encoding `'8'→0, '0'→1, '1'→2, ..., '7'→8` placing fast ice first (rank 0) and giant floe last (rank 8). This implies a size-based ordering with fast ice as a special category. The scientific meaning of a "mean form of ice" value is unclear.
+- **Context**: The Egg Code form of ice uses WMO codes 0–9 (pancake ice through giant floe, plus fast ice and growlers). CLAUDE.md specifies an ordinal encoding `'8'→0, '0'→1, '1'→2, ..., '7'→8` placing fast ice first (rank 0) and giant floe last (rank 8). This implies a size-based ordering with fast ice as a special category. 
 - **Options considered**:
   1. **CLAUDE.md encoding** — fast ice at rank 0 (treated as a distinct regime), then ordered by floe size (pancake → giant); allows weighted mean computation.
   2. **Floe size only** — encode only the size-based codes (0=pancake/brash through 7=giant floe) in order, treat fast ice (8) and growlers (9) as separate flags.
-  3. **Frequency distribution only** — no encoding; most scientifically defensible.
-  4. **Not encoded** — drop form of ice from quantitative climatological analysis; report qualitatively only.
-- **Choice made**: PENDING
-- **Rationale**: The physical significance of a mean form of ice is limited — form is a more qualitative descriptor than stage or concentration. For navigation safety and ecosystem studies, the proportion of area with fast ice, large floes, or brash ice may be more informative than a mean rank. The rationale for the specific ordering in CLAUDE.md (fast ice as rank 0) is unclear and should be justified.
-- **Validation status**: PENDING
+  3. **Frequency distribution only** — no encoding.
+- **Choice made**: hybrid approach using 1, 2 and 3.
+- **Validation status**: Approved
 - **References**: WMO-No. 259, MANICE
-
----
-
-## DEC-006 — Handling of Inconsistent Partial Concentrations (CA + CB + CC ≠ CT)
-
-- **Context**: In the Egg Code, CA + CB + CC should sum to CT. In practice, CIS charts frequently have polygons where this relationship does not hold — due to rounding (concentrations in tenths), operational conventions (a fourth ice type below the reporting threshold), or data entry errors. The frequency and magnitude of this inconsistency in the local archive is unknown.
-- **Options considered**:
-  1. **Accept as-is** — use E_CT as the primary variable and treat CA, CB, CC independently; do not enforce the sum constraint.
-  2. **Normalize CA, CB, CC** — scale partial concentrations so they sum to CT.
-  3. **Flag and exclude** — polygons where |CA + CB + CC - CT| > 1 tenth are flagged as suspect and excluded from stage/form analysis.
-  4. **Use CT only** — drop CA, CB, CC from quantitative analysis; use CT for concentration climatology and treat SA, SB, SC as unweighted descriptors.
-  5. **Audit-first** — determine the empirical frequency of violations before deciding.
-- **Choice made**: PENDING
-- **Rationale**: Option 5 (audit-first) is the correct approach before choosing among Options 1–4. The choice depends on how common and how large the inconsistencies are in practice. This decision is deferred to the DATA_AUDIT phase.
-- **Validation status**: PENDING
-- **References**: WMO-No. 259, MANICE
-
----
-
-## DEC-007 — Missing Chart Weeks: Exclusion vs. Infilling
-
-- **Context**: The CIS weekly chart archive has occasional gaps (missing weeks). For computing weekly climatological means, a decision is needed on whether to (a) compute means from available data only, (b) infill missing weeks from adjacent weeks or climatological values, or (c) exclude any week-of-year from the climatology if coverage falls below a threshold (DEC-003).
-- **Options considered**:
-  1. **Exclusion (no infilling)** — compute means from available years only for each calendar week; standard in CIS-based literature.
-  2. **Temporal interpolation** — fill missing weeks by linear interpolation from adjacent weeks in the same year.
-  3. **Climatological substitution** — replace missing week with the climatological mean for that week.
-  4. **Spatial interpolation** — reconstruct missing polygons from spatially adjacent charts; operationally complex.
-- **Choice made**: PENDING
-- **Rationale**: Exclusion (Option 1) is the standard in the literature and recommended by WMO-No. 1203. Infilling introduces artificial smoothing and should only be used if missing data patterns are systematic (e.g., a specific region always missing). The decision depends on the frequency and spatial pattern of missing data — again, deferred to DATA_AUDIT.
-- **Validation status**: PENDING
-- **References**: WMO-No. 1203, Tivy et al. (2011)
-
----
-
-## DEC-008 — Null / Missing Value Representation in SIGRID-3 Fields
-
-- **Context**: CIS SIGRID-3 DBF files use various representations for missing or not-applicable attribute values: `'.'`, `'X'`, `'-9'`, `''` (empty string), `NULL`, and potentially others. The specific values used may differ by product era, field type, and ice chart type (weekly vs. daily). A definitive list is needed for the parser/loader.
-- **Options considered**:
-  1. **Treat all non-numeric string values as missing** — parse to NaN; risk of inadvertently dropping valid codes.
-  2. **Enumerate known null codes explicitly** — hardcode a list of null sentinels; risk of missing edge cases.
-  3. **Audit-first** — perform a full frequency count of all unique values in each field across the archive before defining null codes.
-- **Choice made**: PENDING (Option 3 recommended as first step)
-- **Rationale**: Until the full value distribution in the archive is known, hardcoding null codes is risky. A data audit (DATA_AUDIT.md) should enumerate all unique string values per field.
-- **Validation status**: PENDING
-- **References**: SIGRID-3 specification, MANICE
+- **Implementation status**: Not implemented yet
 
 ---
 
@@ -143,11 +50,11 @@ This log records all scientific decisions, assumptions, and edge-case choices id
   1. **Include as zeros** — area-weighted mean over the entire analysis region including open water; represents true mean concentration over the region.
   2. **Exclude open-water polygons** — mean concentration within ice-covered area only; a measure of ice density where ice is present.
   3. **Report both** — report mean concentration (Option 1) and ice-covered fraction separately; then Option 2 = Option 1 / (ice-covered fraction).
-  4. **Binary ice extent** — report proportion of region covered by ice (CT ≥ threshold) separately from mean concentration within ice cover.
-- **Choice made**: PENDING
+- **Choice made**: report-both
 - **Rationale**: For a complete climatology, Option 3 is most informative: report (a) frequency of ice occurrence (% of weeks with any ice), (b) mean total concentration when ice is present, and (c) mean total concentration over the full region (including ice-free weeks). These three statistics together characterize the ice regime fully.
-- **Validation status**: PENDING
+- **Validation status**: approved
 - **References**: Parkinson & Cavalieri (2008), CIS Climatic Atlas
+- **Implementation status**: Not implemented yet
 
 ---
 
@@ -156,12 +63,12 @@ This log records all scientific decisions, assumptions, and edge-case choices id
 - **Context**: MANICE and the CIS literature acknowledge that ice chart production involves significant analyst judgment, particularly for ice type assignment and partial concentration splitting. This subjectivity introduces uncertainty that is not formally quantified in the SIGRID-3 files. Inter-analyst variability and inter-chart consistency (temporal homogeneity due to changes in operational practices, sensor inputs, and analyst staff) are known sources of systematic uncertainty.
 - **Options considered**:
   1. **Ignore** — treat all chart data as equally reliable; standard in most published studies.
-  2. **Qualitative documentation** — note the uncertainty as a caveat in the climatology product without quantifying it.
+  2. **Qualitative documentation** — note the uncertainty as a caveat in the climatology product without quantifying it. Inspect .xml files for a data quality tag. Ask CIS for the application of the corrections to charts (era-dependent) named in their cliamtological documentation to the archive provided by Brad Drummond via their sftp.
   3. **Era-based weighting** — weight charts by era (e.g., modern SIGRID-3 weighted higher than early digital records) based on known quality improvements.
   4. **Formal uncertainty estimation** — use the spread across overlapping products (e.g., daily vs. weekly charts for the same day) as a proxy for analyst uncertainty.
 - **Choice made**: PENDING
 - **Rationale**: Options 1 and 2 are standard practice. Options 3 and 4 would be methodological innovations. Given the research orientation of this project, at minimum Option 2 (qualitative documentation) is required. Whether to attempt quantitative uncertainty estimation is a scope decision.
-- **Validation status**: PENDING
+- **Validation status**: NEED PROBING
 - **References**: MANICE, Stern & Heide-Jørgensen (2003)
 
 ---
