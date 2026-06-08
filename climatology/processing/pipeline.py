@@ -19,6 +19,7 @@ import pandas as pd
 from rasterio.features import rasterize as rio_rasterize
 from rasterio.transform import from_bounds
 from shapely import wkt
+from shapely.geometry import box
 from sqlalchemy import create_engine, text
 
 from climatology.processing.metrics import Metric
@@ -29,11 +30,23 @@ log = logging.getLogger(__name__)
 BBOX_ROOT  = Path("/home/eliedl/data/reference/climatology_bbox")
 OUTPUT_DIR = Path(__file__).parents[1] / "output"
 LAND_MASK_PATH = Path("/home/eliedl/data/reference/cis_landmasks/global_coastline.shp")
+# Display-only overlay: OSM land polygons (island-complete), clipped to the
+# SGRDA domain. NOT used for computation — see osm_land_polygons/README.md.
+LAND_DISPLAY_PATH = Path("/home/eliedl/data/reference/osm_land_polygons/osm_land_gulf.shp")
 
-GRID_RES   = 25
+GRID_RES   = 250
 GRID_CRS   = 26919          # NAD83 / UTM Zone 19N
 SEASON_MIN = "2010-09-01"
 SEASON_MAX = "2019-09-01"
+
+# Dark "Mapbox-style" theme. Ocean = axes background (shows through NaN /
+# ice-free cells); land polygons are painted on top so they cover dry cells only.
+DARK_OCEAN = "#0b0f14"
+DARK_LAND  = "#1c2128"
+DARK_COAST = "#3a4350"
+DARK_FG    = "#dfe3e8"
+DARK_MUTED = "#7a828c"
+DARK_LINE  = "#3a3f47"
 
 REGION_DISPLAY = {
     "gaspe":                 "Gaspé",
@@ -49,7 +62,7 @@ def region_paths(slug: str, metric_slug: str) -> tuple[Path, Path, str]:
     bbox = BBOX_ROOT / slug / f"{slug}_square.geojson"
     if not bbox.exists():
         sys.exit(f"ERROR: squared bbox not found for region '{slug}': {bbox}")
-    png = OUTPUT_DIR / f"{metric_slug}_{slug}.png"
+    png = OUTPUT_DIR / f"{metric_slug}_{slug}_{GRID_RES}m.png"
     display = REGION_DISPLAY.get(slug, slug.replace("-", " ").title())
     return bbox, png, display
 
@@ -204,34 +217,52 @@ def plot_metric(
     tick_labels = metric.format_ticks(tick_values)
 
     fig, ax = plt.subplots(figsize=(10, 9))
-    ax.set_facecolor("white")
+    fig.patch.set_facecolor(DARK_OCEAN)
+    ax.set_facecolor(DARK_OCEAN)          # dark "ocean" behind transparent cells
 
-    im = ax.imshow(values, origin="upper",
-                   extent=[xmin, xmax, ymin, ymax],
-                   cmap=cmap, norm=norm, interpolation="none")
+    # Ice raster (NaN cells transparent -> ocean shows through), kept in GRID_CRS.
+    im = ax.imshow(values, origin="upper", extent=[xmin, xmax, ymin, ymax],
+                   cmap=cmap, norm=norm, interpolation="none", zorder=1)
+
+    # Land mask on top -> covers dry cells only; wet cells keep the ice colors.
+    # bbox-filtered read loads just the in-view polygons (file is EPSG:4326).
+    bbox_geom = gpd.GeoSeries([box(xmin, ymin, xmax, ymax)], crs=GRID_CRS)
+    land = gpd.read_file(LAND_DISPLAY_PATH, bbox=bbox_geom).to_crs(epsg=GRID_CRS)
+    if not land.empty:
+        land.plot(ax=ax, facecolor=DARK_LAND, edgecolor=DARK_COAST,
+                  linewidth=0.4, zorder=2)
+    ax.set_xlim(xmin, xmax)
+    ax.set_ylim(ymin, ymax)
 
     cbar = fig.colorbar(im, ax=ax, orientation="horizontal",
-                        fraction=0.046, pad=0.06, extend="both",
-                        label=metric.display_label)
+                        fraction=0.046, pad=0.06, extend="both")
     cbar.set_ticks(tick_values)
     cbar.set_ticklabels(tick_labels, fontsize=8)
+    cbar.set_label(metric.display_label, color=DARK_FG)
+    cbar.ax.xaxis.set_tick_params(color=DARK_LINE, labelcolor=DARK_FG)
+    cbar.outline.set_edgecolor(DARK_LINE)
 
     ax.set_title(
         f"{metric.display_label}\n{display_name} region — winters 2011–2020",
-        fontsize=12, pad=10,
+        fontsize=12, pad=10, color=DARK_FG,
     )
-    ax.set_xlabel("Easting (m, NAD83 UTM 19N)")
-    ax.set_ylabel("Northing (m, NAD83 UTM 19N)")
+    ax.set_xlabel("Easting (m, NAD83 UTM 19N)", color=DARK_FG)
+    ax.set_ylabel("Northing (m, NAD83 UTM 19N)", color=DARK_FG)
+    ax.tick_params(axis="both", colors=DARK_FG)
     ax.ticklabel_format(style="plain", axis="both")
+    for spine in ax.spines.values():
+        spine.set_edgecolor(DARK_LINE)
 
     fig.text(
         0.01, 0.01,
-        f"Source: CIS SIGRID3 daily charts (GEC_D) | Grid: {GRID_RES} m EPSG:{GRID_CRS} | "
+        f"Source: CIS SIGRID3 daily charts (GEC_D) | Grid: {GRID_RES} m "
+        f"EPSG:{GRID_CRS} | Land: © OpenStreetMap contributors | "
         "[NEEDS REVIEW] spatial resolution reflects CIS polygon scale",
-        fontsize=6, color="grey",
+        fontsize=6, color=DARK_MUTED,
     )
 
     png_path.parent.mkdir(exist_ok=True)
-    fig.savefig(png_path, dpi=150, bbox_inches="tight")
+    fig.savefig(png_path, dpi=150, bbox_inches="tight",
+                facecolor=fig.get_facecolor())
     log.info("Map saved to %s", png_path)
     plt.show()
