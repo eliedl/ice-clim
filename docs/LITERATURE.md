@@ -1,223 +1,311 @@
-# Literature Review — Sea Ice Climatology Methods
-## DRAFT — PENDING VALIDATION
+# Literature Synthesis — Sea Ice Climatology Methods
+## DRAFT — SKELETON (pointer map only; synthesis prose pending)
 
 **Project:** Canadian Sea Ice Climatology — Gulf of St. Lawrence
-**Prepared by:** Claude Code (Phase 1A)
-**Date:** 2026-03-15
-**Status:** Draft based on training knowledge up to August 2025 — DOIs require verification; post-August 2025 publications not covered
+**Maintainer:** Élie Dumas
+**Created:** 2026-06-09
+
+### Revision log
+- **2026-06-09** — Rebuilt from scratch. Replaced the previous paper-by-paper
+  annotated bibliography (L01–L16, training-knowledge based) with a
+  theme-indexed structure. This pass lays the skeleton and the
+  `eNNN → theme` pointer map only; no synthesis prose yet.
 
 ---
 
-## Purpose
+## Concern of this document
 
-This document reviews peer-reviewed literature on: (1) regional sea ice climatologies from CIS chart data, (2) area-weighted climatology methods for vector/polygon ice data, (3) Egg Code to continuous variable conversion, (4) Gulf of St. Lawrence sea ice variability, and (5) categorical ice data in climate analyses. It provides the methodological precedent for the analytical choices ahead.
+This file is the **synthesis layer** of the documentation chain:
 
----
+```
+READING_LOG.md  →  LITERATURE.md  →  DECISIONS.md  →  climatological processing pipeline
+ (raw atomic       (corpus synthesis    (the rulings,        (the implementation)
+  notes, by         by question)         by decision)
+  source × time)
+```
 
-## Search Strategy [FROM TRAINING KNOWLEDGE]
+Its job is to answer, per methodological question: **what does the corpus
+collectively say, what is the spread of defensible practice, and where do we
+position ourselves?** It supplies the **Context** and **Options considered**
+that a DECISIONS.md entry then rules on. It is *not* a decision record (that is
+DECISIONS.md) and *not* a capture surface (that is READING_LOG.md).
 
-Sources consulted (from training data): Google Scholar, Web of Science, Semantic Scholar coverage up to August 2025. Search terms included: "Canadian Ice Service climatology", "sea ice concentration polygon area-weighted", "Egg Code sea ice", "Gulf of St. Lawrence sea ice", "SIGRID ice chart climatology", "sea ice stage of development climate", "CIS ice chart trend analysis".
+### Orthogonality — four documents, four axes
 
----
+| Document | Indexed by | Answers |
+|---|---|---|
+| `READING_LOG.md` | **source × time** (atomic `eNNN` notes) | "What did I read, and what did each note say?" |
+| `READING_LOG.md` References footer | **citation** | "What is the canonical reference for this source?" |
+| **`LITERATURE.md`** (this file) | **theme / methodological question** | "What does the corpus say about question X, and where do we stand?" |
+| `DECISIONS.md` | **decision** (`DEC-###`, with validation status) | "What did we choose, and is it validated?" |
 
-## Part A — Regional Sea Ice Climatologies from CIS Chart Data
+A single `eNNN` note (one source) feeds one theme; a single theme draws on many
+`eNNN` across many sources. The thematic sections below are the transposition of
+the log's source-axis onto a question-axis.
 
----
+### How this file relates to READING_LOG
 
-### [L01] Tivy et al. (2011) — Changes in Sea Ice Cover Across Canada
+`READING_LOG.md` is the **permanent atomic store** and is kept intact. This file
+**references** its entries by `eNNN` pointer — notes are never moved or deleted
+out of the log. Each paper's full citation lives once in the READING_LOG
+References footer; cite it from here via its `[Author Year]` anchor rather than
+duplicating it.
 
-**Citation:** Tivy, A., Howell, S.E.L., Alt, B., McCourt, S., Chagnon, R., Crocker, G., Carrieres, T., & Yackel, J.J. (2011). Changes in sea ice cover across Canada (1968–2008). *Journal of Geophysical Research: Oceans*, 116(C6), C06021.
-**DOI:** 10.1029/2010JC006453
+### Timestamping convention
 
-**Methodological Summary:**
-This is the foundational peer-reviewed study using CIS SIGRID-3 (and pre-SIGRID-3) chart data to compute long-term trends in sea ice for all Canadian regions including the Gulf of St. Lawrence. The authors compute **area-weighted weekly mean ice concentration** by aggregating polygon CA values (thickest ice type) to fixed geographic regions. They use the CIS archive from 1968–2008, representing approximately 40 years of weekly charts. Missing charts are handled by exclusion (no infilling), with a minimum annual coverage threshold applied. The study reports trends in total ice extent, concentration, and ice season length (ice-on and ice-off dates).
+- This document carries a **Revision log** (above).
+- Each theme carries an `**Aggregated:**` date.
+- Synthesis content sits under dated `### YYYY-MM-DD` sub-blocks. Each
+  re-aggregation pass **appends** a new dated block rather than overwriting the
+  previous one, building a trace of how the synthesis evolved.
 
-**Key Methodological Choices:**
-- **Reference period:** No fixed WMO normal period; uses full 1968–2008 record for trend analysis
-- **Spatial method:** Area-weighted polygon aggregation to pre-defined CIS regional zones
-- **Missing data:** Excluded from means; missing weeks flagged but not infilled
-- **Encoding:** Uses total concentration (E_CT) as primary variable; stage and form not quantitatively analyzed
-- **Temporal unit:** Weekly resolution maintained throughout; seasonal aggregation via week-of-year grouping
+### Forward-looking research bets
 
-**Relevance to this project:** Very high. Establishes the standard CIS-based methodology. The area-weighting approach, exclusion of missing data, and use of E_CT as primary variable are all directly applicable.
-
----
-
-### [L02] Galbraith & Larouche (2011) — Sea Ice in the Gulf of St. Lawrence
-
-**Citation:** Galbraith, P.S., & Larouche, P. (2011). Sea-surface temperature in Hudson Bay and Hudson Strait in relation to air temperature, 1982–2009. *Atmosphere-Ocean*, 49(4), 141–161.
-**DOI:** 10.1080/07055900.2011.590445
-**[FROM TRAINING KNOWLEDGE — Citation may be imprecise; the specific Galbraith & Larouche paper on Gulf of St. Lawrence ice should be verified]** [NEEDS REVIEW]
-
-**Methodological Summary:**
-Galbraith and colleagues at DFO/IML have published extensively on Gulf of St. Lawrence oceanography and sea ice, though their primary focus is often ocean temperature and productivity. Papers in this series use CIS ice chart data aggregated over the Gulf to characterize seasonal and interannual variability. The methodology typically involves computing weekly mean ice concentration from polygon data, area-weighted to the Gulf as a whole or to defined sub-regions (north/south Gulf, Cabot Strait).
-
-**Key Methodological Choices:**
-- **Spatial method:** Area-weighted means over the Gulf of St. Lawrence
-- **Reference period:** Variable; typically 1969–present or 1981–2010
-- **Focus variable:** Total ice concentration (E_CT); ice extent derived from binary threshold (CT ≥ 1 or CT ≥ 3)
-- **Ice season metrics:** Date of first ice, date of last ice, maximum ice extent
-
-**Relevance to this project:** High. The Gulf of St. Lawrence focus is directly relevant; methodology aligns with proposed approach.
-
----
-
-### [L03] Galbraith et al. (2025) — Annual overview, Gulf of St. Lawrence oceanographic conditions
-
-**Citation:** Galbraith, P.S., Chassé, J., Nicot, P., Caverhill, C., Gilbert, D., Pettigrew, B., Lefaivre, D., Brickman, D., Devine, L., & Lafleur, C. (annual series, most recent ~2021–2024). *Oceanographic conditions in the Gulf of St. Lawrence during 2024. DFO Canadian Science Advisory Secretariat Research Document.
-
-**Methodological Summary:**
-This annual DFO series routinely reports sea ice conditions in the Gulf of St. Lawrence as part of broader oceanographic monitoring. The ice section uses CIS data processed to compute seasonal mean ice cover and compares each year to a reference climatology (typically based on the most recent WMO normal period available). Methods are not always fully described but typically use area-weighted polygon concentration, with anomalies expressed relative to the 1981–2010 or 1991–2020 climatological mean.
-
-**Key Methodological Choices:**
-- **Reference period:** 1981–2010 or 1991–2020 (transitioning)
-- **Spatial method:** Area-weighted mean over defined Gulf sub-regions or the Gulf itself
-- **Anomaly calculation:** Absolute deviation from climatological mean
-
-**Relevance to this project:** High. Provides a template for the type of climatological output this project should produce.
+Speculative directions not feeding the current climatology pipeline
+(vulnerability index, wave–ice co-occurrence, NN sea-ice model, forcing/FDD
+climatologies, CMIP projections) live in
+[RESEARCH_DIRECTIONS.md](RESEARCH_DIRECTIONS.md), not here.
 
 ---
 
-## Part B — Area-Weighted Climatology Methods for Vector/Polygon Ice Data
+## T1 — Grid resolution for statistics computation   [P0]
+
+The rasterization grid cell size for computing climatological statistics, derived
+from the resolution of the sensors that produced the ice charts (per era) and the
+chart drafting scale (1:4M regional). This is the **only theme feeding a
+genuinely open, decision-critical fork.**
+
+**Source entries (READING_LOG, by pointer):** e037, e039, e042, e043, e044, e045,
+e046, e073, e077, e101, e102, e103, e105, e109, e110, e111, e112, e113, e114,
+e124, e127, e129, e135  *(cross-ref: e088, e092, e100, e138)*
+
+**Feeds:** DEC-013 (spatial aggregation — grid cell size, **OPEN**)
+**Absorbs:** the cross-era / inter-chart uncertainty concern formerly in DEC-010
+(deleted 2026-06-09 — its concern is encapsulated in the grid-resolution question).
+
+**Aggregated:** 2026-06-09
+
+### 2026-06-09  (skeleton — synthesis pending)
+- **What the corpus does** — TODO. (Grid precedents: Wilson 500 m [e129], Kinnard
+  0.25° [e127], Tivy 1° [e135], CIS 1 km climatological grid [e077]; sensor /
+  chart resolution per era [e073, e045, e101–e112].)
+- **Decision space** — TODO. (Homogeneous grid across eras vs. era-dependent; the
+  1:4M line-width floor of ~500 m [e045] as a candidate lower bound.)
+- **Our position** — OPEN. Email sent to **Angela Cheng (head of climatologies,
+  CIS)** requesting a recommended cell size for statistics computation. Decision
+  deferred pending her reply. → DEC-013
+- **Open questions** — TODO. (Does CIS recommend a single cell size or an
+  era-stratified one? Relation to the per-era sensor-resolution table [e073].)
 
 ---
 
-### [L05] Parkinson & Cavalieri (2008) — Arctic Sea Ice Variability
+## T2 — Climatology computation methodology   [P0]
 
-**Citation:** Parkinson, C.L., & Cavalieri, D.J. (2008). Arctic sea ice variability and trends, 1979–2006. *Journal of Geophysical Research: Oceans*, 113(C7), C07003.
-**DOI:** 10.1029/2007JC004558
-**[FROM TRAINING KNOWLEDGE]**
+Phenology definitions, concentration thresholds, coverage masking, reference
+periods, season-duration definitions, and the median-then-threshold vs.
+threshold-then-median ordering. Largely the literature backing behind
+already-approved choices (report-ready justification).
 
-**Methodological Summary:**
-Although this paper uses passive microwave satellite data (SSMI) rather than CIS chart polygons, it is the canonical reference for computing sea ice area and extent from gridded concentration data. The distinction between **sea ice area** (sum of grid cell areas × concentration) and **sea ice extent** (sum of grid cell areas where concentration ≥ 15%) is established here and applies directly to polygon data. Area-weighted polygon aggregation is the polygon analogue of the grid-cell area × concentration calculation. The 15% threshold for "ice extent" is operationally standard.
+**Source entries (READING_LOG, by pointer):** e005, e016, e017, e018, e023, e025,
+e061, e063, e064, e065, e069, e079, e115, e116, e117, e126, e130, e131,
+e133, e134
 
-**Key Methodological Choices:**
-- **Area vs. extent:** Area = sum(polygon_area × concentration); Extent = sum(polygon_area) where concentration ≥ threshold
-- **Threshold for extent:** 15% (0–10 scale: ≥ 2 tenths) — standard internationally
-- **Missing data:** Grid cells with missing data excluded from both numerator and denominator
-- **Projection:** Equal-area projection essential for area calculations — critical flag for EPSG:4326 data [NEEDS REVIEW — see DEC-001]
+**Feeds:** DEC-009 (open-water polygons), DEC-025 (CT ≥ 4/10 threshold),
+DEC-027 (median-then-threshold)
 
-**Relevance to this project:** High. Establishes the conceptual framework for ice area vs. extent, and the projection issue is critical — EPSG:4326 is NOT an equal-area projection and polygon areas computed in geographic coordinates are inaccurate at high latitudes. [NEEDS REVIEW — see DEC-001]
+**Aggregated:** 2026-06-09
 
----
+### 2026-06-09
 
-### [L06] Cavalieri et al. (1999) — Satellite-derived ice records reconciliation
+**What the corpus does.** The corpus carries two distinct production lineages for
+phenology/date climatologies, separated by the order of two operations — thresholding
+and aggregating across years — which do not commute:
 
-**Citation:** Cavalieri, D.J., Gloersen, P., Parkinson, C.L., Comiso, J.C., & Zwally, H.J. (1997). Observed hemispheric asymmetry in global sea ice changes. *Science*, 278(5340), 1104–1106.
-**DOI:** 10.1126/science.278.5340.1104
-**[FROM TRAINING KNOWLEDGE — citation details may be imprecise]** [NEEDS REVIEW]
+- *CIS production methodology* — **median-then-threshold** on weekly Historical-Date
+  bins over a 30-year normal: at each (cell, time-step), median `CT` across years
+  first, then find the first/last bin the medianed field crosses the threshold.
+  Historical charts were produced end-of-season on a fixed 7–8-day interval expressly
+  for climatology, which is the origin of the "Historical Dates" grid [e116, e117].
+- *DFO methodology* ([Galbraith et al. 2024]) — **threshold-then-median**: per pixel,
+  take the first/last weekly chart with ice each year, then median those per-year
+  dates across the record [e016].
 
-**Methodological Summary:**
-This paper (and related NSIDC technical documentation) describes procedures for computing climatological statistics from sea ice concentration time series, including the handling of missing data in polar orbit satellite passes and the computation of seasonal means. The methodology of using the available-data average (excluding missing periods) rather than infilling is established as standard practice. The paper also addresses the treatment of the "pole hole" (unmeasured region) as a special case of missing data — analogous to the "no data" polygons in CIS charts.
+The "ice present" threshold varies across the corpus: CIS uses >1/10 for first/last
+occurrence, DFO uses >0/10 ("any") [e017], and a stable-cover convention of 4/10
+filters transient low concentrations — the latter motivated by the documented poor
+accuracy of low-concentration retrievals [e061]. Season duration is *undefined by
+CIS*, leaving four threshold×source variants (0/10 or 1/10 or 4/10 × DFO or CIS) [e018].
 
-**Relevance to this project:** Medium. Establishes precedent for missing-data exclusion approach; conceptually bridges satellite and chart-based methodologies.
+Spatially, the dominant output is a **rasterized frequency/occurrence climatology**:
+Wilson's binary ice-presence frequency maps on a 500 m grid [e130], Kinnard's EOF
+variability analysis on 0.25° [e126], and Qian's area-coverage quartiles [e005]. The
+analysis domain/mask is set from CIS region boundaries — named CGNDB features [e069]
+and an explicit GSL boundary-point list [e079] — while open-water (CT=0), no-data
+polygons, chart-extent changes, and base-map revisions all bear on what is admissible
+in the mask [e063, e064, e065]. Two coverage masks compete: the **WMO 80%
+data-availability rule** vs DFO's **15/30-year ("50% probability of ice") rule** [e023];
+Wilson cites WMO guidelines without invoking an explicit 80% threshold [e131].
+Reference periods in the corpus span Wilson 1997–2019 [e133], DFO 1991–2020, and our
+own 2011–2020 archive window.
 
----
+**Decision space.**
+1. *Operation ordering* — median-then-threshold (CIS-comparable) vs
+   threshold-then-median (per-year distribution). → **DEC-027**
+2. *"Ice present" threshold* — 0/10 vs 1/10 vs 4/10. → **DEC-025**
+3. *Open-water (CT=0) treatment in means/medians* — include-as-zeros vs
+   conditional-on-ice vs report-both. → **DEC-009**
+4. *Coverage mask* — WMO 80% vs DFO 15/30.
+5. *Output statistic* — occurrence-frequency maps vs mean concentration vs
+   phenology dates.
+6. *Reference period & cadence* — weekly Historical Dates vs native-daily.
 
-### [L07] Stern & Heide-Jørgensen (2003) — Trends in sea ice in Northwest Greenland
+**Our position.**
+- **DEC-027 (APPROVED)** — native-daily median-then-threshold: CIS's logical operation
+  applied at our archive's daily cadence rather than weekly HD bins; WMO 80% mask,
+  first-crossing, strict-match cross-year alignment. We diverge from the DFO
+  threshold-then-median ordering and from the DFO 15/30 mask, adopting the WMO+CIS
+  standard instead [e023].
+- **DEC-025 (APPROVED)** — CT ≥ 4/10 for freeze-up/break-up dates, marking
+  establishment of a stable cover per CIS practice rather than transient ice.
+- **DEC-009 (approved, partially implemented)** — report-both; the median date metrics
+  already include open water as CT=0 (`POLY_TYPE='W'`), realizing the include-as-zeros
+  component; the full three-statistic report set is not yet computed.
+- The DFO threshold-then-median scheme is *retained as a possible separate per-year
+  distribution product*, not discarded — it answers a different question.
+- **DEC-028 (APPROVED 2026-06-09)** — analysis-domain consistency: the coastal bbox is
+  a subset of all chart extents (no handling needed); basin-wide climatologies adopt the
+  more restrictive SGRDAWIS28 bbox, enforcing a consistent area through time [e063, e065].
 
-**Citation:** Stern, H.L., & Heide-Jørgensen, M.P. (2003). Trends and variability of sea ice in Davis Strait and Hudson Strait, 1953–2001. *Polar Research*, 22(1), 11–18.
-**DOI:** 10.3402/polar.v22i1.6438
-**[FROM TRAINING KNOWLEDGE — citation may be imprecise]** [NEEDS REVIEW]
-
-**Methodological Summary:**
-This paper uses CIS and US NIC (National Ice Center) chart data to compute long-term trends for regions adjacent to the Gulf of St. Lawrence study area. It addresses the transition between pre-digital (manually digitized) and digital chart formats and demonstrates a methodology for reconciling inhomogeneous archives. The authors use area-weighted mean concentration per region per week, summed seasonally, with explicit documentation of format changes in the archive. The paper notes that CIS chart polygons prior to ~1990 differ in spatial resolution from later SIGRID-3 products, creating a potential inhomogeneity.
-
-**Key Methodological Choices:**
-- **Archive inhomogeneity:** Explicitly addressed; early data described as coarser polygon resolution
-- **Spatial method:** Area-weighted polygon means
-- **Trend analysis:** Linear regression on annual/seasonal means; Mann-Kendall test for significance
-- **Uncertainty:** No formal uncertainty quantification for analyst subjectivity
-
-**Relevance to this project:** High. The archive inhomogeneity concern directly applies to the 1969–present CIS archive.
-
----
-
-## Part C — Egg Code to Continuous Variable Conversion
-
----
-
-
-### [L09] Lavergne et al. (2019) — Sea Ice Products Comparison
-
-**Citation:** Lavergne, T., Sørensen, A.M., Kern, S., Tonboe, R., Notz, D., Aaboe, S., ... & Pedersen, L.T. (2019). Version 2 of the EUMETSAT OSI SAF and ESA CCI sea-ice concentration climate data records. *The Cryosphere*, 13(1), 49–78.
-**DOI:** 10.5194/tc-13-49-2019
-**[FROM TRAINING KNOWLEDGE]**
-
-**Methodological Summary:**
-This paper, while focused on satellite-derived passive microwave sea ice concentration CDRs, provides the most rigorous treatment of uncertainty quantification for sea ice concentration climatologies. It introduces formal uncertainty propagation from observation-level to climatological aggregate. It also provides a comprehensive comparison of different concentration algorithms and addresses the distinction between "total error" (including algorithm uncertainty) and "sampling error" (from temporal coverage gaps). The methodology for computing climatological uncertainty from overlapping CDRs is directly adaptable to CIS polygon data.
-
-**Key Methodological Choices:**
-- **Uncertainty framework:** Per-pixel uncertainty propagated to area-weighted mean uncertainty
-- **Missing data:** Flagged and excluded; uncertainty inflated for low-coverage periods
-- **Reference period:** 1979–2015 (satellite era); WMO alignment discussed
-- **Format:** Gridded (25 km EASE grid); methodology adaptable to polygon format
-
-**Relevance to this project:** Medium-High. Provides a modern uncertainty framework applicable to polygon concentration climatology.
-
----
-
-## Part D — Gulf of St. Lawrence Sea Ice Variability
-
----
-
-### [L13] Saucier et al. (2003) — GSL Circulation and Ice Formation
-
-**Citation:** Saucier, F.J., Roy, F., Gilbert, D., Pellerin, P., & Ritchie, H. (2003). Modeling the formation and circulation processes of water masses and sea ice in the Gulf of St. Lawrence, Canada. *Journal of Geophysical Research: Oceans*, 108(C8), 3269.
-**DOI:** 10.1029/2000JC000686
-**[FROM TRAINING KNOWLEDGE]**
-
-**Methodological Summary:**
-This is the definitive physical oceanography study of Gulf of St. Lawrence ice formation and circulation. While modeling-focused, it provides the physical basis for understanding the spatial structure of ice in the Gulf: ice forms first in the Rivière-du-Loup area and northern estuary, then expands southward; the Cabot Strait acts as the primary export path. This physical geography is important for understanding the spatial autocorrelation structure of ice concentration anomalies and for defining climatologically meaningful sub-regions.
-
-**Relevance to this project:** Medium-High. Physical basis for spatial aggregation decisions; defines the relevant geographic structure.
+**Open questions.**
+- Season-duration definition (undefined by CIS): adopt which of the four variants, or
+  hold as out-of-scope for a coastal study [e018].
+- Whether to compute sensitivity diff-maps — 0/10 vs 1/10 threshold [e017], and WMO 80%
+  vs DFO 15/30 mask [e023] — currently judged overkill, parked.
+- Spatial grid cell size is inherited from **T1 / DEC-013** (open, awaiting CIS).
+- DEC-009's report-both set is not fully implemented yet.
 
 ---
 
-## Part E — Categorical Ice Data in Climate Analyses
+## T3 — Cross-era homogeneity & data quality   [P0, cross-cutting]
+
+Archive homogeneity, CIS data-quality indices, format transitions (ratio → egg),
+now-casting, concentration accuracy, and the egg-code → thickness/volume
+conversion. The homogeneity/resolution strand feeds T1 (grid); the value-quality
+strand feeds DEC-015 and the conversion sub-cluster.
+
+**Source entries (READING_LOG, by pointer):** e002, e004, e014, e034, e035, e038,
+e040, e041, e047, e048, e050, e062, e068, e072, e074, e075, e076, e078, e083,
+e084, e092, e096, e099, e100, e106, e108, e118, e119, e120, e121, e123, e125, e136,
+e060
+
+**Conversion sub-cluster (egg-code → thickness/volume):** e006, e008, e024, e026,
+e049, e051, e052, e053, e054, e055, e056, e057, e058, e059, e066, e067, e093,
+e094, e095
+
+**Feeds:** DEC-015 ('9+' parsing) · conversion sub → DEC-004 (stage encoding),
+DEC-005 (form encoding), DEC-026 (orphan_ct volume)
+
+**Aggregated:** 2026-06-09
+
+### 2026-06-09
+
+**What the corpus does.** The authoritative basis is the two CIS Digital Archive
+documentation reports ([CIS Archive No.1 2006], [CIS Archive No.3 2007]). CIS computes
+a **Data Quality Index** per region: each reconnaissance method's availability×quality
+is scored 0–5 by experienced staff, weighted by the method's contribution to chart
+construction in each era and by each era's contribution to the record [e072, e075,
+e078]. The decisive empirical result for this project: **the Gulf of St. Lawrence
+scores the highest quality index of any CIS region or sub-region, *and* the least
+early→present change** — i.e. the most reliable and most homogeneous timeseries in the
+archive [e034]. [Tivy et al. 2011] provides a reproducible CIS-archive quality
+methodology [e002].
+
+Known sources of cross-era inhomogeneity, mostly concentrated *before* our 2011–2020
+window: the ratio code (`R_` fields) is less accurate than the egg code, improving
+across the 1982–83 transition [e040, e066, e119]; mapping errors fell after IDIAS
+(1989) and ISIS (1995) and after projection improvements (epidiascope 1979, 1989)
+[e038, e118, e121]; early-chart concentration is less accurate [e062]; a possible
+satellite-reliance accuracy dip around 2006 was recovered by later algorithm sharpening
+[e041]; now-casting — lower-impact for the GSL than other regions thanks to dense
+aerial/surface coverage, and falling after RADARSAT — adds era-dependent error [e048,
+e123]. Accuracy is region- and location-specific and varies over the record [e083],
+and is better near shipping lanes [e084]. Crucially for aggregation, CIS states that for
+general ice climatology the **random errors are small** because the contributing factors
+are random [e047]. The satellite literature offers cross-era SIC correction algorithms
+as a normalization precedent [e004].
+
+*Egg-code → thickness/volume conversion* (sub-cluster). Computing volume from
+thickness-range **midpoints** carries ~35% error, worst during melt/growth when
+thickness changes fast [e008]; DFO instead reports a **25–75% range as an uncertainty
+band** [e026] and excludes thin ice <10 cm from the area timeseries [e024]. Pre-1983
+charts used 65 cm for FYI (an underestimate); 85 cm (GSL) / 95 cm (NFLD) are more
+representative, and Galbraith keeps 85 cm to prefer slight underestimation in the NE
+Gulf over overestimation elsewhere [e006]. Stage-of-development is the most error-prone
+field — hard to observe, little surface verification [e055] — though its accuracy is
+roughly constant once FYI is reached [e049], and per-sensor SD/form confidence levels
+exist that could refine the uncertainty band [e051]. Ridged/rafted thickness is not
+reported, undervaluing volume in high-convergence zones [e052]. Floe size is
+systematically biased toward larger classes by sensor resolution [e056–e059].
+
+**Decision space.**
+1. *`'9+'` concentration parse* — 9.5 vs 10 vs 9 vs NaN. The Digital Archive itself
+   already encodes `9+` as 9.7/10 (≠ the 10/10 implied by summing partials) [e060].
+   → **DEC-015**
+2. *Stage / form encoding* — ordinal vs physical-thickness vs frequency-distribution.
+   → **DEC-004, DEC-005**
+3. *`orphan_ct` rows* (CT present, no stage) — skip vs Undetermined-stage-`99` vs
+   default-thickness. → **DEC-026**
+4. *Cross-era homogeneity treatment* — use-as-is vs restrict-to-modern vs
+   homogeneity-testing vs era-weighting (the era-weighting/uncertainty strand is now
+   routed into the grid-resolution question; see below).
+5. *Thickness conversion* — midpoint value vs 25–75% uncertainty band; thin-ice
+   exclusion threshold.
+
+**Our position.**
+- **Region choice (GSL)** is empirically justified — the most homogeneous, highest-DQI
+  region in the CIS archive [e034].
+- **Use the full archive as-is for 2011–2020**, which sits entirely in the modern stable
+  era (post-ISIS, post-RADARSAT); most documented era-inhomogeneity predates the window.
+- **DEC-004 / DEC-005 (APPROVED)** — hybrid ordinal + physical-thickness +
+  frequency-distribution encoding.
+- **DEC-026 (APPROVED)** — `orphan_ct` rows treated as Undetermined stage `99`:
+  concentration counts in the denominator, zero volume contributed.
+- **DEC-015 (APPROVED 2026-06-09)** — `'9+'` (SGRDA code `91`) = 0.97 per the
+  CIS-documented value [e060], superseding the prior probe-001-based 1.00; genuine
+  compact `92` stays 1.00.
+- The inter-chart/analyst-uncertainty concern (former DEC-010, deleted 2026-06-09) is
+  **consolidated into the grid-resolution question (T1 / DEC-013)** — the cell size CIS
+  recommends will set the scale at which that uncertainty is averaged out. Awaiting
+  Angela Cheng (CIS).
+
+**Open questions.**
+- Whether to apply era-based weighting or formal homogeneity testing — deferred; the
+  cross-era concern is routed to T1/grid pending the CIS cell-size recommendation.
+- Refine the 25–75% volume uncertainty band using per-sensor SD/form confidence levels
+  [e051].
+- Ridged/rafted thickness undervaluation in convergence zones [e052] — quantifiable via
+  a drift climatology (see RESEARCH_DIRECTIONS R-threads).
+- Iceberg concentration folded into total CT for the GSL [e067] — low priority.
+- DEC-015 resolved to 0.97; volume and mean-concentration metrics need re-running to
+  propagate the 1.00→0.97 change (date metrics unaffected — both clear 4/10).
 
 ---
 
-### [L14] Hutchings et al. (2012) — Sea Ice Thickness Distributions
+## T4 — Model vs. observation comparison   [P1]
 
-**Citation:** Hutchings, J.K., Roberts, A., Geiger, C.A., & Richter-Menge, J. (2012). Spatial and temporal characterization of sea ice deformation in the Beaufort Sea. *Journal of Geophysical Research: Oceans*, 117(C5), C05020.
-**DOI:** 10.1029/2011JC007669
-**[FROM TRAINING KNOWLEDGE — this specific citation may not be optimally representative of categorical ice in climate analyses; citation should be verified]** [NEEDS REVIEW]
+Methodology for comparing modelled ice fields against CIS observations, and the
+biases each carries. New territory — no decision yet; stub only.
 
-**Methodological Summary (adjusted to represent the general literature):**
-The broader literature on categorical ice type analysis in climatology deals with the problem of computing statistics from ordered categorical data (ice types). The standard approach is to compute **frequency distributions** (proportion of area in each ice type class per time period) rather than means of category codes. Some studies convert categories to physical proxies (thickness, albedo, roughness) before computing means. The key finding across this literature is that the choice of encoding (ordinal vs. physical-value) significantly affects the resulting climatology, and that the encoding must be scientifically justified based on the analysis purpose (e.g., mass balance vs. navigation hazard vs. ecosystem impact).
+**Source entries (READING_LOG, by pointer):** e009, e010  *(cross-ref: e052, e090, e120)*
 
-**Relevance to this project:** High. Directly relevant to the treatment of E_SA/SB/SC and E_FA/FB/FC.
+**Feeds:** (future DEC — not yet logged)
 
----
+**Aggregated:** 2026-06-09
 
-### [L15] Maslanik et al. (2011) — Sea Ice Age
-
-**Citation:** Maslanik, J., Stroeve, J., Fowler, C., & Emery, W. (2011). Distribution and trends in Arctic sea ice age through spring 2011. *Geophysical Research Letters*, 38(13), L13502.
-**DOI:** 10.1029/2011GL047735
-**[FROM TRAINING KNOWLEDGE]**
-
-**Methodological Summary:**
-This paper uses a Lagrangian sea ice age tracking algorithm with SSMI data to produce age-class climatologies (first-year ice, second-year ice, multi-year ice) — directly analogous to the Egg Code stage-of-development categories. The methodology for computing climatological statistics from categorical age data uses frequency distributions (% area in each age class by week/month). The authors demonstrate that the area-weighted frequency distribution is more informative than a mean age value, especially at the tail of the distribution (multi-year ice fraction).
-
-**Key Methodological Choices:**
-- **Encoding:** Categorical (age class), not ordinal mean
-- **Summary statistic:** Frequency distribution (% area in each class)
-- **Reference period:** 1981–2010 (then available WMO period)
-- **Trend analysis:** Linear trend in each age class separately
-
-**Relevance to this project:** High. Provides the strongest argument for using frequency distributions rather than ordinal means for ice type (stage) climatology.
-
----
-
-### [L16] Markus & Cavalieri (2000) — Sea Ice Classification from SAR
-
-**Citation:** Markus, T., & Cavalieri, D.J. (2000). An enhancement of the NASA Team sea ice algorithm. *IEEE Transactions on Geoscience and Remote Sensing*, 38(3), 1387–1398.
-**DOI:** 10.1109/36.843033
-**[FROM TRAINING KNOWLEDGE]**
-
-**Methodological Summary:**
-This paper demonstrates how multi-class categorical ice type data (from passive microwave algorithms) can be converted to continuous climate variables through appropriate aggregation. The authors show that direct averaging of ice-type codes produces physically meaningless results and recommend always computing statistics separately within each ice type class before combining. This principle applies directly to computing separate climatologies for each Egg Code stage value and then combining, rather than encoding all stages into a single ordinal and averaging.
-
-**Relevance to this project:** Medium-High. Methodological argument for class-wise analysis over ordinal encoding.
-
+### 2026-06-09  (skeleton — synthesis pending)
+- **What the corpus does** — TODO. (Amplitude-agnostic max/min-region comparison
+  [e010]; CIS high-concentration bias [e009].)
+- **Decision space** — TODO.
+- **Our position** — TODO.
+- **Open questions** — TODO. (Apply the amplitude-agnostic method to climatologies
+  rather than timestamps for WW3 / CIOPS-East verification [e010, e052].)

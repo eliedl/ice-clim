@@ -23,15 +23,17 @@ This is the messy intake; the curated synthesis lives in [LITERATURE.md](LITERAT
   graph, so a thread can be followed across entries and into actionable work.
 - **Date headers** — group entries under a `## YYYY-MM-DD` header by reading session.
 
-## Draining into LITERATURE.md
+## Referencing from LITERATURE.md
 
-When a tag/theme has accumulated enough, **move** (don't copy) those entries into the
-relevant LITERATURE.md section, leaving this log to drain. Migration is the
-messy → pattern → structure step, made explicit.
+This log is the **permanent atomic store** and is kept intact — entries are never
+moved or deleted out of it. When a tag/theme has accumulated enough, LITERATURE.md
+**references** those entries by `eNNN` pointer in the relevant thematic section;
+the synthesis (the messy → pattern → structure step) happens there, over the
+pointers, leaving this log untouched.
 
 ---
 
-<!-- next-id: e137 -->
+<!-- next-id: e144 -->
 
 ## 2026-06-01
 
@@ -79,7 +81,7 @@ messy → pattern → structure step, made explicit.
 - e039 · [CIS Archive No.1 2006] Telex encoding/decoding (60s–early 70s) limited the number of points per polygon → limited resolution. #resolution #cross-era-normalization
 - e040 · [CIS Archive No.1 2006] Ratio code (R_ fields, SGRDREC) less accurate than egg code (E_ fields); gradual improvement across the ratio→egg transition. #SGRDREC #cross-era-normalization #data-quality
 - e041 · [CIS Archive No.1 2006] (2006 caveat) Heavier satellite reliance may have decreased concentration accuracy; post-2006 algorithm sharpening (e.g. ICEMAP) likely recovered it → possible momentary obs→satellite quality dip then recovery. #data-quality #cross-era-normalization #open-question
-- e042 · [CIS Archive No.1 2006] Positional accuracy of 4 km = true position within 4 ± 2 km. Spatial inhomogeneity of resolution since multiple sources feed one chart. #resolution #uncertainty
+- e042 · [CIS Archive No.1 2006] A positional accuracy of 4 km in Table 3.1 means the true position is within 4 ± 2 km. Spatial inhomogeneity of resolution since multiple sources feed one chart. #resolution #uncertainty
 - e043 · [CIS Archive No.1 2006] Table 2.1 = relative % coverage of a chart per observation type (ship, aerial, satellite, now-cast). A mean accuracy could be derived from it. → cis-002 #resolution #methodology
 - e044 · [CIS Archive No.1 2006] Polygon position accuracy depends on the platform positioning system (few km in old eras). Near-shore + shipping lanes raise GSL position error in older eras. Observation error on position/polygon limits bounded 1–2 km (±10% of range); SLAR reduced this to ~300 m, but helicopters were not SLAR-equipped at doc date → 10% human-observation error still current then. A more recent document would help for the modern era. #resolution #uncertainty #open-question
 - e045 · [CIS Archive No.1 2006] Map scale 1:4M → the polygon-delimiting line has a real-world width of ~1 km → ±0.5 km accuracy. Hypothesis: this line-width uncertainty could be the basis for Wilson et al.'s 500 m grid in the Mittimatalik atlas. Modern mapping geosystems may reduce this uncertainty. → [Wilson et al. 2021] #resolution #uncertainty #hypothesis
@@ -220,6 +222,16 @@ messy → pattern → structure step, made explicit.
 - e135 · [Tivy et al. 2011] Uses a 1° grid and seasonal-averaged values for inter-region comparison. No mention of a grid cell size depending on the chart's production year (i.e. homogeneous grid across eras). → e127 → e077 → e045 #grid-resolution
 - e136 · [Tivy et al. 2011] Shore-based observations fed to Ice Central were focused on harbour break-up and clearing. → e093 #chart-lineage #surface-obs
 
+## 2026-06-09
+
+- e137 · [ECCC CMIP5 2023] Climatological reference period: 1986–2005. #time-period #projection
+- e138 · [ECCC CMIP5 2023] A polar grid (north-pole origin) at 1°×1° is used — coarse in the GSL. → e135 #grid-resolution #projection
+- e139 · [ECCC CMIP5 2023] Unclear what the SIC value represents for each 20-yr period (2021–2040, 2041–2060, 2061–2080, 2081–2100). #projection #open-question
+- e140 · [ECCC CMIP5 2023] Scenarios: RCP2.6, 4.5, 8.5. Temporal resolutions: monthly, seasonal, annual (seasons MAM spring, JJA summer, SON fall, DJF winter). Available fields: surface temperature, wind speed, sea-ice thickness & concentration, plus projected % change vs the climatological reference period. #projection #data
+- e141 · [ECCC CMIP5 2023] Table 2 lists the climate models used in the multi-model ensembles; the input data is not yet clear. #projection #open-question
+- e142 · [ECCC CMIP5 2023] Some fields are viewable in the ECCC Climate Data Viewer app. CMIP6 simulation results also contain sea-ice data — their specs should be probed. #data-viz #projection #to-search
+- e143 · [Senneville et al. 2018] Uses 170 cm as the thickness of Old Ice (SIGRID-3 stage code `95`) in a fine-scale Nunavik river/coastal ice-modelling report. No documented justification for the 170 cm value located; it should plausibly exceed Thick First-Year ice (160 cm midpoint) since old ice is older/thicker by definition. Bears on the unresolved stage→thickness map for codes 95–98 (currently `None`, pending CIS); not adopted. → DEC-029 #conversion-values #thickness #open-question
+
 ---
 
 ## Watchlist (potentially relevant, not yet read)
@@ -263,6 +275,8 @@ Leads surfaced during reading but not yet sourced/read. Promote to a dated entry
 [Galbraith et al. 2025]: Galbraith, P.S., Chassé, J., Shaw, J.-L., Lefaivre, D. & Bourassa, M.-N. (2025). Physical Oceanographic Conditions in the Gulf of St. Lawrence during 2024.
 
 [Saucier et al. 2003]: Saucier, F.J., Roy, F., Gilbert, D., Pellerin, P. & Ritchie, H. (2003). Modeling the formation and circulation processes of water masses and sea ice in the Gulf of St. Lawrence, Canada. *Journal of Geophysical Research: Oceans*, 108(C8), 3269.
+
+[Senneville et al. 2018]: Senneville, S. et al. (2018). « Modélisation des glaces de rive à fine échelle à proximité d'infrastructures maritimes au Nunavik en contexte de changements climatiques : Kuujjuarapik, Umiujaq, Ivujivik, Baie Déception, Quaqtaq et Aupaluk ». Rapport final remis au Bureau de la coordination du Nord du Québec, Ministère des Transports du Québec. Projet CC05.1, 15 octobre 2018, 67 pp.
 
 [Hutchings et al. 2011]: Hutchings, J.K., Roberts, A., Geiger, C.A. & Richter-Menge, J. (2011). Spatial and temporal characterisation of sea ice deformation. *Annals of Glaciology*, 52(57), 360–368.
 

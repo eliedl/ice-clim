@@ -1,95 +1,95 @@
 # ice-clim — Sea Ice Climatology R&D
 
 ## Project identity
-Operator: Élie Dumas, data scientist & software developer, OGSL / independent consultant
-Domain: Canadian sea ice climatology (Gulf of St. Lawrence, CIS SIGRID3 shapefiles)
-Archive path: C:\Users\dumas\Documents\archive\ice-raw-data-MPO (1969–present)
+Operator: Élie Dumas — data scientist & software developer; research assistant at UQAR
+(coastal geography lab) / independent consultant. Former OGSL contractor.
+Domain: Canadian sea ice climatology (Gulf of St. Lawrence, CIS SIGRID-3 charts).
 
-## Scientific domain
-Data source: Canadian Ice Service (CIS) weekly and daily ice charts (GEC_H_* : weekly, GEC_D_*: daily)
-Format: SIGRID3 shapefiles with Egg Code attributes
-Primary table: sgrda (Gulf of St. Lawrence), EPSG:4326
+## Data sources
+Primary working data: PostGIS DB, table `sgrda` (GSL), EPSG:4326 — Dockerized
+(docker-compose.yml); connection via `.env` (POSTGRES_DB/USER/PASSWORD/PORT). Ingested
+from the local archive by backend/ingestion/.
+Local archive root: `/home/eliedl/data/` — full provenance, CIS SFTP details, and transfer
+log live in `~/data/README.md` (dotfiles-managed; not duplicated here, incl. credentials).
+  SGRDA/  daily analysis (TAR)     GULF 2006–2023, WIS28 2023–2026  (note: dir is `WIS28`)
+  SGRDR/  historical regional (EC) 1968–2026  (== "SGRDREC"; weekly, SIGRID-3; NAD27 pre-2020)
+  SGRDI/  satellite-derived        SGRDO/  observation (EC; RV = St. Lawrence River)
+  1991-2020_climatology_shapefiles/ (CIS reference)   reference/ (landmasks, MPO zones)
+File selection when multiple files exist for a date: highest clean revision c>b>a;
+timestamped-suffix saves excluded; suffix fallback only when no clean file exists (DEC-030,
+implemented in `backend/ingestion/sources.py:ChartSource.discover`).
+For raw `.xml`-sidecar probes (007) set `ARCHIVE_ROOT=/home/eliedl/data`; sidecars are not
+in the DB.
 
-Key fields:
-  - region : wis28 
-  - geometry: MultiPolygon
-  - t1: TIMESTAMP WITH TIME ZONE (observation datetime)
-  - E_CT, E_CA, E_CB, E_CC: total & partial concentrations (tenths, 0–10, categorical strings)
-  - E_SA, E_SB, E_SC: stage of development (codes '0'–'9', '1.', '4.')
-  - E_FA, E_FB, E_FC: form of ice (codes '0'–'9')
+## Scientific domain knowledge
+CIS SIGRID-3 Egg Code in PostGIS table `sgrda`. Two
+on-disk schema eras normalized on ingestion: SGRDAGULF (old, no CRS→assume 4326) and
+SGRDAWIS28 (new, polar stereographic→reprojected to 4326).
+Fields: region wis28; geometry MultiPolygon; T1 TIMESTAMPTZ (18:00 UTC daily snapshot);
+CT total concentration; CA/CB/CC partial concentrations; SA/SB/SC stage of development;
+FA/FB/FC form of ice; POLY_TYPE ('I' ice, 'W' water/CT=0, 'N' no-data, 'L' land).
 
-## Ordinal encoding (preliminary — subject to validation)
-Stage of development (E_SA/SB/SC):
-  '0'→0, '1'→1, '2'→2, '4'→3, '5'→4, '3'→5, '7'→6, '8'→7, '9'→8, '6'→9, '1.'→10, '4.'→11
-Form of ice (E_FA/FB/FC):
-  '8'→0, '0'→1, '1'→2, '2'→3, '3'→4, '4'→5, '5'→6, '6'→7, '7'→8
+### Field naming quirks (non-obvious)
+Despite the C*/S* convention (C* = concentration, S* = stage of development), two fields
+are **misnamed**:
+  - `CN` is **not** a concentration — it is the stage-of-development code for the **SO**
+    category ("ice thicker than SA but present at <1/10 concentration"); SIGRID-3 standard,
+    equivalent to `So` in ICESOD.
+  - `CD` is **not** a concentration — it is the stage-of-development of **any remaining
+    class of ice** (SIGRID-3 v3.1), equivalent to `Sd` in ICESOD.
+  Both mappings (CN=SO, CD=SD) are confirmed against SIGRID-3 v3.1 — **not** open questions.
+A SIGRID-3 ice description has **five thickness bands SO·SA·SB·SC·SD**. Three carry
+explicit partial concentrations (CA→SA, CB→SB, CC→SC); the other two are **derived, not
+stored**:
+  - **SO** concentration: trace, defined by CIS as <1/10. Placeholder 0.05 (fraction) for
+    arithmetic [a more authoritative value is a clim-001 CIS-outreach item].
+  - **SD** concentration: piecewise (probe 001 / DEC-029) — residual `r = CT−(CA+CB+CC)`:
+    `r > 0` → r; `−0.03 ≤ r ≤ 0` → 0.05 trace; `r < −0.03` → log+skip. Lives in the volume
+    `reduce_season`, not the parser.
 
-## Decision log
-All scientific decisions (assumptions, edge case handling, encoding choices)
-must be logged in docs/DECISIONS.md with:
-  - Decision ID
-  - Context
-  - Options considered
-  - Choice made
-  - Rationale
-  - Validation status (PENDING | APPROVED | REJECTED)
+Encoding/conversion (SIGRID-3 codes → fraction / thickness in m) lives in
+`climatology/services/units_conversion_maps.py` — single source of truth; unobserved codes
+raise KeyError. The concentration and stage→thickness tables are not duplicated here (read
+the code).
+
+Settled facts (full rationale + provenance in DECISIONS.md):
+  - '9+' = code '91' = 0.97 (CIS doc), distinct from compact '92' = 1.00 (DEC-015)
+  - Volume = area × Σ conc(stage)×thickness(stage); regime-aware attribution + ε=0.03
+    residual trace floor (DEC-029; not yet implemented)
+  - Freeze-up/break-up: native-daily median-then-threshold, CT≥4/10, WMO 80% mask (DEC-025/027)
+  - Archive version selection c>b>a, suffix-fallback (DEC-030)
+  - GSL = highest-quality, most homogeneous CIS region; climatology period 2011–2020
+  - Open: grid cell size (DEC-013, awaiting Angela Cheng/CIS); thickness for stages 95–98
+    (old/2nd-year/multi-year/glacier) UNRESOLVED — CIS outreach pending
+
+## Decision making (project specifics — behavior is in ~/CLAUDE.md)
+  - Log lives in `docs/DECISIONS.md`. Two orthogonal provenance pipelines terminate there:
+      LITERATURE chain (knowledge): READING_LOG.md → LITERATURE.md → DECISIONS.md
+      DATA/PROBE chain (data):      backend/probes/NNN/probe.py → README.md(+output/) → DECISIONS.md
+  - Entries cross-ref provenance: `Literature cross-ref` (theme + eNNN + papers) and/or
+    `Implementation refs` (probe dirs, code paths).
 
 ## Autonomy rules
-Claude Code MAY autonomously:
-  - Write and run exploratory/diagnostic code
-  - Search documentation and literature
-  - Draft reports and proposals
-  - Implement reversible software components
-  - Log decisions as PENDING
-
-Claude Code MUST pause and request human validation before:
-  - Finalizing any scientific assumption about climatology methodology
-  - Writing to the production database
-  - Making hard to reverse schema migrations
-  - Choosing between competing scientific standards and following them
-  - Publishing or exporting any climatological output
+See ~/CLAUDE.md. Project mapping: "production data store" = PostGIS `sgrda` DB;
+"competing scientific standards" = WMO vs CIS vs DFO climatology conventions.
 
 ## Work structure
-docs/
-  DECISIONS.md         ← scientific decision log
-  WMO_REVIEW.md        ← WMO guidelines synthesis
-  CIS_REVIEW.md        ← CIS-specific documentation synthesis
-  DATA_AUDIT.md        ← data structure & edge case report
-  ARCHITECTURE.md      ← storage & pipeline architecture options
-  VISUALIZATION.md     ← visualization methods review
-  LITERATURE.md        ← state-of-the-art literature review
+docs/   (literature & decision chain; Phase-1 review docs removed)
+  DECISIONS.md · READING_LOG.md · LITERATURE.md · RESEARCH_DIRECTIONS.md
+backend/
+  ingestion/  (db, main, pipeline, sources)   ← archive → PostGIS `sgrda`
+  initdb/  (DDL + init)   probes/NNN_*/  (re-runnable DB/archive probes)   viz/   test/
+climatology/
+  services/units_conversion_maps.py           ← parse maps; single source of truth
+  processing/  (metrics, event_detection, pipeline, main)  ← date metrics (DEC-027)
+  utils/ (raster_to_vector, square_bbox)   viz/ (colormaps)   tests/ (parity_check)
+  (volume reduce_season — specified in DEC-029, not yet implemented)
+scripts/ (audit)   refs/ (WMO PDF)   docker-compose.yml · .env
 
 ## Session start protocol
-At the start of every session, use the Read tool to read CLAUDE.md from disk
-(do not rely solely on the injected system context — the file may have been
-edited since the context was captured).
+~/CLAUDE.md and this file are auto-loaded into context each session, so reading them from
+disk is not normally needed. Re-read a file from disk only if you suspect it changed during
+the session.
 
 ## Communication protocol
-- End each work session with a **Session Summary** section: what was done,
-  decisions pending validation, blockers, and recommended next steps.
-- Tag any uncertainty with [NEEDS REVIEW].
-- Never silently assume — always surface ambiguity.
-```
-
----
-
-## Prompt de session — Phase 1 : Revue scientifique & audit de données
-
-Ce prompt est conçu pour lancer Claude Code sur les premières phases de façon autonome mais balisée.
-```
-# MANDATE: Sea Ice Climatology — Phase 1
-# Scientific Review & Data Audit
-
-Read CLAUDE.md fully before proceeding.
-
----
-
-## OBJECTIVE
-
-Establish the scientific and methodological foundation for computing
-regional sea ice climatologies from Canadian Ice Service (CIS) SIGRID3
-data, following recognized international standards (WMO) and CIS
-protocols. Document all findings, assumptions, and open questions in
-structured reports. Do not implement any climatology algorithm yet.
-
-
+See ~/CLAUDE.md.

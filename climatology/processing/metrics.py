@@ -212,7 +212,7 @@ class FreezeUpDateMetric(Metric):
     """
 
     slug = "freeze_up_date"
-    display_label = "Median date of freeze-up (CT >= 4/10)"
+    display_label = "Freeze-up climatology"
     ct_threshold = 0.4
 
     def sql(self, *, grid_crs, season_min, season_max):

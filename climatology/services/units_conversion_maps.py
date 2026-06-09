@@ -29,11 +29,13 @@ CONCENTRATION_FRACTION: dict[str, float] = {
     "70": 0.70,
     "80": 0.80,
     "90": 0.90,
-    "91": 1.00,   # "9+/10" — observed to mean compact coverage in SGRDA: when partials
-                  # are fully encoded alongside CT='91' they sum to 1.0 every time (probe 001
-                  # sub-analysis, 20 613 rows), and when partials sum to <1.0 alongside CT='91'
-                  # CD is present in 99.6% of cases so SD carries the 1−partial_sum remainder.
-    "92": 1.00,   # compact (10/10)
+    "91": 0.97,   # "9+/10" — DEC-015: adopt the CIS-documented value 9.7/10 (0.97) for the
+                  # "9+" code (CIS Archive No.1; reading-log e060), which the doc states differs
+                  # from the 10/10 implied by summing partials. Changed 2026-06-09 from 1.00.
+                  # (Probe 001 found CT='91' partials sum to 1.0 across 20 613 SGRDA rows, which
+                  # had motivated the prior 1.00; the CIS documentation is now treated as
+                  # authoritative over that indirect inference.)
+    "92": 1.00,   # compact (10/10) — genuine full coverage, distinct from "9+"; unchanged.
 }
 
 # Codes treated as missing data (SIGRID-3 dummy variable convention).

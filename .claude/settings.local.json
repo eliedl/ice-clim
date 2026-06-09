@@ -85,7 +85,11 @@
       "Bash(git add *)",
       "Bash(git commit -m ' *)",
       "Bash(git -C /home/eliedl/Documents/ice-clim log --since=\"2026-05-26\" --until=\"2026-05-29\" --pretty=format:\"%h %ad %s\" --date=short)",
-      "Bash(git -C /home/eliedl/Documents/ice-clim log --since=\"2026-05-27\" --until=\"2026-05-29\" --name-status --pretty=format:\"COMMIT %h %ad %s\" --date=short)"
+      "Bash(git -C /home/eliedl/Documents/ice-clim log --since=\"2026-05-27\" --until=\"2026-05-29\" --name-status --pretty=format:\"COMMIT %h %ad %s\" --date=short)",
+      "Bash(grep -vE '\\\\.\\(pyc|png|jpg|zip|shp|dbf|shx|prj|cpg\\)$')",
+      "Bash(.venv/bin/python -)",
+      "Bash(.venv/bin/python backend/probes/008_sgrda_version_selection/probe.py)",
+      "Bash(xargs sed -n '1,40p')"
     ],
     "additionalDirectories": [
       "/home/eliedl/Documents/ice-clim/climatology"

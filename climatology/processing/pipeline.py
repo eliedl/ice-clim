@@ -34,7 +34,7 @@ LAND_MASK_PATH = Path("/home/eliedl/data/reference/cis_landmasks/global_coastlin
 # SGRDA domain. NOT used for computation — see osm_land_polygons/README.md.
 LAND_DISPLAY_PATH = Path("/home/eliedl/data/reference/osm_land_polygons/osm_land_gulf.shp")
 
-GRID_RES   = 250
+GRID_RES   = 25
 GRID_CRS   = 26919          # NAD83 / UTM Zone 19N
 SEASON_MIN = "2010-09-01"
 SEASON_MAX = "2019-09-01"
@@ -235,7 +235,7 @@ def plot_metric(
     ax.set_ylim(ymin, ymax)
 
     cbar = fig.colorbar(im, ax=ax, orientation="horizontal",
-                        fraction=0.046, pad=0.06, extend="both")
+                        fraction=0.046, pad=0.1, extend="both")
     cbar.set_ticks(tick_values)
     cbar.set_ticklabels(tick_labels, fontsize=8)
     cbar.set_label(metric.display_label, color=DARK_FG)
@@ -255,9 +255,8 @@ def plot_metric(
 
     fig.text(
         0.01, 0.01,
-        f"Source: CIS SIGRID3 daily charts (GEC_D) | Grid: {GRID_RES} m "
-        f"EPSG:{GRID_CRS} | Land: © OpenStreetMap contributors | "
-        "[NEEDS REVIEW] spatial resolution reflects CIS polygon scale",
+        f"Source: CIS SIGRID3 daily charts (SGRDA) | Grid: {GRID_RES} m "
+        f"EPSG:{GRID_CRS} | Land: © OpenStreetMap contributors | ",
         fontsize=6, color=DARK_MUTED,
     )
 

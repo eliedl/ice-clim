@@ -24,7 +24,7 @@ This log records all scientific decisions, assumptions, and edge-case choices id
 - **Choice made**: hybrid approach using 1, 2 and 3.
 - **Rationale**: The physical thickness approach (Option 2) is most defensible physically (Howell et al. 2009) but introduces midpoint assignment uncertainty. The frequency distribution approach (Option 3) is most rigorous statistically (Maslanik et al. 2011). The CLAUDE.md ordinal encoding (Option 1) is a pragmatic compromise requiring explicit validation.
 - **Validation status**: Approved
-- **References**: WMO-No. 259, Howell et al. (2009), Maslanik et al. (2011), MANICE 9th ed.
+- **Literature cross-ref**: LITERATURE.md T3 (conversion sub-cluster); READING_LOG e006, e014, e055; [Galbraith et al. 2025], [Markus & Cavalieri 2000], [Maslanik et al. 2011], [CIS Archive No.1 2006].
 - **Implementation status**: Not implemented yet
 
 ---
@@ -38,14 +38,14 @@ This log records all scientific decisions, assumptions, and edge-case choices id
   3. **Frequency distribution only** — no encoding.
 - **Choice made**: hybrid approach using 1, 2 and 3.
 - **Validation status**: Approved
-- **References**: WMO-No. 259, MANICE
+- **Literature cross-ref**: LITERATURE.md T3 (conversion sub-cluster); READING_LOG e056, e057, e058, e059; [CIS Archive No.1 2006].
 - **Implementation status**: Not implemented yet
 
 ---
 
 ## DEC-009 — Treatment of Open-Water Polygons (E_CT = 0) in Climatological Means
 
-- **Context**: SIGRID-3 charts contain explicit open-water polygons (E_CT = 0, no ice). These polygons are physically valid observations. Including them in a mean concentration calculation (as zeros) reduces the mean; excluding them is equivalent to computing mean concentration conditional on ice presence. Both are legitimate statistics with different interpretations.
+- **Context**: SIGRID-3 charts contain explicit open-water polygons (E_CT = 0, no ice). These polygons are physically valid observations. Including them in a mean concentration calculation (as zeros) reduces the mean; excluding them is equivalent to computing mean concentration conditional on ice presence. Both are legitimate statistics with different interpretations. In SIGRID-3 the open-water polygons carry `POLY_TYPE = 'W'` with `CT = 0`.
 - **Options considered**:
   1. **Include as zeros** — area-weighted mean over the entire analysis region including open water; represents true mean concentration over the region.
   2. **Exclude open-water polygons** — mean concentration within ice-covered area only; a measure of ice density where ice is present.
@@ -53,53 +53,9 @@ This log records all scientific decisions, assumptions, and edge-case choices id
 - **Choice made**: report-both
 - **Rationale**: For a complete climatology, Option 3 is most informative: report (a) frequency of ice occurrence (% of weeks with any ice), (b) mean total concentration when ice is present, and (c) mean total concentration over the full region (including ice-free weeks). These three statistics together characterize the ice regime fully.
 - **Validation status**: approved
-- **References**: Parkinson & Cavalieri (2008), CIS Climatic Atlas
-- **Implementation status**: Not implemented yet
-
----
-
-## DEC-010 — Treatment of Analyst Subjectivity / Inter-Chart Uncertainty
-
-- **Context**: MANICE and the CIS literature acknowledge that ice chart production involves significant analyst judgment, particularly for ice type assignment and partial concentration splitting. This subjectivity introduces uncertainty that is not formally quantified in the SIGRID-3 files. Inter-analyst variability and inter-chart consistency (temporal homogeneity due to changes in operational practices, sensor inputs, and analyst staff) are known sources of systematic uncertainty.
-- **Options considered**:
-  1. **Ignore** — treat all chart data as equally reliable; standard in most published studies.
-  2. **Qualitative documentation** — note the uncertainty as a caveat in the climatology product without quantifying it. Inspect .xml files for a data quality tag. Ask CIS for the application of the corrections to charts (era-dependent) named in their cliamtological documentation to the archive provided by Brad Drummond via their sftp.
-  3. **Era-based weighting** — weight charts by era (e.g., modern SIGRID-3 weighted higher than early digital records) based on known quality improvements.
-  4. **Formal uncertainty estimation** — use the spread across overlapping products (e.g., daily vs. weekly charts for the same day) as a proxy for analyst uncertainty.
-- **Choice made**: PENDING
-- **Rationale**: Options 1 and 2 are standard practice. Options 3 and 4 would be methodological innovations. Given the research orientation of this project, at minimum Option 2 (qualitative documentation) is required. Whether to attempt quantitative uncertainty estimation is a scope decision.
-- **Validation status**: NEED PROBING
-- **References**: MANICE, Stern & Heide-Jørgensen (2003)
-
----
-
-## DEC-011 — Archive Inhomogeneity: Pre-SIGRID3 vs. SIGRID3 Records
-
-- **Context**: The CIS archive in the project path extends from 1969 to present. The SIGRID-3 format was not universally adopted by CIS until the early 2000s. Earlier records may be in different vector formats (e.g., earlier CIS proprietary formats) or may have been retrospectively digitized/converted. The spatial resolution (polygon count per chart) likely differs between eras, potentially creating inhomogeneities in polygon-based climatological statistics.
-- **Options considered**:
-  1. **Use full archive (1969–present) as-is** — any inhomogeneity is part of the data reality; document but do not correct.
-  2. **Restrict to post-SIGRID3 era** — use only records after the SIGRID-3 transition (approximately 2000–2005); more homogeneous but shorter record.
-  3. **Homogeneity testing** — apply statistical tests (e.g., Pettitt test, SNHT) to detect structural breaks in the archive; adjust or segment accordingly.
-  4. **Audit-first** — determine empirically whether pre-SIGRID3 records in the local archive are already in a consistent format (they may have been converted).
-- **Choice made**: PENDING (Option 4 as first step)
-- **Rationale**: The local archive at `C:\Users\dumas\Documents\archive\ice-raw-data-MPO` may already be in a consistent shapefile format regardless of original format, if it was obtained from CIS as a processed archive. A data audit is needed to determine whether this inhomogeneity issue actually applies to the available data.
-- **Validation status**: PENDING
-- **References**: Stern & Heide-Jørgensen (2003), CIS archive documentation
-
----
-
-## DEC-012 — Identification and Exclusion of Non-Ice Polygons
-
-- **Context**: SIGRID-3 files contain non-ice polygons (land, no-data regions, chart border areas) that must be excluded from ice analysis. These polygons are typically identified by an AREA_TYPE or similar field, but the exact field names and code values vary by product era and have not been verified for the local archive.
-- **Options considered**:
-  1. **Filter by AREA_TYPE field** — standard approach; requires verifying the field name and valid codes.
-  2. **Filter by geometry** — exclude polygons that intersect a land mask (e.g., Natural Earth or GSHHG coastline).
-  3. **Filter by ice code values** — exclude polygons where all E_CT, E_CA, etc. fields are NULL or missing.
-  4. **Combination** — apply AREA_TYPE filter first, then geometry filter as a secondary check.
-- **Choice made**: PENDING
-- **Rationale**: Options 1 and 4 are standard for SIGRID-3 data. Option 2 is a useful secondary validation. A data audit is required to confirm the AREA_TYPE field name and value conventions in the local archive.
-- **Validation status**: PENDING
-- **References**: SIGRID-3 specification
+- **Literature cross-ref**: LITERATURE.md T2 (climatology computation methodology); [Parkinson & Cavalieri 2008], CIS Climatic Atlas.
+- **Implementation refs**: climatology/processing/metrics.py `_median_ct_sql` (metrics.py:47-50) — `POLY_TYPE IN ('I','W')` includes water polygons (`CT = 0`) in the median-then-threshold computation, realizing the include-as-zeros component (Option 1); omitting them biases the median upward.
+- **Implementation status**: Partially implemented — the median date metrics (DEC-027 pipeline) include open water as `CT = 0`; the full report-both set (occurrence frequency, mean-when-present, mean-over-region) is not yet computed.
 
 ---
 
@@ -109,215 +65,28 @@ This log records all scientific decisions, assumptions, and edge-case choices id
 - **Options considered**:
   1. **Whole Gulf (wis28)** — simplest; directly comparable to CIS atlas products.
   2. **CIS-defined sub-regions** — use whatever sub-regional breakdown CIS uses in its operational products; requires obtaining the CIS sub-region definitions.
-  3. **Custom sub-regions** — define ecologically or oceanographically meaningful sub-regions (e.g., Estuary, Northern Gulf, Southern Gulf, Cabot Strait).
-  4. **Regular grid** — rasterize to a 0.25° or 0.5° grid; allows spatial mapping but changes the data structure fundamentally.
+  3. **Custom sub-regions** — define ecologically or oceanographically meaningful sub-regions (MRC, municipalities)
+  4. **Regular grid** — rasterize to a grid;
   5. **All of the above** — compute at whole-Gulf level and at sub-regional level.
-- **Choice made**: PENDING
+- **Choice made**: 3. and 4. 
 - **Rationale**: At minimum, whole-Gulf (Option 1) is required as the standard output. Sub-regional analysis (Option 2 or 3) adds scientific value for understanding spatial variability and for applications (shipping, fisheries, etc.). This decision should be made in coordination with the intended use cases for the climatology product.
-- **Validation status**: PENDING
-- **References**: Saucier et al. (2003), CIS Climatic Atlas, DFO annual reports
-
----
-
-## DEC-014 — Temporal Aggregation Unit (Weekly vs. Monthly vs. Seasonal)
-
-- **Context**: CIS produces primarily weekly charts. The climatology can be expressed at weekly, monthly, or seasonal resolution. WMO climate normals are typically defined at monthly resolution, but sea ice is highly variable within a month and weekly resolution preserves important phenological signals (ice-on date, maximum extent week, ice-off date).
-- **Options considered**:
-  1. **Weekly** — native resolution; preserves phenological detail; not directly comparable to WMO monthly normals.
-  2. **Monthly** — WMO-standard; computed by averaging available weekly values within each calendar month.
-  3. **Seasonal** — compute winter (Jan–Apr) and freeze-up (Nov–Dec) seasonal means; most useful for climate monitoring.
-  4. **All of the above** — weekly as primary, monthly and seasonal as derived products.
-- **Choice made**: PENDING
-- **Rationale**: Option 4 is ideal for a comprehensive research product. Weekly resolution is the most appropriate for the Gulf of St. Lawrence given the typical 4–6 week ice season in some areas. Monthly aggregation risks aliasing the timing of ice formation and melt. All three levels should be computed but the primary output level should be agreed upon.
-- **Validation status**: PENDING
-- **References**: WMO-No. 1203, Tivy et al. (2011)
-
----
-
-## Prioritized Decision List for Human Validation
-
-The following decisions are most urgent and should be validated before any pipeline implementation:
-
-| Priority | Decision | Why Urgent |
-|----------|----------|-----------|
-| 1 | DEC-001 — CRS for area calculation | Affects every calculation; must be fixed before any code is written |
-| 2 | DEC-002 — Reference period | Defines the scope of the climatology; affects data loading strategy |
-| 3 | DEC-004 — Stage of development encoding | Defines what variables are computed; affects database schema |
-| 4 | DEC-013 — Spatial aggregation unit | Defines the output geometry; affects pipeline design |
-| 5 | DEC-014 — Temporal aggregation unit | Defines output resolution; affects pipeline design |
-| 6 | DEC-009 — Open-water polygon treatment | Affects mean concentration calculation |
-| 7 | DEC-006 — Inconsistent partial concentrations | Affects data quality filtering |
-| 8 | DEC-011 — Archive inhomogeneity | Affects whether pre-2000 data can be used |
-
-Decisions DEC-003, DEC-007, DEC-008, DEC-010, DEC-012 can be partially resolved through data audit (DATA_AUDIT.md phase).
-
----
+- **Validation status**: approved
+- **Literature cross-ref**: LITERATURE.md T1 (grid resolution for statistics) — grid cell size OPEN, awaiting Angela Cheng (head of climatologies, CIS); absorbs the inter-chart uncertainty concern of the former DEC-010 (deleted 2026-06-09). READING_LOG e045, e073, e077, e127, e129, e135; [Wilson et al. 2021], [Tivy et al. 2011], [Kinnard et al. 2006], [CIS Archive No.1 2006], [CIS Archive No.3 2007].
 
 ---
 
 ## DEC-015 — Parsing of E_CT = '9+' (Over-9/10 Concentration)
 
-- **Context**: Data audit (Phase 1B) found that E_CT can take the value `'9+'`, representing a concentration above 9/10 but below full coverage (10/10). This non-integer string will raise errors if E_CT is cast to int. The SIGRID-3 spec does not list `'9+'` as a valid E_CT value, suggesting it may be a CIS-specific extension.
+- **Context**: SGRDA encodes "over 9/10" total concentration with code `91` (egg-code "9+"), distinct from genuine compact 10/10 (code `92`). CIS Archive No.1 documentation states the Digital Archive numerical attribute encodes "9+" as **9.7/10 (0.97)**, explicitly differing from the 10/10 implied by summing the partial concentrations (reading-log e060). Probe 001 separately found that in SGRDA, CT=`91` rows have partials summing to 1.0 across 20 613 rows, which had motivated an earlier 1.00 mapping in the code.
 - **Options considered**:
-  1. Parse as float `9.5` — midpoint of the (9, 10] interval; conservative, preserves information.
-  2. Round up to `10` — treats "over 9/10" as effectively full coverage.
-  3. Round down to `9` — conservative lower bound.
-  4. Flag as missing (NaN) — treats non-integer as invalid.
-- **Choice made**: PENDING (Option 1 tentatively recommended)
-- **Rationale**: Midpoint assignment (9.5) is the most information-preserving approach. Rounding introduces systematic bias. Flagging as missing discards valid observations. [NEEDS REVIEW]
-- **Validation status**: PENDING
-- **References**: DATA_AUDIT.md Section 2; SIGRID-3 specification
-
----
-
-## DEC-016 — Sentinel Value Semantics in Schema A (X vs @ vs blank)
-
-- **Context**: Schema A (weekly GEC_H_* files) uses at least three distinct non-numeric values in Egg Code fields: `'X'` (analyst notation, possibly "not applicable"), `'@'` (meaning unknown), and blank/empty string. The SIGRID-3 specification uses `'X'` to mean "not applicable" (no ice layer B/C when only one type present). Whether `'@'` and blank have distinct meanings from `'X'` is unclear.
-- **Options considered**:
-  1. Treat all three as `NaN` — unified missing-value treatment; loses potential semantic distinction.
-  2. Map `'X'` → "not applicable" (expected missing), blank → NaN (data gap), `'@'` → flag for investigation.
-  3. Audit frequency of each in each field, then decide.
-- **Choice made**: PENDING (Option 3 as first step)
-- **Rationale**: Semantic distinction between `'X'` and blank matters for coverage fraction calculations. If `'X'` means "no second ice type" (valid observation of single ice type), it should not be treated identically to a missing week. A full frequency audit is required.
-- **Validation status**: PENDING
-- **References**: DATA_AUDIT.md Section 2; SIGRID-3 specification; MANICE
-
----
-
-## DEC-017 — Sentinel Value `-9` in Schema B/C (Daily Charts)
-
-- **Context**: Schema B (daily GEC_D_*) and Schema C (cis_SGRDAWIS28_*) use `-9` as a sentinel value in numeric fields (CT, CA, CB, etc.). It is assumed to mean "missing/not applicable" but whether it uniformly means NaN or has sub-meanings (e.g., "-9 in CT means open water" vs. "-9 in CA means no second type") is unverified.
-- **Options considered**:
-  1. Treat `-9` uniformly as NaN across all fields.
-  2. Field-specific treatment: `-9` in CT = NaN; `-9` in CA/CB/CC = "not applicable" (only one ice type).
-  3. Audit and verify against ECCC technical documentation.
-- **Choice made**: PENDING (Option 3 recommended)
-- **Rationale**: A uniform NaN mapping may be incorrect if `-9` in concentration sub-fields actually means "no second ice type present" (a valid observation). This distinction affects whether a polygon with CT=5, CA=5, CB=-9 should contribute to stage B/form B statistics.
-- **Validation status**: PENDING
-- **References**: DATA_AUDIT.md Section 2; ECCC/CIS Schema B documentation
-
----
-
-## DEC-018 — Authoritative Product for Climatology: Weekly (Schema A) vs. Daily (Schema B)
-
-- **Context**: The archive contains both weekly (GEC_H_*, Schema A, 1969–present) and daily (GEC_D_*, Schema B, ~2009–2025) charts. Daily charts have ~300+ observations/year vs. ~26–52 for weekly. However, daily and weekly charts use different schemas, different sentinels, and may reflect different analyst methodologies. The climatology can be based on weekly data only, daily data only (for the overlap period), or a blend.
-- **Options considered**:
-  1. **Weekly only (Schema A)** — full temporal coverage (1969–present); consistent schema; lower temporal density.
-  2. **Daily only (Schema B/C)** — higher density; only 2009–2025; schema differs; shorter record precludes long normals.
-  3. **Weekly primary, daily as supplementary QC** — use weekly for climatology, use daily to validate weekly or fill occasional gaps.
-  4. **Separate climatologies** — compute weekly climatology (1969–present) and daily climatology (2009–2025) independently.
-- **Choice made**: PENDING (Option 1 or 3 recommended)
-- **Rationale**: A climatology reference period of 30 years (e.g., 1991–2020) requires weekly data — daily data covers only 2009–2025. For temporal consistency, weekly (Schema A) should be the primary input. Daily data can serve as a QC cross-check. [NEEDS REVIEW]
-- **Validation status**: PENDING
-- **References**: DATA_AUDIT.md Section 3; DEC-002 (reference period)
-
----
-
-## DEC-019 — Treatment of the 1969 Partial Season
-
-- **Context**: The archive begins in January 1969, but 1969 data covers only the ice season (roughly January–June). The second half of 1969 has no charts. If the full archive is used, 1969 contributes incomplete annual data.
-- **Options considered**:
-  1. **Include 1969** — ice season only; acceptable for winter/spring climatologies.
-  2. **Exclude 1969** — start archive from 1970 for consistency; lose one year of data.
-  3. **Include with flag** — include 1969 but flag it as partial year; exclude from any annual statistics.
-- **Choice made**: PENDING (Option 3 tentatively recommended)
-- **Rationale**: 1969 ice-season data is scientifically valid for winter/spring analyses. Excluding it entirely wastes data from the only year in the 1960s. However, it must not contribute to annual or summer statistics. A "partial year" flag in the pipeline is the appropriate handling.
-- **Validation status**: PENDING
-- **References**: DATA_AUDIT.md Section 3
-
----
-
-## DEC-020 — Compatibility of Schema C (cis_SGRDAWIS28_*, 2025-04-29+) with Schema B
-
-- **Context**: From 2025-04-29 onward, daily charts use a new naming convention and schema (`cis_SGRDAWIS28_YYYYMMDDTHHMMZ_pl_a.*`). This new schema has 16 fields vs. 18 in Schema B and may reflect a CIS operational format change. Compatibility with Schema B is unverified.
-- **Options considered**:
-  1. Treat Schema C as an extension of Schema B — map fields, absorb into the same pipeline.
-  2. Treat Schema C as a new product — maintain separate processing path.
-  3. Defer until Schema C documentation is available from ECCC.
-- **Choice made**: PENDING (Option 3 initially, then Option 1 or 2)
-- **Rationale**: Without CIS documentation on the Schema C format change, assumptions about field equivalence are risky. Schema C currently covers only ~10.5 months of data (2025-04-29 to ~2026-03-15). Given it falls entirely outside the 1991–2020 reference period, it has low priority for the core climatology computation.
-- **Validation status**: PENDING
-- **References**: DATA_AUDIT.md Section 1
-
----
-
-## DEC-021 — Fast Ice Handling Across Schemas
-
-- **Context**: Fast ice (landfast ice) is encoded differently across schemas. In Schema A (weekly), fast ice appears as a distinct polygon type identifiable via the `A_LEGEND` field. In Schema B/C (daily), fast ice is encoded as `POLY_TYPE='I'` with concentration 10. These representations are not directly equivalent and may lead to inconsistent fast ice statistics if schemas are mixed.
-- **Options considered**:
-  1. **Normalize to a unified fast ice flag** — derive a consistent `is_fast_ice` boolean for all schemas.
-  2. **Exclude fast ice from concentration/stage climatology** — treat it as a boundary condition, not a statistical variable.
-  3. **Compute fast ice extent separately** — report fast ice extent as its own climatological variable (% of coastal area with fast ice per week).
-  4. **Schema-specific handling** — treat fast ice differently in Schema A vs. B/C pipelines and note the inconsistency.
-- **Choice made**: PENDING (Option 1 + Option 3 recommended)
-- **Rationale**: Fast ice is scientifically important in the Gulf of St. Lawrence (notably in the Estuary and North Shore). A unified flag (Option 1) enables consistent cross-schema processing. Reporting fast ice extent as a separate climatological variable (Option 3) preserves its scientific value without conflating it with drifting ice concentration statistics. [NEEDS REVIEW]
-- **Validation status**: PENDING
-- **References**: DATA_AUDIT.md Section 2; MANICE; WMO-No. 259
-
----
-
-## Prioritized Decision List for Human Validation
-
-The following decisions are most urgent and should be validated before any pipeline implementation:
-
-| Priority | Decision | Why Urgent |
-|----------|----------|-----------|
-| 1 | DEC-001 — CRS for area calculation | Affects every calculation; must be fixed before any code is written |
-| 2 | DEC-002 — Reference period | Defines the scope of the climatology; affects data loading strategy |
-| 3 | DEC-018 — Weekly vs. daily as authoritative product | Affects which files enter the pipeline; must precede schema design |
-| 4 | DEC-004 — Stage of development encoding | Defines what variables are computed; affects database schema |
-| 5 | DEC-013 — Spatial aggregation unit | Defines the output geometry; affects pipeline design |
-| 6 | DEC-014 — Temporal aggregation unit | Defines output resolution; affects pipeline design |
-| 7 | DEC-009 — Open-water polygon treatment | Affects mean concentration calculation |
-| 8 | DEC-021 — Fast ice handling | Affects schema normalization design |
-| 9 | DEC-016 — Schema A sentinel semantics (X/@/blank) | Needed before data loader is written |
-| 10 | DEC-017 — Schema B sentinel (-9) | Needed before daily data loader is written |
-
----
-
-## DEC-022 — Undocumented Stage of Development Code `'B'` in E_SA
-
-- **Context**: `scripts/run_audit.py` found 11 records across the archive where E_SA = `'B'`. This value is not listed in the SIGRID-3 specification, not in the WMO Sea Ice Nomenclature codes, and not in the CLAUDE.md encoding table. It could be: (a) a digitization/encoding artifact (e.g., character `'B'` entered instead of a numeric code), (b) an older CIS-proprietary code predating SIGRID-3, or (c) an analyst annotation with local meaning.
-- **Options considered**:
-  1. **Treat as NaN** — exclude from all encoding; 11 records discarded.
-  2. **Investigate and map** — identify which years/charts the 11 records come from; cross-reference with EGG_ATTR or source documents to determine intended code.
-  3. **Treat as unknown stage** — keep records but propagate as missing in stage aggregations.
-- **Choice made**: PENDING (Option 2 recommended as first step)
-- **Rationale**: 11 records is small enough that manual investigation is feasible. Before discarding data, the years and context should be identified. If all 11 come from a single file or short era, it may be a systematic digitization error with a clear mapping.
-- **Validation status**: PENDING
-- **References**: DATA_AUDIT.md Section 2.4; SIGRID-3 specification
-
----
-
-## DEC-023 — Undocumented Stage of Development Code `'9.'` in E_SA
-
-- **Context**: `scripts/run_audit.py` found 3 records where E_SA = `'9.'`. The CLAUDE.md encoding includes `'1.'` (second-year ice) and `'4.'` (multi-year ice) as the only dot-suffix codes. `'9.'` has no known meaning in SIGRID-3 or WMO nomenclature.
-- **Options considered**:
-  1. **Treat as NaN** — 3 records discarded.
-  2. **Treat as `'4.'` (multi-year ice)** — if `'9.'` is a typo for `'4.'`, mapping preserves the observation.
-  3. **Investigate** — identify charts and cross-reference EGG_ATTR.
-- **Choice made**: PENDING (Option 3 as first step, likely Option 1 or 2 after investigation)
-- **Rationale**: 3 records. Most likely a data entry error. Given rarity and that multi-year ice is unusual in the Gulf, Option 1 (NaN) is a safe default if investigation is inconclusive.
-- **Validation status**: PENDING
-- **References**: DATA_AUDIT.md Section 2.4; SIGRID-3 specification
-
----
-
-## DEC-024 — Year 2014 Anomalously Low Weekly Chart Count (31 vs. ~42/yr)
-
-- **Context**: The verified annual count for 2014 is 31 weekly charts, significantly below the 2011–2020 average of ~42/year and below even the pre-2010 seasonal average (~30/year). This is anomalous for the year-round production era. It may reflect a production disruption, a transfer/archiving gap, or a genuine operational change in CIS weekly chart issuance.
-- **Options considered**:
-  1. **Accept as-is** — 31 charts is still above the WMO 80% threshold (≥24 charts if 30 is expected) and above the 20-chart completeness threshold used in coverage analysis.
-  2. **Investigate** — check which months are missing; compare with the CIS online archive.
-  3. **Flag and exclude from normals if below threshold** — if the gap is in a critical winter month, it may affect winter climatological means.
-- **Choice made**: PENDING (Option 2 recommended)
-- **Rationale**: The anomaly affects 2014, which falls within the 1991–2020 reference period. If a winter month is missing, it could bias the climatological normal. Investigation is warranted before finalizing the reference period.
-- **Validation status**: PENDING
-- **References**: DATA_AUDIT.md Section 3.2
-
----
-
-Decisions DEC-003, DEC-007, DEC-008, DEC-010, DEC-012, DEC-015, DEC-019, DEC-020, DEC-022, DEC-023, DEC-024 can be partially or fully resolved through targeted data investigation (scripts/run_audit.py monthly breakdown, CIS archive comparison, EGG_ATTR cross-reference) and ECCC documentation review.
+  1. **0.97** — adopt the CIS-documented value for "9+" [e060]; treats the documentation as authoritative.
+  2. **1.00** — treat "9+" as compact, per the SGRDA partial-sum evidence (probe 001).
+  3. **9.5** — midpoint of the (9, 10] interval (original training-knowledge tentative).
+- **Choice made**: Option 1 (0.97), applied to code `91` only; compact `92` remains 1.00.
+- **Rationale**: CIS Archive No.1 explicitly defines the "9+" encoding as 9.7/10, distinct from compact 10/10. This documented definition is treated as authoritative over the indirect probe-001 partial-sum inference (the partials summing to 1.0 reflects the encoded compact remainder, not a contradiction of the "9+ < 10/10" semantics). The change touches only code `91`; `92` (genuine full coverage) is unchanged. Setting `91`=0.97 re-introduces ~20 613 small negative SD residuals (−0.03) in multi-stage rows where partials sum to 1.0; these are absorbed as the CIS 0.05 trace by the ε=0.03 floor in the volume metric (**DEC-029**), preserving probe 001's separation of benign "9+" rounding from the genuine −0.6/−0.7 encoding errors.
+- **Validation status**: APPROVED (2026-06-09) — user-confirmed; supersedes the prior probe-001-based 1.00 mapping. Promoted from ESCALATIONS_2026-06-02 item 1.
+- **Implementation refs**: climatology/services/units_conversion_maps.py — `CONCENTRATION_FRACTION["91"] = 0.97` (changed 2026-06-09 from 1.00); probe 001. **Re-run required** for volume and mean-concentration metrics; freeze-up/break-up date metrics are unaffected (both 0.97 and 1.00 clear the 4/10 threshold).
+- **Literature cross-ref**: LITERATURE.md T3 (cross-era homogeneity & data quality); READING_LOG e060 ('9+' encoded as 9.7/10 in the Digital Archive); [CIS Archive No.1 2006].
 
 ---
 
@@ -330,7 +99,8 @@ Decisions DEC-003, DEC-007, DEC-008, DEC-010, DEC-012, DEC-015, DEC-019, DEC-020
 - **Choice made**: Option 2 (CT >= 40 / CT_MIN = 40).
 - **Rationale**: CIS uses CT >= 40 to define freeze-up and break-up dates. The "first/last occurrence at CT >= 1" definition is rejected because ice presence at CT < 40 is not guaranteed to persist; using it would produce climatology dates that depend on individual transient observations rather than the establishment of a stable ice cover. User-confirmed convention per CIS practice; written source citation pending the Wilson/CIS outreach (see WORK_TASKS clim-001).
 - **Validation status**: APPROVED (2026-05-26) — pending written CIS source citation for the file record.
-- **References**: scripts/climatology_metrics.py:FreezeUpDateMetric.ct_min; clim-001 outreach.
+- **Implementation refs**: scripts/climatology_metrics.py:FreezeUpDateMetric.ct_min; clim-001 outreach.
+- **Literature cross-ref**: LITERATURE.md T2 (climatology computation methodology); READING_LOG e061 (low-concentration accuracy / 4-10 threshold rationale), e016, e017 (DFO threshold variants); [CIS Archive No.1 2006], [Galbraith et al. 2024].
 
 ---
 
@@ -344,7 +114,8 @@ Decisions DEC-003, DEC-007, DEC-008, DEC-010, DEC-012, DEC-015, DEC-019, DEC-020
 - **Choice made**: Option 2 (treat as Undetermined / stage `99`).
 - **Rationale**: Preserves the polygon's concentration in the total ice denominator (so per-region totals are not biased low by ~1%), while honestly contributing zero volume (no thickness information is available). Aligns with the existing handling of stage `99` when it appears in a stage slot directly — surfacing the volume gap rather than papering over it. Default-thickness attribution (option 3) was rejected because it would silently inflate volume with unjustified values.
 - **Validation status**: APPROVED (2026-05-27) — user-confirmed during clim-003 volume formula design.
-- **References**: backend/probes/004_column_configuration_census/ — Outcome; climatology/services/units_conversion_maps.py — `STAGE_OF_DEVELOPMENT_THICKNESS['99'] = None`.
+- **Implementation refs**: backend/probes/004_column_configuration_census/ — Outcome; climatology/services/units_conversion_maps.py — `STAGE_OF_DEVELOPMENT_THICKNESS['99'] = None`.
+- **Literature cross-ref**: LITERATURE.md T3 (conversion sub-cluster); READING_LOG e008 (volume-from-thickness-midpoint ~35% error), e026 (volume uncertainty band 25–75%); [Saucier et al. 2003], [Galbraith et al. 2024].
 
 ---
 
@@ -364,8 +135,71 @@ Decisions DEC-003, DEC-007, DEC-008, DEC-010, DEC-012, DEC-015, DEC-019, DEC-020
   - **Crossing detector**: first-crossing (no consecutive-day persistence rule). The 10-year median already provides the smoothing a persistence rule would impose; CIS itself uses first-crossing on its HD grid.
 - **Known censoring (Gulf early-onset caveat)**: Cells where the *true* climatological freeze-up precedes Dec 11 (estuary tip, exposed cold-source bays) will report freeze-up = Dec 11 — a known WMO-defined floor, not a measurement. Mirror at May 17 ceiling for breakup. To be flagged in climatology product metadata; pile-up at the mask boundary is the empirical signature to look for once the refactor is implemented.
 - **Validation status**: APPROVED (2026-05-28) — user-confirmed after probe 005 outcome review.
-- **References**: backend/probes/005_sgrda_chart_cadence/ — Outcome; CIS Climatic Ice Atlas methodology section ("Date of First Ice / Last Ice, Freeze-up / Break-up Dates"); WMO-No. 1203 (80% data-availability rule); `FreezupDateMetric` and `BreakupDateMetric` — refactor target.
+- **Implementation refs**: backend/probes/005_sgrda_chart_cadence/ — Outcome; `FreezupDateMetric` and `BreakupDateMetric` — refactor target.
+- **Literature cross-ref**: LITERATURE.md T2 (climatology computation methodology); READING_LOG e016 (DFO threshold-then-median phenology), e017 (0/10 vs 1/10 threshold), e018 (season-duration variants), e023 (WMO 80% vs DFO 15/30 mask), e025 (season-duration zero-counting); [Galbraith et al. 2024], [Wilson et al. 2021]; standards: WMO-No. 1203 (80% data-availability rule), CIS Climatic Ice Atlas methodology section ("Date of First Ice / Last Ice, Freeze-up / Break-up Dates").
 
 ---
 
-*All decisions logged as PENDING. No scientific assumption has been finalized. This log will be updated as decisions are validated.*
+## DEC-028 — Analysis-Domain Consistency: Common bbox Across Charts
+
+- **Context**: CIS Archive No.1 warns that chart extents change across the dataset; unless a consistent analysis area is enforced, statistics are biased by the varying coverage from chart to chart (reading-log e063; cf. base-map changes e065). The SGRDA GULF and SGRDAWIS28 (global) products have different extents.
+- **Options considered**:
+  1. **Native per-chart extent** — compute over whatever each chart covers; inconsistent area through time, biased.
+  2. **Common restrictive bbox** — enforce a single bbox that intersects all chart bounding boxes present in the archive (i.e. the most restrictive common extent) for the analysis period.
+- **Choice made**: Option 2, scoped by product:
+  - **Coastal climatologies** — the coastal bbox is far smaller than both the SGRDA GULF and WIS28 extents, so it already lies within every chart; no problem, no special handling.
+  - **Basin-wide / whole-Gulf climatologies** — adopt the more restrictive **SGRDAWIS28** bbox for computation.
+- **Rationale**: A consistent area through the analysis period is required for unbiased basin-wide statistics; the coastal domain is already a subset of all chart extents so it is unaffected. User-resolved.
+- **Validation status**: APPROVED (2026-06-09) — user-resolved; promoted from ESCALATIONS_2026-06-02 item 2.
+- **Implementation refs**: pipeline bbox configuration (target — confirm where the basin-wide bbox is set).
+- **Literature cross-ref**: LITERATURE.md T2 (climatology computation methodology — masking); READING_LOG e063, e065; relates to DEC-013 (spatial aggregation unit).
+
+---
+
+## DEC-029 — Volume Metric: Regime-Aware Attribution
+
+- **Context**: The sea-ice volume metric is **not yet implemented**; its attribution rules were validated piecemeal across probes 001/002/004 and are consolidated here before `reduce_season` is written. Volume is a **data-chain decision** (probe.py → README+output → this log), depending on the encoding decisions DEC-004/005/009/015/026. Per-polygon: `volume = area × Σ_stages conc(stage) × thickness(stage)`, with concentrations from `CONCENTRATION_FRACTION` and thicknesses from `STAGE_OF_DEVELOPMENT_THICKNESS` (single source of truth, parallel to the date-metric SQL).
+- **Attribution specification** (consolidated, with probe provenance):
+  - **Diagnostic branch** (probe 004): `empty` / `other` / `stage_only` → contribute 0 (log counter); `orphan_ct` (CT set, no stage codes) → treat as stage `99`, counted in the total-ice denominator but 0 volume (DEC-026); `canonical` → attribute as below.
+  - **Canonical regimes** (probe 002/004), split on whether `CA` is populated:
+    - *Single-stage* (`CT+SA`, 76.3% of rows): the lone stage carries the total — `conc(SA) = parse(CT)`, so `vol = area × parse(CT) × thk(SA)`.
+    - *Multi-stage* (`CT+CA+CB+CC+SA/SB/SC`): `Σ_i parse(C_i) × thk(S_i)` over the named partials i ∈ {A,B,C}.
+  - **Trace contributions:**
+    - `CN` set → SO trace, `conc = 0.05` (both regimes).
+    - `CD` set → SD concentration via the piecewise residual rule (probe 001), `residual = CT − (CA+CB+CC)`:
+      - `residual > 0` → `conc = residual`
+      - `−0.03 ≤ residual ≤ 0` → `conc = 0.05` (CIS trace) — **benign band**: the "9+" rounding artifact (CT=`91`=0.97 alongside partials summing to 1.0 yields exactly −0.03) and exact-zero exhaustion are both treated as the CIS trace.
+      - `residual < −0.03` → **log + skip** (genuine encoding error; only −0.6 ×2 and −0.7 ×1 observed — probe 001 output `2026-05-27_131500.txt`).
+      - Single-stage `CD` → `0.05` trace.
+  - **No-thickness stages** (`95`–`99` = `None` in `STAGE_OF_DEVELOPMENT_THICKNESS`, set `NO_THICKNESS_STAGE_CODES`) → skip (no volume), consistent with DEC-026.
+- **Options considered** (the one live fork — negative-residual handling):
+  1. **Symmetric trace band** — `−0.03 ≤ residual ≤ 0 → 0.05 trace`, `residual < −0.03 → log+skip`.
+  2. **Skip all negatives** — `residual == 0 → trace`, any `residual < 0 → log+skip`.
+- **Choice made**: Regime-aware attribution as specified, with the **symmetric trace band (ε = 0.03)**.
+- **Rationale**: ε = 0.03 cleanly separates the "9+" rounding artifact (exactly −0.03, ~20 613 rows) from the only deeper negatives in the archive (−0.6, −0.7; 3 rows, genuine encoding errors). Option 2 would log+skip the ~20 613 benign rows and discard real coverage. Keeping concentration/thickness parsing in the shared maps keeps the volume metric and the date metrics on one source of truth.
+- **Validation status**: APPROVED (2026-06-09) — user-confirmed; **implementation pending** (`reduce_season` not yet written).
+- **Implementation refs**: backend/probes/001_sd_residual, 002_stage_of_development_census, 004_column_configuration_census (+ output files); climatology/services/units_conversion_maps.py; volume `reduce_season` — to be implemented.
+- **Literature cross-ref**: data/probe-chain decision; depends on DEC-004, DEC-005, DEC-009, DEC-015, DEC-026. LITERATURE.md T3 (conversion sub-cluster) provides the literature backing for the encoding/thickness assumptions.
+
+---
+
+## DEC-030 — SGRDA / SGRDREC Archive Version Selection
+
+- **Context**: For a given `(region, date)` the archive can hold several files: clean published revisions `pl_a`/`pl_b`/`pl_c` and timestamped production-save suffixes (`..._pl_b_YYYYMMDDHHMMSS.tar`). Ingestion must pick exactly one. Data-chain decision (probe → this log); the rule is implemented in `backend.ingestion.sources.ChartSource.discover`.
+- **Options considered**:
+  1. **Ingest all candidates** — double-counts the same chart for a date.
+  2. **Native / first match** — arbitrary; may ingest a superseded or intermediate save.
+  3. **Highest clean revision (c > b > a); timestamped-suffix only as a fallback when no clean file exists.**
+- **Choice made**: Option 3.
+- **Rationale** (probe-validated — probe 008 committed run 2026-06-09 across SGRDA GULF+WIS28 + SGRDREC; confirms the original 2026-05-12/13 ad-hoc findings):
+  - Suffix saves are redundant production copies: feature counts match the clean file in **478/484** SGRDA pairs and **5/6** SGRDREC pairs; the exceptions (all GULF `20150312`; SGRDREC `20230508`) are intermediate saves superseded by the clean publication.
+  - Higher clean revisions are corrections within an **identical bounding box, never spatial amendments**: **0 bbox changes across 195 clean-revision comparisons** (185 SGRDA + 10 SGRDREC, 2008–2026); feature-count `|Δ|≤10` in 98%; the three large SGRDA outliers (QGIS-inspected) all confirm c>b>a, including the `20150221` revert (pl_a 152 → pl_b 74 → pl_c 152).
+  - Suffix-only fallback dates (no clean file): **one** as of 2026-06-09 — `GULF_20190319` (pl_a). The fallback set is archive-dependent and resolved dynamically by `discover()`.
+  - SGRDREC era-1 (1968–2019, ZIP) is `pl_a`-only (no choice); era-2 (2020+, TAR) follows the same c>b>a + suffix-fallback rule — now confirmed empirically.
+- **Validation status**: APPROVED — refreshed by probe 008 committed run (2026-06-09); metrics above are current.
+- **Implementation refs**: backend/ingestion/sources.py `ChartSource.discover` (the c>b>a + suffix-fallback rule; the SGRDA WIS28 directory-path bug `wis28`→`WIS28` was fixed 2026-06-09, surfaced by probe 008); backend/probes/008_sgrda_version_selection/ (validating probe + output).
+- **Literature cross-ref**: data/probe-chain decision (no literature dependency).
+
+---
+
+*Decisions are logged with their validation status. Approved entries are confirmed; PENDING entries await human validation.*
