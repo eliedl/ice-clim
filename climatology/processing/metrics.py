@@ -34,7 +34,7 @@ def _ct_codes_above(threshold: float) -> list[str]:
     return sorted(code for code, frac in CONCENTRATION_FRACTION.items() if frac >= threshold)
 
 
-def _all_ct_sql(*, grid_crs: int, season_min: str, season_max: str) -> str:
+def _all_ct_sql(*, table: str, grid_crs: int, season_min: str, season_max: str) -> str:
     """All ice and water SIGRID3 polygons inside the bbox over the climatology period.
 
     No CT pre-filter — the median-then-threshold methodology needs every
@@ -59,7 +59,7 @@ def _all_ct_sql(*, grid_crs: int, season_min: str, season_max: str) -> str:
                 THEN (EXTRACT(YEAR FROM "T1")::text || '-09-01')::date
                 ELSE ((EXTRACT(YEAR FROM "T1")::int - 1)::text || '-09-01')::date
             END AS season_start
-        FROM sgrda
+        FROM {table}
         WHERE "POLY_TYPE" IN ('I', 'W')
           AND ST_Intersects(geometry, ST_GeomFromText(:bbox_wkt, 4326))
           AND CASE
@@ -71,7 +71,7 @@ def _all_ct_sql(*, grid_crs: int, season_min: str, season_max: str) -> str:
     """
 
 
-def _ct_threshold_sql(*, threshold: float, grid_crs: int, season_min: str, season_max: str) -> str:
+def _ct_threshold_sql(*, threshold: float, table: str, grid_crs: int, season_min: str, season_max: str) -> str:
     """SIGRID3 polygons whose total concentration fraction is at least ``threshold``,
     inside the bbox, with season_start in [season_min, season_max].
 
@@ -94,7 +94,7 @@ def _ct_threshold_sql(*, threshold: float, grid_crs: int, season_min: str, seaso
                 THEN (EXTRACT(YEAR FROM "T1")::text || '-09-01')::date
                 ELSE ((EXTRACT(YEAR FROM "T1")::int - 1)::text || '-09-01')::date
             END AS season_start
-        FROM sgrda
+        FROM {table}
         WHERE "CT" IN ({codes_sql})
           AND ("POLY_TYPE" IS NULL OR "POLY_TYPE" != 'L')
           AND ST_Intersects(geometry, ST_GeomFromText(:bbox_wkt, 4326))
@@ -114,7 +114,7 @@ class Metric(ABC):
     display_label: str
 
     @abstractmethod
-    def sql(self, *, grid_crs: int, season_min: str, season_max: str) -> tuple[str, dict[str, Any]]:
+    def sql(self, *, table: str, grid_crs: int, season_min: str, season_max: str) -> tuple[str, dict[str, Any]]:
         """Return ``(parameterized_sql, default_params)``.
 
         The pipeline injects ``bbox_wkt`` into the param dict before binding.
@@ -215,9 +215,9 @@ class FreezeUpDateMetric(Metric):
     display_label = "Freeze-up climatology"
     ct_threshold = 0.4
 
-    def sql(self, *, grid_crs, season_min, season_max):
+    def sql(self, *, table, grid_crs, season_min, season_max):
         return _all_ct_sql(
-            grid_crs=grid_crs, season_min=season_min, season_max=season_max,
+            table=table, grid_crs=grid_crs, season_min=season_min, season_max=season_max,
         ), {}
 
     def reduce_season(self, season_df, *, transform, height, width, burn):
@@ -294,9 +294,9 @@ class BreakupDateMetric(Metric):
     display_label = "Median date of break-up (CT >= 4/10)"
     ct_threshold = 0.4
 
-    def sql(self, *, grid_crs, season_min, season_max):
+    def sql(self, *, table, grid_crs, season_min, season_max):
         return _all_ct_sql(
-            grid_crs=grid_crs, season_min=season_min, season_max=season_max,
+            table=table, grid_crs=grid_crs, season_min=season_min, season_max=season_max,
         ), {}
 
     def reduce_season(self, season_df, *, transform, height, width, burn):
@@ -359,9 +359,9 @@ class SeasonDurationMetric(Metric):
     display_label = "Median ice presence (observation-days, CT >= 4/10)"
     ct_threshold = 0.4
 
-    def sql(self, *, grid_crs, season_min, season_max):
+    def sql(self, *, table, grid_crs, season_min, season_max):
         return _ct_threshold_sql(
-            threshold=self.ct_threshold, grid_crs=grid_crs,
+            threshold=self.ct_threshold, table=table, grid_crs=grid_crs,
             season_min=season_min, season_max=season_max,
         ), {}
 

@@ -34,10 +34,8 @@ LAND_MASK_PATH = Path("/home/eliedl/data/reference/cis_landmasks/global_coastlin
 # SGRDA domain. NOT used for computation — see osm_land_polygons/README.md.
 LAND_DISPLAY_PATH = Path("/home/eliedl/data/reference/osm_land_polygons/osm_land_gulf.shp")
 
-GRID_RES   = 25
+GRID_RES   = 1000
 GRID_CRS   = 26919          # NAD83 / UTM Zone 19N
-SEASON_MIN = "2010-09-01"
-SEASON_MAX = "2019-09-01"
 
 # Dark "Mapbox-style" theme. Ocean = axes background (shows through NaN /
 # ice-free cells); land polygons are painted on top so they cover dry cells only.
@@ -57,12 +55,13 @@ REGION_DISPLAY = {
 }
 
 
-def region_paths(slug: str, metric_slug: str) -> tuple[Path, Path, str]:
-    """Resolve (bbox_geojson, png_out, display_name) for a (region, metric)."""
+def region_paths(slug: str, metric_slug: str, *, period_slug: str, source_slug: str,
+                 ) -> tuple[Path, Path, str]:
+    """Resolve (bbox_geojson, png_out, display_name) for a (region, metric, period, source)."""
     bbox = BBOX_ROOT / slug / f"{slug}_square.geojson"
     if not bbox.exists():
         sys.exit(f"ERROR: squared bbox not found for region '{slug}': {bbox}")
-    png = OUTPUT_DIR / f"{metric_slug}_{slug}_{GRID_RES}m.png"
+    png = OUTPUT_DIR / f"{metric_slug}_{slug}_{period_slug}_{source_slug}_{GRID_RES}m.png"
     display = REGION_DISPLAY.get(slug, slug.replace("-", " ").title())
     return bbox, png, display
 
@@ -112,10 +111,12 @@ def burn_values(geom_value_pairs, transform, height: int, width: int) -> np.ndar
                          transform=transform, fill=np.nan, dtype=np.float32)
 
 
-def load_polygons(metric: Metric, bbox_path: Path) -> pd.DataFrame:
+def load_polygons(metric: Metric, bbox_path: Path, *, table: str,
+                  season_min: str, season_max: str) -> pd.DataFrame:
     """Pull rows from the DB per the metric's SQL; attach shapely geometries."""
     bbox_wkt_str = gpd.read_file(bbox_path).to_crs(epsg=4326).union_all().wkt
-    sql, params = metric.sql(grid_crs=GRID_CRS, season_min=SEASON_MIN, season_max=SEASON_MAX)
+    sql, params = metric.sql(table=table, grid_crs=GRID_CRS,
+                             season_min=season_min, season_max=season_max)
     params = {**params, "bbox_wkt": bbox_wkt_str}
     engine = get_engine()
     with engine.connect() as conn:
@@ -208,6 +209,8 @@ def plot_metric(
     metric: Metric,
     png_path: Path,
     display_name: str,
+    period_label: str,
+    source_label: str,
 ) -> None:
     xmin, ymin, xmax, ymax = bounds
     vmin, vmax = percentile_range(values, low=2, high=98)
@@ -243,7 +246,7 @@ def plot_metric(
     cbar.outline.set_edgecolor(DARK_LINE)
 
     ax.set_title(
-        f"{metric.display_label}\n{display_name} region — winters 2011–2020",
+        f"{metric.display_label}\n{display_name} region — winters {period_label}",
         fontsize=12, pad=10, color=DARK_FG,
     )
     ax.set_xlabel("Easting (m, NAD83 UTM 19N)", color=DARK_FG)
@@ -255,7 +258,7 @@ def plot_metric(
 
     fig.text(
         0.01, 0.01,
-        f"Source: CIS SIGRID3 daily charts (SGRDA) | Grid: {GRID_RES} m "
+        f"Source: {source_label} | Grid: {GRID_RES} m "
         f"EPSG:{GRID_CRS} | Land: © OpenStreetMap contributors | ",
         fontsize=6, color=DARK_MUTED,
     )

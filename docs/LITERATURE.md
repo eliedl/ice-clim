@@ -196,14 +196,15 @@ strand feeds DEC-015 and the conversion sub-cluster.
 **Source entries (READING_LOG, by pointer):** e002, e004, e014, e034, e035, e038,
 e040, e041, e047, e048, e050, e062, e068, e072, e074, e075, e076, e078, e083,
 e084, e092, e096, e099, e100, e106, e108, e118, e119, e120, e121, e123, e125, e136,
-e060
+e060, e144
 
 **Conversion sub-cluster (egg-code → thickness/volume):** e006, e008, e024, e026,
 e049, e051, e052, e053, e054, e055, e056, e057, e058, e059, e066, e067, e093,
 e094, e095
 
 **Feeds:** DEC-015 ('9+' parsing) · conversion sub → DEC-004 (stage encoding),
-DEC-005 (form encoding), DEC-026 (orphan_ct volume)
+DEC-005 (form encoding), DEC-026 (orphan_ct volume) · DEC-033 (CIS_EC historical
+series authoritative for 2020)
 
 **Aggregated:** 2026-06-09
 
@@ -288,6 +289,11 @@ systematically biased toward larger classes by sensor resolution [e056–e059].
 - Iceberg concentration folded into total CT for the GSL [e067] — low priority.
 - DEC-015 resolved to 0.97; volume and mean-concentration metrics need re-running to
   propagate the 1.00→0.97 change (date metrics unaffected — both clear 4/10).
+- Whether the SFTP-delivered CIS_EC historical charts carry the post-corrections
+  described in the CIS website climatology methodology [e144] — a data-quality
+  mechanism distinct from the end-of-season historical production method [e116,
+  e117]. Awaiting the CIS client-service reply (→ cis-004); bears on cross-era
+  homogeneity of the SGRDR record and on DEC-033.
 
 ---
 

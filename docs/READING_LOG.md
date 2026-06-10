@@ -33,7 +33,7 @@ pointers, leaving this log untouched.
 
 ---
 
-<!-- next-id: e144 -->
+<!-- next-id: e145 -->
 
 ## 2026-06-01
 
@@ -200,7 +200,7 @@ pointers, leaving this log untouched.
 - e113 · [CIS Archive No.1 2006] Daily charts (1:2M) produced since 1968 (and earlier) for ice-covered Canadian waters, combining satellite + aerial + surface obs per data availability and ice-specialist workload; previous charts, now-casting, and forecaster knowledge fill the gaps. #chart-preparation #data-product
 - e114 · [CIS Archive No.1 2006] Regional charts (1:4M): same sources, more often fully combined than daily (less restrictive deadline); greater extent means some daily-chart detail is omitted. #chart-preparation #data-product #resolution
 - e115 · [CIS Archive No.1 2006] Historical charts produced end-of-season (benefit from all the season's data, sometimes shortly after a regional chart); believed more accurate than regional but NOT included in the historical dataset as of 2006. Open Q: inclusion status in 2026? #chart-preparation #data-product #open-question
-- e116 · [CIS Archive No.1 2006] 1968: historical charts produced on a set 7- or 8-day interval (the "Historical Dates" of CIS climatological methodology), published at **end of season**: each chart combines all the data sources that came to be available around its nominal date — including imagery released 1–2 days after the chart publication date — hence a more accurate picture than the operational chart for the same week. Distinct topic from the post-corrections of the CIS website climatology methodology [CIS Normals EC n.d.] (cross-era homogenization; see cis-004) — both bear on data quality but through separate mechanisms. → DEC-027 → DEC-033 #chart-preparation #cross-era-normalization
+- e116 · [CIS Archive No.1 2006] 1968: historical charts produced on a set 7- or 8-day interval (the "Historical Dates" of CIS climatological methodology), published at **end of season**: each chart combines all the data sources that came to be available around its nominal date — including imagery released 1–2 days after the chart publication date — hence a more accurate picture than the operational chart for the same week. Distinct data-quality topic from the CIS post-corrections → e144. → DEC-027 → DEC-033 #chart-preparation #cross-era-normalization
 - e117 · [CIS Archive No.1 2006] Historical charts discontinued in 1974; being end-of-season compilations (see e116) they carried better shoulder-season (start/end) information than regional charts (often not produced until the ice season was underway). → DEC-027 → DEC-033 #chart-preparation #open-question
 - e118 · [CIS Archive No.1 2006] 1979: the epidiascope introduced potential projection errors with significant chart-quality impact, but still allowed better information transfer than prior manual techniques. #chart-preparation #uncertainty
 - e119 · [CIS Archive No.1 2006] 1983: switch to egg code (more detailed reporting); no immediate quality increase (still sensor/availability-limited) but enabled gradual accuracy improvement as recon tech improved; ratio↔egg differences in Appendix A → likely moot since pre-1983 weekly charts carry E_ fields. → e040 → e066 #chart-preparation #cross-era-normalization
@@ -231,6 +231,10 @@ pointers, leaving this log untouched.
 - e141 · [ECCC CMIP5 2023] Table 2 lists the climate models used in the multi-model ensembles; the input data is not yet clear. #projection #open-question
 - e142 · [ECCC CMIP5 2023] Some fields are viewable in the ECCC Climate Data Viewer app. CMIP6 simulation results also contain sea-ice data — their specs should be probed. #data-viz #projection #to-search
 - e143 · [Senneville et al. 2018] Uses 170 cm as the thickness of Old Ice (SIGRID-3 stage code `95`) in a fine-scale Nunavik river/coastal ice-modelling report. No documented justification for the 170 cm value located; it should plausibly exceed Thick First-Year ice (160 cm midpoint) since old ice is older/thicker by definition. Bears on the unresolved stage→thickness map for codes 95–98 (currently `None`, pending CIS); not adopted. → DEC-029 #conversion-values #thickness #open-question
+
+## 2026-06-10
+
+- e144 · [CIS Normals EC n.d.] The CIS website climatology methodology mentions data corrections applied to the charts feeding the normals. Cross-era quality/homogeneity would come from these **post-corrections** on the CIS_EC historical charts — a data-quality mechanism distinct from the end-of-season historical production method (→ e116, which explains intrinsic per-chart quality). Open: whether the SFTP-delivered CIS_EC files carry these corrections. → cis-004 → DEC-033 #data-quality #cross-era-normalization #open-question
 
 ---
 

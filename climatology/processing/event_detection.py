@@ -51,19 +51,19 @@ def admissible_calendar_days(df: pd.DataFrame, *, coverage: float = 0.8) -> list
     is dropped a priori (its coverage is structurally capped at ~25% of any
     period, well below the WMO threshold).
 
-    The minimum-year threshold scales with the period: for 10 winters and
-    coverage=0.8, min_years = 8. For 30 winters, min_years = 24.
+    The denominator counts **winter seasons** (``season_start``), not calendar
+    years: a 10-winter climatology spans 11 calendar years (Sep year-1 ->
+    Aug year+10), which would inflate the WMO threshold. For 10 winters and
+    coverage=0.8, min_seasons = 8; for 30 winters, min_seasons = 24.
     """
     df = df.copy()
     df["obs_date_dt"] = pd.to_datetime(df["obs_date"])
     df["month_day"] = df["obs_date_dt"].dt.strftime("%m-%d")
     df = df[df["month_day"] != "02-29"]
-    n_years = df["obs_date_dt"].dt.year.nunique()
-    min_years = int(np.ceil(coverage * n_years))
-    coverage_per_day = df.groupby("month_day")["obs_date_dt"].apply(
-        lambda s: s.dt.year.nunique()
-    )
-    admissible = coverage_per_day[coverage_per_day >= min_years].index.tolist()
+    n_seasons = df["season_start"].nunique()
+    min_seasons = int(np.ceil(coverage * n_seasons))
+    coverage_per_day = df.groupby("month_day")["season_start"].nunique()
+    admissible = coverage_per_day[coverage_per_day >= min_seasons].index.tolist()
     return sorted(admissible, key=_ice_season_ordinal)
 
 

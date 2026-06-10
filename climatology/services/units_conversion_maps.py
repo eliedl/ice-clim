@@ -15,9 +15,13 @@ surfaces as a loud KeyError rather than being silently mapped.
 from __future__ import annotations
 
 # Concentration code -> fraction in [0, 1].
-# Includes only codes observed in probe 003.
+# Includes only codes observed in probe 003 (SGRDA) and in sgrdr (CT census,
+# 2026-06-10, during clim-008).
 CONCENTRATION_FRACTION: dict[str, float] = {
     "00": 0.00,   # ice-free (2004 convention; 2010 code "55" not observed)
+    "98": 0.00,   # ice-free — SGRDR encoding, exclusively on POLY_TYPE='W'
+                  # polygons (3 327/3 736 W rows, 1968–2020; never on ice
+                  # polygons; absent from SGRDA). User-confirmed 2026-06-10.
     "01": 0.05,   # bergy water / <1/10 — per "Open water/bergy water < 1 tenth"
     "02": 0.05,   # bergy water variant — [NEEDS CIS VALIDATION via clim-001]
     "10": 0.10,
