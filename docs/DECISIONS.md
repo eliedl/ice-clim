@@ -230,4 +230,19 @@ This log records all scientific decisions, assumptions, and edge-case choices id
 
 ---
 
+## DEC-033 — SGRDR 2020 Dual-Series Deduplication: CIS_EC (Historical Dates) Authoritative
+
+- **Context**: The local archive `SGRDR/EC/` held **two overlapping series for 2020**: 52 `CIS_EC_2020*.zip` (era-1 format, dated on the CIS Historical Dates, uninterrupted Jan 1 – Dec 25) and 42 `cis_SGRDREC_2020*.tar` (era-2 format, dated by **publication date** — Mondays, `T1` 18:00Z — Jan 20 – Aug 24 + Nov 9 – Dec 28, with an Aug 31 – Nov 2 interruption). Because the two series carry different dates for the same weeks, the natural key `(T1, region)` did not deduplicate them and 2020 was **double-ingested** into `sgrdr` (92 distinct chart dates instead of 52). Surfaced by the probe 005 chart-cadence run on `sgrdr`/ec (2026-06-10): all HD jitter in the 1991–2020 era traced to 2020.
+- **Options considered**:
+  1. **Keep the SGRDREC tars for 2020** — publication-date series; interrupted (no charts Aug 31 – Nov 2), off-HD dates.
+  2. **Keep the CIS_EC zips for 2020** — HD-aligned, complete 52-chart year, consistent with the entire 1968–2019 era-1 record.
+- **Choice made**: Option 2 — `CIS_EC_*` priority for 2020. The 42 `cis_SGRDREC_2020*` tars were moved out of the ingestion source dir to `~/data/SGRDR/EC_superseded_2020/` (quarantine, not deletion); `sgrdr` 2020 `ec` rows deleted and re-ingested from the zips only.
+- **Rationale**: (a) The CIS_EC 2020 series is uninterrupted; the SGRDREC 2020 series has a ~2-month gap. (b) Brad Drummond (CIS) specified the SGRDREC archive proper covers **2021 → present**, making 2020 CIS_EC territory. (c) HD alignment keeps the full 1968–2020 record on a single homogeneous weekly time axis (pre-2020 charts are 100% exactly on-HD per probe 005). Files quarantined rather than deleted so the publication-date series remains available for comparison; returning them to `SGRDR/EC/` would re-duplicate 2020 on the next pipeline run.
+- **Addendum (2026-06-10) — historical-product interpretation**: two separate data-quality topics must not be conflated here. (1) **Production method** (e116/e117): the exact HD alignment of the CIS_EC series (100%, 1968–2020) supports reading it as the CIS *historical* chart line — compiled at end of season, each chart combining all data sources available around its nominal date (including imagery released 1–2 days after publication) — hence intrinsically more accurate per chart than the operational publication-date series the SGRDREC tars represent. This strengthens the choice beyond mere completeness. (2) **Post-corrections** ([CIS Normals EC n.d.]): cross-era quality/homogeneity would come from corrections applied by CIS *after the fact* to the CIS_EC historical charts — a distinct mechanism. Whether the SFTP CIS_EC files carry these corrections is the open cis-004 question (sent to CIS client service 2026-06-02; reply pending). HD alignment evidences (1), not (2).
+- **Validation status**: APPROVED (2026-06-10) — user-directed.
+- **Implementation refs**: backend/probes/005_sgrda_chart_cadence/ (detection run 2026-06-10 + post-cleanup verification run); `~/data/SGRDR/EC_superseded_2020/README.md` and `~/data/README.md` § "Données mises à l'écart" (staging location + provenance); backend/ingestion/sources.py `SGRDREC_SOURCE` (unchanged — discovery simply no longer sees the tars).
+- **Literature cross-ref**: READING_LOG e116, e117 (historical charts: end-of-season compilation on the HD interval, more accurate than operational charts); [CIS Normals EC n.d.] (website climatology methodology — corrected products; cis-004 confirmation pending); personal communication Brad Drummond (CIS) — SGRDREC archive scope 2021–present. Relates to DEC-030 (version selection), DEC-032 (two-era normalization).
+
+---
+
 *Decisions are logged with their validation status. Approved entries are confirmed; PENDING entries await human validation.*

@@ -1,4 +1,20 @@
-# Probe 005 — SGRDA Chart Cadence (2011–2020)
+# Probe 005 — Chart Cadence
+
+Two analysis modes, selected by chart table:
+
+- **Calendar-daily mode** (`sgrda`, original 2026-05-28 run, documented first below):
+  per-calendar-day presence/coverage for the daily-resolution climatology.
+- **HD-weekly mode** (`sgrdr`, added 2026-06-10, documented at the end): each chart
+  is snapped to its nearest CIS **Historical Date** (HD); per-HD coverage, jitter-offset
+  distribution, and cross-era comparison for the weekly climatology (clim-008).
+
+The 52-month-day HD calendar (DEC-027, e116) is hardcoded in `probe.py`
+(`HD_MONTH_DAYS`) — currently the only machine-readable HD definition in the project;
+candidate for promotion into `climatology/` with clim-008.
+
+---
+
+# Part 1 — SGRDA Chart Cadence (2011–2020)
 
 ## Hypothesis
 
@@ -103,3 +119,80 @@ the season shoulders. **No in-season violations.**
   product metadata. Most relevant for estuary cells with early ice onset.
 - These conclusions drive **DEC-027** (median-then-threshold methodology
   for freeze-up / break-up date climatologies).
+
+---
+
+# Part 2 — SGRDR/EC Historical Date Cadence (2026-06-10)
+
+## Question
+
+clim-008 plans the median-then-threshold climatology on the weekly SGRDR record,
+binned to the CIS Historical Date calendar. Main engineering unknown going in:
+**jitter tolerance** — how to handle charts that don't land exactly on an HD.
+The probe was generalized (chart-type agnostic CLI: `--table`, `--region`,
+`--periods`) to measure this on `sgrdr` region `ec` for the three climatological
+normals 1971–2000, 1981–2010, 1991–2020.
+
+## Method (HD-weekly mode)
+
+1. Snap every distinct `"T1"::date` to its nearest HD (`merge_asof`, signed
+   offset in days); era membership by the assigned HD's calendar year.
+2. Per era: per-HD-year chart count, gap distribution, **jitter-offset histogram**,
+   charts >3 days from any HD, per-HD coverage ratio vs the WMO 80% threshold
+   (≥24/30 years), HD-presence matrix CSV.
+3. Cross-era per-HD coverage comparison table.
+
+Sep/Oct HDs are kept in the calendar even though CIS EC climatological products
+don't use them — older-era charts in those months still bin and surface in the
+comparison rather than being silently dropped.
+
+## Run
+
+```bash
+.venv/bin/python backend/probes/005_sgrda_chart_cadence/probe.py --table sgrdr --region ec
+# original sgrda daily run: no arguments
+```
+
+## Outcome — detection run (output/2026-06-10_105114, full record)
+
+The full-record run exposed two structural facts:
+
+1. **The HD calendar is the publication schedule.** Exactly 52 fixed month-days
+   carry coverage ~0.9 across 1968–2026; everything else is ~0. This empirically
+   confirmed the `HD_MONTH_DAYS` list.
+2. **2020 was double-ingested** (92 distinct dates instead of 52): `SGRDR/EC/` held
+   both the HD-dated `CIS_EC_2020*.zip` series (complete) and the publication-dated
+   `cis_SGRDREC_2020*.tar` series (Mondays; interrupted Aug 31 – Nov 2). Different
+   dates for the same weeks → the `(T1, region)` natural key did not deduplicate.
+   Resolved by **DEC-033**: CIS_EC authoritative for 2020; the 42 tars quarantined to
+   `~/data/SGRDR/EC_superseded_2020/`; 2020 `ec` rows deleted and re-ingested from
+   the zips (52 charts, 9 599 rows).
+
+## Outcome — corrected run (output/2026-06-10_114108)
+
+| | 1971–2000 | 1981–2010 | 1991–2020 |
+|---|---|---|---|
+| distinct chart dates | 1 537 | 1 537 | 1 560 |
+| exactly on HD | **100%** | **100%** | **100%** |
+| charts >3 d from any HD | 0 | 0 | 0 |
+| HDs failing WMO 80% | 0 | 0 | 0 |
+| per-HD coverage | 1.00 (0.97 Jul 2 – Dec 4) | 1.00 (0.97 Jul 2 – Dec 4) | **1.00 everywhere** |
+
+The only coverage deficit in the entire record is **1982** (29 charts; no
+publication Jun 25 → Dec 11), responsible for every 0.97 cell in the two earlier
+eras — nowhere near the WMO ≥24/30 threshold.
+
+### Implications
+
+- **clim-008 jitter tolerance: none needed** for any period ending ≤2020. Charts
+  join the HD axis by **exact date match**; nearest-HD snapping is a safeguard only.
+  The Monday publication cadence (and summer interruptions) only appears from
+  2021 onward — revisit if a climatology period extends past 2020.
+- **Historical-product interpretation** (e116/e117, DEC-033 addendum): the perfect
+  HD alignment of the 1968–2020 `CIS_EC` series supports reading it as the CIS
+  end-of-season *historical* chart line — each chart compiled with all data
+  sources available around its nominal date — rather than the operational
+  publication-date line. High intrinsic per-chart quality follows from this
+  production method.
+- All three climatological normals are computable on a single homogeneous
+  52-HD weekly axis with effectively complete coverage.
