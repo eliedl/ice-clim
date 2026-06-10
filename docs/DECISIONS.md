@@ -202,4 +202,32 @@ This log records all scientific decisions, assumptions, and edge-case choices id
 
 ---
 
+## DEC-031 — AREA / PERIMETER Source Fields Not Ingested (Derive from Geometry)
+
+- **Context**: SIGRID-3 shapefiles (both SGRDAGULF and SGRDAWIS28) carry Arc/Info-generated `AREA` and `PERIMETER` attributes, computed once at shapefile creation in the source projection and never updated automatically on reprojection. Any downstream computation needing polygon area (area-weighted concentration, ice extent, volume) must decide whether to trust these legacy fields or recompute.
+- **Options considered**:
+  1. **Ingest as-is** — carry `AREA`/`PERIMETER` columns into `sgrda`/`sgrdo`/`rec`; reuse the precomputed values.
+  2. **Drop and derive at query time** — exclude both from the field whitelist; compute from the geometry column with PostGIS — `ST_Area(geometry::geography)` for spheroidal m², `ST_Area(ST_Transform(geometry, 3979))` for the StatsCan LCC metric CRS.
+- **Choice made**: Option 2 (drop; derive from geometry).
+- **Rationale**: The Arc/Info values are computed in the source projection and are stale after any CRS transformation, so they are unreliable once reprojected to 4326. The CIS 1991–2020 climatology shapefiles contain **no** `AREA`/`PERIMETER` fields — confirming the CIS climatology algorithm never reads them and rasterizes polygon geometry directly. The geometry column is therefore the single authoritative source for area and length.
+- **Validation status**: APPROVED (2026-05-12) — WORK_TASKS ingest-003; relates to DEC-009 (area-weighted means computed from geometry).
+- **Implementation refs**: backend/ingestion/sources.py — `SGRDA_KEEP` (sources.py:25) and `SGRDREC_KEEP` (sources.py:50) field whitelists, neither of which lists `AREA`/`PERIMETER`; area derived at query time via PostGIS `ST_Area`.
+- **Literature cross-ref**: data/probe-chain decision; relates to DEC-009 (open-water / area-weighted means).
+
+---
+
+## DEC-032 — SGRDREC Two-Era Schema Normalization (E_ → Standard SIGRID-3 Fields)
+
+- **Context**: SGRDREC (regional historical, "SGRDREC") exists in two on-disk schema eras. Era 1 (1968–2019; ZIP, NAD27, `pl_a`-only) uses an `E_`-prefixed **5-type** Egg-Code schema; era 2 (2020–present; TAR, WGS84, `pl_a/b/c`) uses the standard SIGRID-3 **3-type** schema shared with SGRDA. Ingestion must normalize both eras into one table schema. Source for the mapping: ETSI6-Doc SIGRID-3 v3.1 (March 2017) Table A-1 + JCOMM_TR23 (2004) Table 1.
+- **Options considered**:
+  1. **Preserve both schemas** — keep the 5-type `E_` fields for era 1 and the 3-type fields for era 2 in separate columns; no normalization.
+  2. **Normalize to the new-format 3-type schema (most restrictive)** — rename the `E_` fields to their standard equivalents, drop the 4th/5th-type and secondary/administrative fields, and store both eras under one homogeneous schema.
+- **Choice made**: Option 2. Field map: `E_SO→CN`, `E_SA/E_SB/E_SC→SA/SB/SC`, `E_SD→CD`, `E_CA/E_CB/E_CC→CA/CB/CC`, `E_FA/E_FB/E_FC→FA/FB/FC`, `E_CT→CT`. **Dropped**: `E_SE` (5th stage), `E_CD` (4th-type concentration), `E_FD/E_FE` (4th/5th-type forms), `E_CS` (secondary concentration of strips/patches), and all `N_`, `R_`, and administrative fields (`EGG_ID`, `EGG_NAME`, `PNT_TYPE`, `EGG_ATTR`, `REGION`). Era-1 date-only filenames (`YYYYMMDD`) → `T1 = 18:00Z` (same convention as SGRDAGULF).
+- **Rationale**: Normalizing to the most restrictive 3-type schema yields one homogeneous table across the full 1968–present record. The dropped 4th/5th-type and strips/patches detail is a minor loss (relevant mainly at season end; does not affect coastal concentration or volume climatology). `E_SO=CN` and `E_SD=CD` are confirmed against SIGRID-3 v3.1 (equivalent to `So`/`Sd` in ICESOD), consistent with the CN/CD naming quirks documented in CLAUDE.md. `N_` fields are dropped (user-confirmed 2026-06-10).
+- **Validation status**: APPROVED (2026-05-22, C*/S*/F* map + 3-type normalization + `T1`=18:00Z; user-confirmed) and (2026-06-10, `N_` fields dropped; user-confirmed).
+- **Implementation refs**: backend/ingestion/sources.py — `SGRDREC_SOURCE` (sources.py:147) with `SGRDREC_KEEP` whitelist (sources.py:50) defining the retained normalized fields; `ChartSource.discover` (sources.py:80); two-era filename grammar `_SGRDREC_OLD_CLEAN_RE` / `_SGRDREC_NEW_CLEAN_RE` (sources.py:36–48). Note: `CF` is intentionally retained in `SGRDA_KEEP` (and present in `SGRDREC_KEEP`); the earlier memory note that CF was dropped from both eras is superseded.
+- **Literature cross-ref**: SIGRID-3 v3.1 (March 2017) Table A-1; JCOMM_TR23 (2004) Table 1.
+
+---
+
 *Decisions are logged with their validation status. Approved entries are confirmed; PENDING entries await human validation.*

@@ -21,6 +21,30 @@ implemented in `backend/ingestion/sources.py:ChartSource.discover`).
 For raw `.xml`-sidecar probes (007) set `ARCHIVE_ROOT=/home/eliedl/data`; sidecars are not
 in the DB.
 
+## Ingestion pipeline conventions (non-obvious)
+Engineering decisions behind `backend/ingestion/`; full rationale in DECISIONS.md (DEC-031/032).
+  - **Table schema**: geometry column is generic `GEOMETRY(Geometry, 4326)`, **not** constrained
+    `MULTIPOLYGON` — post-repair `ST_MakeValid`+`ST_CollectionExtract(...,3)` can yield Polygon
+    or GeometryCollection fragments a constrained type would reject. No surrogate `id`; natural
+    key `(T1, region)` drives delete/re-ingest (`DELETE … WHERE T1=… AND region=…`). All CIS
+    columns use the uppercase SIGRID-3 convention (`T1`, `CT`, …).
+  - **Ingest atomicity**: `to_postgis` + the `ST_MakeValid` geometry repair share one
+    `engine.begin()` connection (pipeline.py) — separate transactions can leave unrepaired
+    geometries that resumability then skips forever. `gdf.drop_duplicates()` runs before
+    `to_postgis` (CIS shapefiles contain exact-duplicate features that skew concentration
+    stats); never after, never on a column subset.
+  - **Schema lifecycle**: DDL lives in `initdb/*.sql`, run by the Docker entrypoint on first
+    startup; Python never `CREATE TABLE`s (may assert existence and fail loudly). The `_KEEP`
+    field whitelist is co-located in each `ChartSource` and must be kept manually in sync with
+    the DDL (`to_postgis(if_exists="append")` errors on columns absent from the table).
+  - **Descriptor pattern**: one `ChartSource` per chart type (table, dir, filename regex,
+    revision ranking, `_KEEP`), regions listed inside; the ETL loop is type-agnostic.
+    `discover()` lives on the base class — no per-type subclass — with era variation encoded via
+    fields (`clean_res`, `suffix_res`, `file_globs`, `region_label_map`).
+  - **AREA/PERIMETER dropped; area derived from geometry at query time** (DEC-031).
+  - **SGRDREC two-era normalization** to the standard 3-type SIGRID-3 schema (`E_`→standard
+    rename, 4th/5th-type + `N_`/`R_`/admin dropped) (DEC-032).
+
 ## Scientific domain knowledge
 CIS SIGRID-3 Egg Code in PostGIS table `sgrda`. Two
 on-disk schema eras normalized on ingestion: SGRDAGULF (old, no CRS→assume 4326) and
