@@ -1,6 +1,7 @@
 import logging
 import tarfile
 import tempfile
+import zipfile
 from datetime import datetime
 from pathlib import Path
 
@@ -16,12 +17,16 @@ log = logging.getLogger(__name__)
 
 # ── Extract ───────────────────────────────────────────────────────────────────
 
-def extract_shp(tar_path: Path, tmpdir: str) -> Path:
-    with tarfile.open(tar_path) as tf:
-        tf.extractall(tmpdir)
+def extract_shp(archive_path: Path, tmpdir: str) -> Path:
+    if archive_path.suffix == ".zip":
+        with zipfile.ZipFile(archive_path) as zf:
+            zf.extractall(tmpdir)
+    else:
+        with tarfile.open(archive_path) as tf:
+            tf.extractall(tmpdir)
     shps = sorted(Path(tmpdir).glob("*_pl_*.shp"))
     if not shps:
-        raise FileNotFoundError(f"No polygon shapefile in {tar_path.name}")
+        raise FileNotFoundError(f"No polygon shapefile in {archive_path.name}")
     return shps[0]
 
 
@@ -64,14 +69,14 @@ def load(gdf: gpd.GeoDataFrame, table: str, t1: datetime, region: str, engine) -
 
 # ── Orchestration ─────────────────────────────────────────────────────────────
 
-def ingest_one(tar_path: Path, t1: datetime, region: str,
+def ingest_one(archive_path: Path, t1: datetime, region: str,
                source: ChartSource, engine) -> int:
     with tempfile.TemporaryDirectory() as tmpdir:
-        shp_path = extract_shp(tar_path, tmpdir)
+        shp_path = extract_shp(archive_path, tmpdir)
         gdf = gpd.read_file(shp_path)
 
     if gdf.empty:
-        log.warning("  Empty: %s", tar_path.name)
+        log.warning("  Empty: %s", archive_path.name)
         return 0
 
     gdf = transform(gdf, source.keep_fields, t1, region)
@@ -88,16 +93,16 @@ def run_source(source: ChartSource, engine) -> None:
     )
 
     total = 0
-    for i, (tar_path, t1, region) in enumerate(pending, 1):
+    for i, (archive_path, t1, region) in enumerate(pending, 1):
         try:
-            n = ingest_one(tar_path, t1, region, source, engine)
+            n = ingest_one(archive_path, t1, region, source, engine)
             total += n
             if i % 50 == 0 or i == len(pending):
                 log.info(
                     "  [%d/%d] %s -> %d rows (total: %d)",
-                    i, len(pending), tar_path.name, n, total,
+                    i, len(pending), archive_path.name, n, total,
                 )
         except Exception as e:
-            log.error("  FAILED %s: %s", tar_path.name, e)
+            log.error("  FAILED %s: %s", archive_path.name, e)
 
     log.info("%s done: %d rows ingested.", source.label, total)

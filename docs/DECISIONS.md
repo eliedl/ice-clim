@@ -218,7 +218,7 @@ This log records all scientific decisions, assumptions, and edge-case choices id
 
 ## DEC-032 — SGRDREC Two-Era Schema Normalization (E_ → Standard SIGRID-3 Fields)
 
-- **Context**: SGRDREC (regional historical, "SGRDREC") exists in two on-disk schema eras. Era 1 (1968–2019; ZIP, NAD27, `pl_a`-only) uses an `E_`-prefixed **5-type** Egg-Code schema; era 2 (2020–present; TAR, WGS84, `pl_a/b/c`) uses the standard SIGRID-3 **3-type** schema shared with SGRDA. Ingestion must normalize both eras into one table schema. Source for the mapping: ETSI6-Doc SIGRID-3 v3.1 (March 2017) Table A-1 + JCOMM_TR23 (2004) Table 1.
+- **Context**: SGRDREC (regional historical, "SGRDREC") exists in two on-disk schema eras. Era 1 (1968–2019; ZIP, NAD27, `pl_a`-only) uses an `E_`-prefixed **5-type** Egg-Code schema; era 2 (2020–present; TAR, WGS84, `pl_a/b/c`) uses the standard SIGRID-3 **3-type** schema shared with SGRDA. Ingestion must normalize both eras into one table schema. Source for the mapping: ETSI6-Doc SIGRID-3 v3.1 (March 2017) Table A-1 + JCOMM_TR23 (2004) Table 1, 
 - **Options considered**:
   1. **Preserve both schemas** — keep the 5-type `E_` fields for era 1 and the 3-type fields for era 2 in separate columns; no normalization.
   2. **Normalize to the new-format 3-type schema (most restrictive)** — rename the `E_` fields to their standard equivalents, drop the 4th/5th-type and secondary/administrative fields, and store both eras under one homogeneous schema.

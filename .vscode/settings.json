@@ -1,0 +1,15 @@
+{
+    "sqltools.connections": [
+        {
+            "ssh": "Disabled",
+            "previewLimit": 50,
+            "server": "localhost",
+            "port": 5432,
+            "driver": "PostgreSQL",
+            "name": "cis_historical_db",
+            "database": "cis_historical_db",
+            "username": "eliedl",
+            "password": "8/7ziObdl3Je0zQcEkvgDRk2FLELT5XzGSdTkLMnHIo"
+        }
+    ]
+}

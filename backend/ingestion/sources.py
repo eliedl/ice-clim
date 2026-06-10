@@ -51,7 +51,7 @@ SGRDREC_KEEP = frozenset({
     "POLY_TYPE",
     "CT", "CA", "CB", "CC", "CN",
     "SA", "SB", "SC", "CD",
-    "FA", "FB", "FC", "CF",
+    "FA", "FB", "FC",
     "geometry",
 })
 
@@ -89,8 +89,8 @@ class ChartSource:
                         if m:
                             region_code = m.group("region").upper()
                             date_str    = m.group("date")
-                            hour        = int(m.group("hour"))   if m.group("hour")   else 18
-                            minute      = int(m.group("minute")) if m.group("minute") else 0
+                            hour        = int(m.group("hour"))   if m.groupdict().get("hour")   else 18
+                            minute      = int(m.group("minute")) if m.groupdict().get("minute") else 0
                             rev         = _REV_RANK[m.group("rev").lower()]
                             key = (region_code, date_str)
                             if key not in best_clean or rev > best_clean[key][0]:
@@ -146,11 +146,11 @@ SGRDA_SOURCE = ChartSource(
 
 SGRDREC_SOURCE = ChartSource(
     label="SGRDREC",
-    table="sgrdrec",
+    table="sgrdr",
     keep_fields=SGRDREC_KEEP,
     directories=[DATA_ROOT / "SGRDR" / "EC"],
     clean_res=[_SGRDREC_OLD_CLEAN_RE, _SGRDREC_NEW_CLEAN_RE],
     suffix_res=[_SGRDREC_NEW_SUFFIX_RE],
-    region_label_map={"EC": "rec"},
+    region_label_map={"EC": "ec"},
     file_globs=("*.tar", "*.zip"),
 )
