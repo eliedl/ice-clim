@@ -43,6 +43,24 @@ def day_of_season(month_day: str) -> int:
     return _ice_season_ordinal(month_day)
 
 
+def _nanmedian_high(a: np.ndarray) -> np.ndarray:
+    """Nan-aware upper-middle median along axis 0 (DEC-035).
+
+    Exact median for odd sample counts; the *upper* of the two middle values
+    for even counts (``sorted[n // 2]``), unlike ``np.nanmedian`` which
+    interpolates the pair. Matches the CIS normals convention (probe 010:
+    99.6% exact cell agreement vs 86.8% interpolated): the median of a
+    discrete-coded CT field is always a representable code value, never an
+    interpolated midpoint.
+    """
+    s = np.sort(a, axis=0)                 # NaNs sort to the end
+    n = np.sum(~np.isnan(a), axis=0)
+    idx = np.where(n > 0, n // 2, 0)
+    out = np.take_along_axis(s, idx[None, ...], axis=0)[0]
+    out[n == 0] = np.nan
+    return out
+
+
 def admissible_calendar_days(df: pd.DataFrame, *, coverage: float = 0.8) -> list[str]:
     """Calendar days passing the WMO data-availability rule over the climatology
     period implicit in ``df``.
@@ -80,8 +98,9 @@ def build_daily_median_ct_cube(
     """Build (n_admissible_days, H, W) median CT cube.
 
     For each admissible calendar day, rasterize each year's (geom, CT)
-    polygons to (H, W), then nan-aware median across the year axis. Streamed
-    so memory holds at most ~n_years rasters per iteration.
+    polygons to (H, W), then nan-aware upper-middle median across the year
+    axis (``_nanmedian_high``, CIS convention per DEC-035). Streamed so
+    memory holds at most ~n_years rasters per iteration.
 
     CT codes are parsed to fractions via CONCENTRATION_FRACTION (single source
     of truth, parallel to the legacy _ct_threshold_sql IN-filter derivation).
@@ -124,9 +143,9 @@ def build_daily_median_ct_cube(
             stack = np.stack(year_rasters, axis=0)
             if not_land is not None:
                 median_slice = np.full((height, width), np.nan, dtype=np.float32)
-                median_slice[not_land] = np.nanmedian(stack[:, not_land], axis=0)
+                median_slice[not_land] = _nanmedian_high(stack[:, not_land])
             else:
-                median_slice = np.nanmedian(stack, axis=0)
+                median_slice = _nanmedian_high(stack)
             cube_slices.append(median_slice)
     return np.stack(cube_slices, axis=0)
 
