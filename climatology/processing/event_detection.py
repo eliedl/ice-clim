@@ -103,7 +103,7 @@ def build_daily_median_ct_cube(
     memory holds at most ~n_years rasters per iteration.
 
     CT codes are parsed to fractions via CONCENTRATION_FRACTION (single source
-    of truth, parallel to the legacy _ct_threshold_sql IN-filter derivation).
+    of truth).
     Unmapped codes drop out as NaN and are excluded from the year's
     contribution to the median.
 

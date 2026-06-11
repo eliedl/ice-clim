@@ -281,7 +281,7 @@ def plot_metric(
     source_label: str,
 ) -> None:
     xmin, ymin, xmax, ymax = bounds
-    vmin, vmax = percentile_range(values, low=1, high=99) # visual removal of extremas (high value pixels near coast)
+    vmin, vmax = percentile_range(values, low=1, high=100) # visual removal of extremas (high value pixels near coast)
     cmap, norm = build_cmap("cool_to_warm_7", vmin=vmin, vmax=vmax)
 
     tick_values = list(np.linspace(vmin, vmax, 6))

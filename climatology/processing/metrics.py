@@ -24,16 +24,6 @@ from climatology.services.units_conversion_maps import CONCENTRATION_FRACTION
 SEASON_ORIGIN = date(2000, 9, 1)  # any Sep-1; used only to format day-of-season as a calendar label
 
 
-def _ct_codes_above(threshold: float) -> list[str]:
-    """Return SIGRID-3 concentration codes whose fraction value is >= threshold.
-
-    Single source of truth: the CONCENTRATION_FRACTION map. Codes never observed
-    in the local archive are absent from the map and therefore never selected,
-    surfacing as a no-match rather than a silent inclusion.
-    """
-    return sorted(code for code, frac in CONCENTRATION_FRACTION.items() if frac >= threshold)
-
-
 def _all_ct_sql(*, table: str, grid_crs: int, season_min: str, season_max: str) -> str:
     """All ice and water SIGRID3 polygons inside the bbox over the climatology period.
 
@@ -41,8 +31,7 @@ def _all_ct_sql(*, table: str, grid_crs: int, season_min: str, season_max: str) 
     observed CT value (including 0 from water polygons) to compute an
     unbiased median across years. CT is returned as the raw SIGRID3 code;
     parsing to a fraction happens in Python via CONCENTRATION_FRACTION
-    (single source of truth, parallel to the IN-filter derivation in
-    ``_ct_threshold_sql``).
+    (single source of truth).
 
     POLY_TYPE filter:
       - 'I' (ice)   -> CT > 0
@@ -61,42 +50,6 @@ def _all_ct_sql(*, table: str, grid_crs: int, season_min: str, season_max: str) 
             END AS season_start
         FROM {table}
         WHERE "POLY_TYPE" IN ('I', 'W')
-          AND ST_Intersects(geometry, ST_GeomFromText(:bbox_wkt, 4326))
-          AND CASE
-                  WHEN EXTRACT(MONTH FROM "T1") >= 9
-                  THEN (EXTRACT(YEAR FROM "T1")::text || '-09-01')::date
-                  ELSE ((EXTRACT(YEAR FROM "T1")::int - 1)::text || '-09-01')::date
-              END BETWEEN '{season_min}' AND '{season_max}'
-        ORDER BY season_start, obs_date;
-    """
-
-
-def _ct_threshold_sql(*, threshold: float, table: str, grid_crs: int, season_min: str, season_max: str) -> str:
-    """SIGRID3 polygons whose total concentration fraction is at least ``threshold``,
-    inside the bbox, with season_start in [season_min, season_max].
-
-    The CT filter uses the SIGRID-3 code list derived from CONCENTRATION_FRACTION
-    (see climatology.services.units_conversion_maps) rather than a raw integer
-    cast on ``CT``. This keeps the parser and the SQL filter on the same source
-    of truth and avoids InvalidTextRepresentation errors for non-numeric codes
-    (e.g. ``9-``).
-    """
-    codes = _ct_codes_above(threshold)
-    if not codes:
-        raise ValueError(f"No SIGRID-3 codes satisfy concentration fraction >= {threshold}")
-    codes_sql = ", ".join(f"'{c}'" for c in codes)
-    return f"""
-        SELECT
-            ST_AsText(ST_Transform(geometry, {grid_crs})) AS geom_wkt,
-            "T1"::date AS obs_date,
-            CASE
-                WHEN EXTRACT(MONTH FROM "T1") >= 9
-                THEN (EXTRACT(YEAR FROM "T1")::text || '-09-01')::date
-                ELSE ((EXTRACT(YEAR FROM "T1")::int - 1)::text || '-09-01')::date
-            END AS season_start
-        FROM {table}
-        WHERE "CT" IN ({codes_sql})
-          AND ("POLY_TYPE" IS NULL OR "POLY_TYPE" != 'L')
           AND ST_Intersects(geometry, ST_GeomFromText(:bbox_wkt, 4326))
           AND CASE
                   WHEN EXTRACT(MONTH FROM "T1") >= 9
@@ -447,22 +400,27 @@ class LastOccurrenceDateMetric(Metric):
 
 
 class SeasonDurationMetric(Metric):
-    """Median count of observation-days with CT fraction >= ct_threshold, per cell across seasons.
+    """Climatological ice-season duration per cell, by the CIS protocol
+    (median-then-threshold, DEC-027 applied to a count instead of a date).
 
-    Cumulative definition: the per-season value is the number of distinct
-    observation dates on which the cell was covered by an ice polygon at
-    CT >= 4/10. The cross-season reduction is the nan-aware median.
+    Methodology (user-directed 2026-06-11, replacing the legacy
+    threshold-then-median per-season count):
+      1. For each time step in the admissible window (WMO 80% rule per
+         calendar day), build the median CT fraction across years — the same
+         cube the freeze-up/break-up metrics scan (upper-middle median,
+         DEC-035).
+      2. The duration is the *count* of admissible time steps where the
+         medianed field is >= ct_threshold (4/10, CIS convention).
 
-    Units are *observation-days*, not calendar-days. SGRDA daily charts are
-    issued on operational days (~5-7 per week), so the count is a slight
-    undercount of calendar days. Within the same observational regime
-    (consistent chart cadence across seasons) the count is comparable
-    year-to-year and spatially.
+    Cumulative on the median field: mid-winter melt-refreeze in the
+    climatological state is not counted, unlike a break-up-minus-freeze-up
+    bracket. Cells observed but never reaching threshold report 0
+    (climatologically ice-free water); cells never observed (or land)
+    report NaN.
 
-    Diverges from a naive "break-up minus freeze-up" definition when the
-    season contains mid-winter melt-refreeze events: cumulative counts
-    only the days ice was actually present, while bracket duration would
-    include the melt interval.
+    Units are admissible *observation time steps* (days for SGRDA, weeks
+    for SGRDR — the display label is set per source in main.py), not
+    calendar days. Comparable spatially and across runs within one source.
     """
 
     slug = "season_duration"
@@ -470,22 +428,36 @@ class SeasonDurationMetric(Metric):
     ct_threshold = 0.4
 
     def sql(self, *, table, grid_crs, season_min, season_max):
-        return _ct_threshold_sql(
-            threshold=self.ct_threshold, table=table, grid_crs=grid_crs,
-            season_min=season_min, season_max=season_max,
+        return _all_ct_sql(
+            table=table, grid_crs=grid_crs, season_min=season_min, season_max=season_max,
         ), {}
 
     def reduce_season(self, season_df, *, transform, height, width, burn):
-        dates = sorted(season_df["obs_date"].unique())
-        count = np.zeros((height, width), dtype=np.float32)
-        ever = np.zeros((height, width), dtype=bool)
-        for obs_date in dates:
-            geoms = season_df.loc[season_df["obs_date"] == obs_date, "geometry"].tolist()
-            mask = burn(geoms, transform, height, width).astype(bool)
-            count += mask.astype(np.float32)
-            ever |= mask
-        count[~ever] = np.nan
-        return count
+        raise NotImplementedError(
+            "SeasonDurationMetric overrides compute_climatology directly "
+            "(median-then-threshold per DEC-027); reduce_season is not used."
+        )
+
+    def compute_climatology(self, df, *, transform, height, width, burn, burn_values=None, land_mask=None):
+        if burn_values is None:
+            raise ValueError(
+                "SeasonDurationMetric.compute_climatology requires burn_values "
+                "(value-keyed rasterizer) from the pipeline."
+            )
+        from climatology.processing.event_detection import (
+            admissible_calendar_days,
+            build_daily_median_ct_cube,
+        )
+        days = admissible_calendar_days(df)
+        cube = build_daily_median_ct_cube(
+            df, admissible_days=days,
+            transform=transform, height=height, width=width,
+            burn_values=burn_values, land_mask=land_mask,
+        )
+        duration = np.sum(cube >= self.ct_threshold, axis=0).astype(np.float32)
+        never_observed = np.all(np.isnan(cube), axis=0)
+        duration[never_observed] = np.nan
+        return duration
 
     def format_ticks(self, tick_values):
         return [f"{int(round(d))}" for d in tick_values]

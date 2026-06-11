@@ -1,0 +1,16 @@
+{
+  "metric": "season_duration",
+  "region": "sept-iles",
+  "source": "sgrda",
+  "period": "2006-2017",
+  "season_min": "2005-09-01",
+  "season_max": "2016-09-01",
+  "grid_res_m": 35,
+  "grid_crs": 26919,
+  "land_mask": "/home/eliedl/data/reference/cis_landmasks/global_coastline.shp",
+  "n_rows": 6755,
+  "git_sha": "be25f66",
+  "git_dirty": true,
+  "created": "20260611-160403",
+  "raster": "season_duration_sept-iles_2006-2017_sgrda_35m_20260611-160403_be25f66.npz"
+}
