@@ -8,3 +8,5 @@ __pycache__/
 *.png
 *.txt
 *.csv
+*.npy
+*.npz

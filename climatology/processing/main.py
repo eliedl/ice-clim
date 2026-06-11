@@ -30,15 +30,20 @@ from dotenv import load_dotenv
 
 from climatology.processing.metrics import (
     BreakupDateMetric,
+    FirstOccurrenceDateMetric,
     FreezeUpDateMetric,
+    LastOccurrenceDateMetric,
     Metric,
     SeasonDurationMetric,
 )
 from climatology.processing.pipeline import (
+    archive_product,
     build_grid,
     build_land_mask,
     burn,
     burn_values,
+    GRID_CRS,
+    GRID_RES,
     load_polygons,
     log_distribution,
     plot_metric,
@@ -59,9 +64,11 @@ log = logging.getLogger(__name__)
 
 
 METRICS: dict[str, Metric] = {
-    FreezeUpDateMetric.slug:   FreezeUpDateMetric(),
-    BreakupDateMetric.slug:    BreakupDateMetric(),
-    SeasonDurationMetric.slug: SeasonDurationMetric(),
+    FreezeUpDateMetric.slug:        FreezeUpDateMetric(),
+    BreakupDateMetric.slug:         BreakupDateMetric(),
+    FirstOccurrenceDateMetric.slug: FirstOccurrenceDateMetric(),
+    LastOccurrenceDateMetric.slug:  LastOccurrenceDateMetric(),
+    SeasonDurationMetric.slug:      SeasonDurationMetric(),
 }
 
 
@@ -105,7 +112,7 @@ def run(metric_slug: str, region: str, source_slug: str, period: tuple[int, int]
     transform, h, w, bounds = build_grid(bbox)
     log.info("Raster grid: %d × %d cells (%d total)", w, h, w * h)
 
-    land_mask = build_land_mask(transform, h, w)
+    land_mask = build_land_mask(source.land_mask_path, transform, h, w)
 
     df = load_polygons(metric, bbox, table=source.table,
                        season_min=season_min, season_max=season_max)
@@ -124,6 +131,13 @@ def run(metric_slug: str, region: str, source_slug: str, period: tuple[int, int]
     log.info("Cells with data: %s / %s",
              f"{int((~np.isnan(values)).sum()):,}", f"{h * w:,}")
     log_distribution(values)
+
+    archive_product(values, png, manifest={
+        "metric": metric.slug, "region": region, "source": source.slug,
+        "period": period_slug, "season_min": season_min, "season_max": season_max,
+        "grid_res_m": GRID_RES, "grid_crs": GRID_CRS,
+        "land_mask": str(source.land_mask_path), "n_rows": len(df),
+    })
 
     plot_metric(values, bounds, metric=metric, png_path=png, display_name=display,
                 period_label=f"{period[0]}–{period[1]}",

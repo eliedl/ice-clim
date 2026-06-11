@@ -336,6 +336,116 @@ class BreakupDateMetric(Metric):
         ]
 
 
+class FirstOccurrenceDateMetric(Metric):
+    """Climatological date of first ice occurrence per cell (CT >= 1/10).
+
+    Identical methodology to FreezeUpDateMetric (DEC-027 median-then-threshold),
+    but with a lower threshold of 1/10 instead of 4/10. Captures the first
+    appearance of any detectable ice concentration rather than the onset of
+    significant ice cover.
+    """
+
+    slug = "first_occurrence_date"
+    display_label = "Median date of first ice occurrence (CT >= 1/10)"
+    ct_threshold = 0.1
+
+    def sql(self, *, table, grid_crs, season_min, season_max):
+        return _all_ct_sql(
+            table=table, grid_crs=grid_crs, season_min=season_min, season_max=season_max,
+        ), {}
+
+    def reduce_season(self, season_df, *, transform, height, width, burn):
+        raise NotImplementedError(
+            "FirstOccurrenceDateMetric overrides compute_climatology directly "
+            "(median-then-threshold per DEC-027); reduce_season is not used."
+        )
+
+    def compute_climatology(self, df, *, transform, height, width, burn, burn_values=None, land_mask=None):
+        if burn_values is None:
+            raise ValueError(
+                "FirstOccurrenceDateMetric.compute_climatology requires burn_values "
+                "(value-keyed rasterizer) from the pipeline."
+            )
+        from climatology.processing.event_detection import (
+            admissible_calendar_days,
+            build_daily_median_ct_cube,
+            day_of_season,
+            extract_event_date,
+        )
+        days = admissible_calendar_days(df)
+        cube = build_daily_median_ct_cube(
+            df, admissible_days=days,
+            transform=transform, height=height, width=width,
+            burn_values=burn_values, land_mask=land_mask,
+        )
+        bool_cube = cube >= self.ct_threshold
+        day_ordinals = [day_of_season(d) for d in days]
+        return extract_event_date(
+            bool_cube, day_ordinals=day_ordinals, mode="first_above",
+        )
+
+    def format_ticks(self, tick_values):
+        return [
+            (SEASON_ORIGIN + timedelta(days=int(round(d)))).strftime("%b %d")
+            for d in tick_values
+        ]
+
+
+class LastOccurrenceDateMetric(Metric):
+    """Climatological date of last ice occurrence per cell (CT >= 1/10).
+
+    Identical methodology to BreakupDateMetric (DEC-027 median-then-threshold),
+    but with a lower threshold of 1/10 instead of 4/10. Captures the last
+    day any detectable ice was present rather than the last day of significant
+    ice cover.
+    """
+
+    slug = "last_occurrence_date"
+    display_label = "Median date of last ice occurrence (CT >= 1/10)"
+    ct_threshold = 0.1
+
+    def sql(self, *, table, grid_crs, season_min, season_max):
+        return _all_ct_sql(
+            table=table, grid_crs=grid_crs, season_min=season_min, season_max=season_max,
+        ), {}
+
+    def reduce_season(self, season_df, *, transform, height, width, burn):
+        raise NotImplementedError(
+            "LastOccurrenceDateMetric overrides compute_climatology directly "
+            "(median-then-threshold per DEC-027); reduce_season is not used."
+        )
+
+    def compute_climatology(self, df, *, transform, height, width, burn, burn_values=None, land_mask=None):
+        if burn_values is None:
+            raise ValueError(
+                "LastOccurrenceDateMetric.compute_climatology requires burn_values "
+                "(value-keyed rasterizer) from the pipeline."
+            )
+        from climatology.processing.event_detection import (
+            admissible_calendar_days,
+            build_daily_median_ct_cube,
+            day_of_season,
+            extract_event_date,
+        )
+        days = admissible_calendar_days(df)
+        cube = build_daily_median_ct_cube(
+            df, admissible_days=days,
+            transform=transform, height=height, width=width,
+            burn_values=burn_values, land_mask=land_mask,
+        )
+        bool_cube = cube >= self.ct_threshold
+        day_ordinals = [day_of_season(d) for d in days]
+        return extract_event_date(
+            bool_cube, day_ordinals=day_ordinals, mode="last_above",
+        )
+
+    def format_ticks(self, tick_values):
+        return [
+            (SEASON_ORIGIN + timedelta(days=int(round(d)))).strftime("%b %d")
+            for d in tick_values
+        ]
+
+
 class SeasonDurationMetric(Metric):
     """Median count of observation-days with CT fraction >= ct_threshold, per cell across seasons.
 

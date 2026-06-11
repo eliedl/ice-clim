@@ -7,9 +7,12 @@ the final plotting. Metric-specific logic lives in climatology_metrics.py.
 
 from __future__ import annotations
 
+import json
 import logging
 import os
+import subprocess
 import sys
+from datetime import datetime
 from pathlib import Path
 
 import geopandas as gpd
@@ -29,12 +32,12 @@ log = logging.getLogger(__name__)
 
 BBOX_ROOT  = Path("/home/eliedl/data/reference/climatology_bbox")
 OUTPUT_DIR = Path(__file__).parents[1] / "output"
-LAND_MASK_PATH = Path("/home/eliedl/data/reference/cis_landmasks/global_coastline.shp")
+# Computation land mask is per-source (ChartTable.land_mask_path, DEC-034).
 # Display-only overlay: OSM land polygons (island-complete), clipped to the
 # SGRDA domain. NOT used for computation — see osm_land_polygons/README.md.
 LAND_DISPLAY_PATH = Path("/home/eliedl/data/reference/osm_land_polygons/osm_land_gulf.shp")
 
-GRID_RES   = 1000
+GRID_RES   = 35
 GRID_CRS   = 26919          # NAD83 / UTM Zone 19N
 
 # Dark "Mapbox-style" theme. Ocean = axes background (shows through NaN /
@@ -61,7 +64,8 @@ def region_paths(slug: str, metric_slug: str, *, period_slug: str, source_slug: 
     bbox = BBOX_ROOT / slug / f"{slug}_square.geojson"
     if not bbox.exists():
         sys.exit(f"ERROR: squared bbox not found for region '{slug}': {bbox}")
-    png = OUTPUT_DIR / f"{metric_slug}_{slug}_{period_slug}_{source_slug}_{GRID_RES}m.png"
+    png = (OUTPUT_DIR / slug / metric_slug / period_slug / source_slug
+           / f"{metric_slug}_{slug}_{period_slug}_{source_slug}_{GRID_RES}m.png")
     display = REGION_DISPLAY.get(slug, slug.replace("-", " ").title())
     return bbox, png, display
 
@@ -111,10 +115,34 @@ def burn_values(geom_value_pairs, transform, height: int, width: int) -> np.ndar
                          transform=transform, fill=np.nan, dtype=np.float32)
 
 
+def fetch_domain_wkt(bbox_path: Path) -> str:
+    """4326 WKT of the spatial filter used to fetch chart polygons.
+
+    Must be a superset of the rasterized grid: the grid is built from the
+    UTM *envelope* of the region square (build_grid), which extends beyond
+    the square itself where the square's reprojected edges bow (~700 m at
+    the sept-iles south edge). Filtering with the square under-fetches the
+    grid-edge slivers and silently drops chart polygons from the median
+    sample (probe 010 attribution: the 2000-01-22 polygon, a +7 d artifact
+    over its footprint). The envelope box is densified so its reprojected
+    edges follow the true curve, and buffered one cell outward so residual
+    approximation error errs on over-fetch — harmless, since rasterization
+    only assigns values at in-grid cell centres.
+    """
+    bbox_utm = gpd.read_file(bbox_path).to_crs(epsg=GRID_CRS)
+    xmin, ymin, xmax, ymax = bbox_utm.total_bounds
+    grid_box = box(xmin, ymin, xmax, ymax)
+    return (gpd.GeoSeries([grid_box], crs=GRID_CRS)
+            .segmentize(10 * GRID_RES)
+            .buffer(GRID_RES)
+            .to_crs(epsg=4326)
+            .union_all().wkt)
+
+
 def load_polygons(metric: Metric, bbox_path: Path, *, table: str,
                   season_min: str, season_max: str) -> pd.DataFrame:
     """Pull rows from the DB per the metric's SQL; attach shapely geometries."""
-    bbox_wkt_str = gpd.read_file(bbox_path).to_crs(epsg=4326).union_all().wkt
+    bbox_wkt_str = fetch_domain_wkt(bbox_path)
     sql, params = metric.sql(table=table, grid_crs=GRID_CRS,
                              season_min=season_min, season_max=season_max)
     params = {**params, "bbox_wkt": bbox_wkt_str}
@@ -125,17 +153,19 @@ def load_polygons(metric: Metric, bbox_path: Path, *, table: str,
     return df.drop(columns="geom_wkt")
 
 
-def build_land_mask(transform, height: int, width: int) -> np.ndarray:
+def build_land_mask(mask_path: Path, transform, height: int, width: int) -> np.ndarray:
     """Binary land mask within the grid; True where land covers the cell.
 
-    Uses the CIS standard land mask file (`global_coastline.shp`, LCC100
-    projection, ~1200 land polygons over the Northern hemisphere). The
-    file is the same coastline CIS uses to produce their own
-    climatologies — validated as operationally identical to SGRDA
-    `POLY_TYPE='L'` for our climatology period (probe 006: ~0.0001%
-    symmetric difference for 2008–2023).
+    ``mask_path`` is the chart source's land mask (``ChartTable.land_mask_path``),
+    chosen per source for analysis-domain consistency across base maps (DEC-034):
+      - SGRDA: `global_coastline.shp` — the CIS standard coastline, validated as
+        operationally identical to SGRDA `POLY_TYPE='L'` for 2008–2023
+        (probe 006: ~0.0001% symmetric difference).
+      - SGRDR: `climatology_landmask.geojson` — the CIS "climate normals
+        coastline" (union of all coastline extents, EC 1991–2020 normals
+        landmask), absorbing the era-1 old-base-map coastal strip (probe 009).
 
-    The whole shapefile is loaded and reprojected to GRID_CRS; rasterio's
+    The whole file is loaded and reprojected to GRID_CRS; rasterio's
     `transform`-driven spatial filtering bbox-rejects out-of-grid
     polygons at the rasterize step (the bbox lives in `transform`). Pre-
     filtering the load via bbox would speed up the load slightly — see
@@ -150,15 +180,53 @@ def build_land_mask(transform, height: int, width: int) -> np.ndarray:
     Returns an all-False mask if no land polygon intersects the grid
     (fully-pelagic region).
     """
-    # TODO (perf): pre-filter the shapefile read with a bbox in the file's
-    # native CRS (LCC100) to avoid loading ~1200 global polygons when only
-    # a few intersect any single region.
-    land_gdf = gpd.read_file(LAND_MASK_PATH).to_crs(epsg=GRID_CRS)
+    # TODO (perf): pre-filter the file read with a bbox in its native CRS
+    # to avoid loading whole-domain polygons when only a few intersect any
+    # single region.
+    land_gdf = gpd.read_file(mask_path).to_crs(epsg=GRID_CRS)
     mask = burn(land_gdf.geometry.tolist(), transform, height, width).astype(bool)
     log.info("Land mask: %s / %s cells (%.1f%%)",
              f"{int(mask.sum()):,}", f"{height * width:,}",
              100.0 * mask.sum() / (height * width))
     return mask
+
+
+def _git_state() -> dict:
+    """Short SHA + dirty flag of the repo producing the product (best-effort)."""
+    root = Path(__file__).parents[2]
+    try:
+        sha = subprocess.run(["git", "rev-parse", "--short", "HEAD"], cwd=root,
+                             capture_output=True, text=True, check=True).stdout.strip()
+        dirty = bool(subprocess.run(["git", "status", "--porcelain"], cwd=root,
+                                    capture_output=True, text=True, check=True).stdout.strip())
+        return {"git_sha": sha, "git_dirty": dirty}
+    except (OSError, subprocess.CalledProcessError):
+        return {"git_sha": None, "git_dirty": None}
+
+
+def archive_product(values: np.ndarray, png_path: Path, manifest: dict) -> Path:
+    """Persist the product raster + run manifest under ``archive/`` next to the PNG.
+
+    The archive is a materialized cache of (code version × parameters) →
+    product: PNGs are not data, and without the raster every method
+    comparison costs a checkout + recompute instead of a ``np.load``
+    (probe 010). One ``.npz`` + sidecar ``.json`` per run, keyed by
+    timestamp + git SHA so products of successive code states coexist.
+
+    Comparison/visualization tooling is deliberately not built yet —
+    probe 010 is the working prototype; generalize when a second use
+    case fixes the pattern.
+    """
+    stamp = datetime.now().strftime("%Y%m%d-%H%M%S")
+    git = _git_state()
+    arch_dir = png_path.parent / "archive"
+    arch_dir.mkdir(parents=True, exist_ok=True)
+    npz = arch_dir / f"{png_path.stem}_{stamp}_{git['git_sha'] or 'nogit'}.npz"
+    np.savez_compressed(npz, values=values)
+    manifest = {**manifest, **git, "created": stamp, "raster": npz.name}
+    npz.with_suffix(".json").write_text(json.dumps(manifest, indent=2, default=str))
+    log.info("Archived product raster: %s", npz)
+    return npz
 
 
 def reduce_seasons_stack(
@@ -213,7 +281,7 @@ def plot_metric(
     source_label: str,
 ) -> None:
     xmin, ymin, xmax, ymax = bounds
-    vmin, vmax = percentile_range(values, low=2, high=98)
+    vmin, vmax = percentile_range(values, low=1, high=99) # visual removal of extremas (high value pixels near coast)
     cmap, norm = build_cmap("cool_to_warm_7", vmin=vmin, vmax=vmax)
 
     tick_values = list(np.linspace(vmin, vmax, 6))
@@ -263,7 +331,7 @@ def plot_metric(
         fontsize=6, color=DARK_MUTED,
     )
 
-    png_path.parent.mkdir(exist_ok=True)
+    png_path.parent.mkdir(parents=True, exist_ok=True)
     fig.savefig(png_path, dpi=150, bbox_inches="tight",
                 facecolor=fig.get_facecolor())
     log.info("Map saved to %s", png_path)
