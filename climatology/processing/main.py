@@ -50,7 +50,7 @@ from climatology.processing.pipeline import (
     region_paths,
     REGION_DISPLAY,
 )
-from climatology.processing.sources import CHART_TABLES, ChartTable
+from climatology.processing.sources import CHART_TABLES, LAND_MASK_PATH, ChartTable
 from climatology.services.hd_calendar import off_hd_month_days
 
 load_dotenv(Path(__file__).parents[2] / ".env")
@@ -112,7 +112,7 @@ def run(metric_slug: str, region: str, source_slug: str, period: tuple[int, int]
     transform, h, w, bounds = build_grid(bbox)
     log.info("Raster grid: %d × %d cells (%d total)", w, h, w * h)
 
-    land_mask = build_land_mask(source.land_mask_path, transform, h, w)
+    land_mask = build_land_mask(LAND_MASK_PATH, transform, h, w)
 
     df = load_polygons(metric, bbox, table=source.table,
                        season_min=season_min, season_max=season_max)
@@ -136,7 +136,7 @@ def run(metric_slug: str, region: str, source_slug: str, period: tuple[int, int]
         "metric": metric.slug, "region": region, "source": source.slug,
         "period": period_slug, "season_min": season_min, "season_max": season_max,
         "grid_res_m": GRID_RES, "grid_crs": GRID_CRS,
-        "land_mask": str(source.land_mask_path), "n_rows": len(df),
+        "land_mask": str(LAND_MASK_PATH), "n_rows": len(df),
     })
 
     plot_metric(values, bounds, metric=metric, png_path=png, display_name=display,

@@ -31,7 +31,7 @@ def _all_ct_sql(*, table: str, grid_crs: int, season_min: str, season_max: str) 
     observed CT value (including 0 from water polygons) to compute an
     unbiased median across years. CT is returned as the raw SIGRID3 code;
     parsing to a fraction happens in Python via CONCENTRATION_FRACTION
-    (single source of truth).
+    (single source of truth at services/units_conversion_maps.py).
 
     POLY_TYPE filter:
       - 'I' (ice)   -> CT > 0

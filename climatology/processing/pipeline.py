@@ -32,7 +32,7 @@ log = logging.getLogger(__name__)
 
 BBOX_ROOT  = Path("/home/eliedl/data/reference/climatology_bbox")
 OUTPUT_DIR = Path(__file__).parents[1] / "output"
-# Computation land mask is per-source (ChartTable.land_mask_path, DEC-034).
+# Computation land mask is shared by all sources (sources.LAND_MASK_PATH, DEC-034).
 # Display-only overlay: OSM land polygons (island-complete), clipped to the
 # SGRDA domain. NOT used for computation — see osm_land_polygons/README.md.
 LAND_DISPLAY_PATH = Path("/home/eliedl/data/reference/osm_land_polygons/osm_land_gulf.shp")
@@ -156,14 +156,9 @@ def load_polygons(metric: Metric, bbox_path: Path, *, table: str,
 def build_land_mask(mask_path: Path, transform, height: int, width: int) -> np.ndarray:
     """Binary land mask within the grid; True where land covers the cell.
 
-    ``mask_path`` is the chart source's land mask (``ChartTable.land_mask_path``),
-    chosen per source for analysis-domain consistency across base maps (DEC-034):
-      - SGRDA: `global_coastline.shp` — the CIS standard coastline, validated as
-        operationally identical to SGRDA `POLY_TYPE='L'` for 2008–2023
-        (probe 006: ~0.0001% symmetric difference).
-      - SGRDR: `climatology_landmask.geojson` — the CIS "climate normals
-        coastline" (union of all coastline extents, EC 1991–2020 normals
-        landmask), absorbing the era-1 old-base-map coastal strip (probe 009).
+    ``mask_path`` is the shared computation land mask (``sources.LAND_MASK_PATH``,
+    DEC-034): `climatology_landmask.geojson` — the CIS "climate normals coastline"
+    (EC 1991–2020 normals landmask that takes into consideration the evolution of the landmask across eras of chart production).
 
     The whole file is loaded and reprojected to GRID_CRS; rasterio's
     `transform`-driven spatial filtering bbox-rejects out-of-grid

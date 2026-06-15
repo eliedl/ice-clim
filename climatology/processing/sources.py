@@ -19,6 +19,13 @@ from typing import Literal
 
 LANDMASK_DIR = Path("/home/eliedl/data/reference/cis_landmasks")
 
+# Single computation land mask shared by all chart sources (DEC-027 / DEC-034):
+# the CIS "climate normals coastline" — the union of all coastline extents,
+# extracted from the EC 1991-2020 normals landmask. It absorbs the SGRDR era-1
+# old-base-map coastal strip (probe 009) and is operationally identical to
+# SGRDA `POLY_TYPE='L'` for 2008-2023 (probe 006).
+LAND_MASK_PATH = LANDMASK_DIR / "climatology_landmask.geojson"
+
 
 @dataclass(frozen=True)
 class ChartTable:
@@ -27,27 +34,17 @@ class ChartTable:
     cadence: Literal["daily", "hd_weekly"]
     display_label: str        # plot footer source attribution
     obs_unit: str             # unit of the season-duration count
-    land_mask_path: Path      # computation land mask (DEC-027 / DEC-034)
 
 
 CHART_TABLES: dict[str, ChartTable] = {
-    # SGRDA (2006-2026) sits on the modern base map for the whole current
-    # climatology period; global_coastline matches its L polygons to
-    # floating-point precision for 2008-2023 (probe 006, DEC-027).
     "sgrda": ChartTable(
         slug="sgrda", table="sgrda", cadence="daily",
         display_label="CIS SIGRID3 daily charts (SGRDA)",
         obs_unit="observation-days",
-        land_mask_path=LANDMASK_DIR / "global_coastline.shp",
     ),
-    # SGRDR spans multiple base-map lineages (era-1 coast ~420 m off the
-    # modern coastline at Sept-Îles, probe 009); mask with the CIS
-    # "climate normals coastline" — the union of all coastline extents,
-    # extracted from the EC 1991-2020 normals landmask (DEC-034).
     "sgrdr": ChartTable(
         slug="sgrdr", table="sgrdr", cadence="hd_weekly",
         display_label="CIS SIGRID3 weekly historical charts (SGRDR)",
         obs_unit="observation-weeks",
-        land_mask_path=LANDMASK_DIR / "climatology_landmask.geojson",
     ),
 }
