@@ -38,18 +38,17 @@ from climatology.processing.metrics import (
 )
 from climatology.processing.pipeline import (
     archive_product,
+    build_clip_mask,
     build_grid,
     build_land_mask,
     burn,
     burn_values,
-    GRID_CRS,
-    GRID_RES,
     load_polygons,
     log_distribution,
+    output_png,
     plot_metric,
-    region_paths,
-    REGION_DISPLAY,
 )
+from climatology.processing.regions import REGION_SLUGS, resolve_region
 from climatology.processing.sources import CHART_TABLES, LAND_MASK_PATH, ChartTable
 from climatology.services.hd_calendar import off_hd_month_days
 
@@ -104,44 +103,72 @@ def run(metric_slug: str, region: str, source_slug: str, period: tuple[int, int]
     if metric_slug == SeasonDurationMetric.slug:
         metric.display_label = f"Median ice presence ({source.obs_unit}, CT >= 4/10)"
 
-    bbox, png, display = region_paths(region, metric.slug,
-                                      period_slug=period_slug, source_slug=source.slug)
-    log.info("Region: %s (slug=%s) | Metric: %s | Source: %s | Winters: %s",
-             display, region, metric.slug, source.slug, period_slug)
+    spec = resolve_region(region)
+    log.info("Region: %s (slug=%s) | Metric: %s | Source: %s | Winters: %s | CRS: EPSG:%d | %d tier(s)",
+             spec.display, region, metric.slug, source.slug, period_slug,
+             spec.grid_crs, len(spec.tiers))
 
-    transform, h, w, bounds = build_grid(bbox)
-    log.info("Raster grid: %d × %d cells (%d total)", w, h, w * h)
-
-    land_mask = build_land_mask(LAND_MASK_PATH, transform, h, w)
-
-    df = load_polygons(metric, bbox, table=source.table,
-                       season_min=season_min, season_max=season_max)
+    # Fetch DB rows once over the union envelope of all tiers (coarsest res sets
+    # the fetch buffer scale); the same df rasterizes onto every tier's grid.
+    fetch_bounds = _union_bounds(spec.tiers)
+    fetch_res = max(t.res_m for t in spec.tiers)
+    df = load_polygons(metric, fetch_bounds, grid_crs=spec.grid_crs, res_m=fetch_res,
+                       table=source.table, season_min=season_min, season_max=season_max)
     log.info("Fetched %s rows.", f"{len(df):,}")
     if df.empty:
-        log.error("No rows returned — check metric SQL, bbox, season range.")
+        log.error("No rows returned — check metric SQL, region bounds, season range.")
         return
 
     if source.cadence == "hd_weekly":
         assert_hd_aligned(df, source)
 
-    values = metric.compute_climatology(
-        df, transform=transform, height=h, width=w,
-        burn=burn, burn_values=burn_values, land_mask=land_mask,
-    )
-    log.info("Cells with data: %s / %s",
-             f"{int((~np.isnan(values)).sum()):,}", f"{h * w:,}")
-    log_distribution(values)
+    multi = len(spec.tiers) > 1
+    layers: list[tuple[np.ndarray, tuple[float, float, float, float]]] = []
+    for tier in spec.tiers:
+        transform, h, w, bounds = build_grid(tier.bounds_geom, tier.res_m)
+        log.info("Tier '%s': %d × %d cells (%d total) @ %g m",
+                 tier.name, w, h, w * h, tier.res_m)
 
-    archive_product(values, png, manifest={
-        "metric": metric.slug, "region": region, "source": source.slug,
-        "period": period_slug, "season_min": season_min, "season_max": season_max,
-        "grid_res_m": GRID_RES, "grid_crs": GRID_CRS,
-        "land_mask": str(LAND_MASK_PATH), "n_rows": len(df),
-    })
+        land_mask = build_land_mask(LAND_MASK_PATH, transform, h, w, spec.grid_crs)
+        clip_mask = build_clip_mask(tier.clip_geom, transform, h, w)
 
-    plot_metric(values, bounds, metric=metric, png_path=png, display_name=display,
+        values = metric.compute_climatology(
+            df, transform=transform, height=h, width=w,
+            burn=burn, burn_values=burn_values, land_mask=land_mask,
+        )
+        values[~clip_mask] = np.nan
+        log.info("  Tier '%s' cells with data: %s / %s", tier.name,
+                 f"{int((~np.isnan(values)).sum()):,}", f"{h * w:,}")
+        log_distribution(values)
+
+        res_tag = f"{int(round(tier.res_m))}m"
+        tier_label = f"{tier.name}_{res_tag}" if multi else res_tag
+        tier_png = output_png(region, metric.slug, period_slug=period_slug,
+                              source_slug=source.slug, label=tier_label)
+        archive_product(values, tier_png, manifest={
+            "metric": metric.slug, "region": region, "source": source.slug,
+            "period": period_slug, "season_min": season_min, "season_max": season_max,
+            "tier": tier.name, "grid_res_m": tier.res_m, "grid_crs": spec.grid_crs,
+            "land_mask": str(LAND_MASK_PATH), "n_rows": len(df),
+        })
+        layers.append((values, bounds))
+
+    # Composite PNG: coarse first, fine last (fine wins where it has data).
+    res_label = " / ".join(f"{int(round(t.res_m))} m" for t in spec.tiers)
+    png_label = "adaptive" if multi else f"{int(round(spec.tiers[0].res_m))}m"
+    composite_png = output_png(region, metric.slug, period_slug=period_slug,
+                               source_slug=source.slug, label=png_label)
+    plot_metric(layers, metric=metric, png_path=composite_png, display_name=spec.display,
                 period_label=f"{period[0]}–{period[1]}",
-                source_label=source.display_label)
+                source_label=source.display_label,
+                grid_crs=spec.grid_crs, res_label=res_label)
+
+
+def _union_bounds(tiers) -> tuple[float, float, float, float]:
+    """(xmin, ymin, xmax, ymax) enclosing every tier's bounds geometry."""
+    bounds = [t.bounds_geom.bounds for t in tiers]
+    return (min(b[0] for b in bounds), min(b[1] for b in bounds),
+            max(b[2] for b in bounds), max(b[3] for b in bounds))
 
 
 def _parse_period(s: str) -> tuple[int, int]:
@@ -155,8 +182,8 @@ def _parse_args() -> argparse.Namespace:
     p = argparse.ArgumentParser(description="Region-scale climatology by metric.")
     p.add_argument("metric", choices=sorted(METRICS),
                    help=f"Metric slug. Available: {', '.join(sorted(METRICS))}.")
-    p.add_argument("region", choices=sorted(REGION_DISPLAY),
-                   help=f"Region slug. Available: {', '.join(sorted(REGION_DISPLAY))}.")
+    p.add_argument("region", choices=REGION_SLUGS,
+                   help=f"Region slug. Available: {', '.join(REGION_SLUGS)}.")
     p.add_argument("--source", choices=sorted(CHART_TABLES), default="sgrda",
                    help="Chart table (default: sgrda).")
     p.add_argument("--period", type=_parse_period, default=(2011, 2020),

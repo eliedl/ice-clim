@@ -17,7 +17,7 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Literal
 
-LANDMASK_DIR = Path("/home/eliedl/data/reference/cis_landmasks")
+LANDMASK_DIR = Path("/home/eliedl/data/masks/cis_landmasks")
 
 # Single computation land mask shared by all chart sources (DEC-027 / DEC-034):
 # the CIS "climate normals coastline" — the union of all coastline extents,

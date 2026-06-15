@@ -30,12 +30,12 @@ from climatology.viz.colormaps import build_cmap, percentile_range
 
 log = logging.getLogger(__name__)
 
-BBOX_ROOT  = Path("/home/eliedl/data/reference/climatology_bbox")
+BBOX_ROOT  = Path("/home/eliedl/data/masks/climatology_bbox")
 OUTPUT_DIR = Path(__file__).parents[1] / "output"
 # Computation land mask is shared by all sources (sources.LAND_MASK_PATH, DEC-034).
 # Display-only overlay: OSM land polygons (island-complete), clipped to the
 # SGRDA domain. NOT used for computation — see osm_land_polygons/README.md.
-LAND_DISPLAY_PATH = Path("/home/eliedl/data/reference/osm_land_polygons/osm_land_gulf.shp")
+LAND_DISPLAY_PATH = Path("/home/eliedl/data/masks/osm_land_polygons/osm_land_gulf.shp")
 
 GRID_RES   = 35
 GRID_CRS   = 26919          # NAD83 / UTM Zone 19N
@@ -58,16 +58,16 @@ REGION_DISPLAY = {
 }
 
 
-def region_paths(slug: str, metric_slug: str, *, period_slug: str, source_slug: str,
-                 ) -> tuple[Path, Path, str]:
-    """Resolve (bbox_geojson, png_out, display_name) for a (region, metric, period, source)."""
-    bbox = BBOX_ROOT / slug / f"{slug}_square.geojson"
-    if not bbox.exists():
-        sys.exit(f"ERROR: squared bbox not found for region '{slug}': {bbox}")
-    png = (OUTPUT_DIR / slug / metric_slug / period_slug / source_slug
-           / f"{metric_slug}_{slug}_{period_slug}_{source_slug}_{GRID_RES}m.png")
-    display = REGION_DISPLAY.get(slug, slug.replace("-", " ").title())
-    return bbox, png, display
+def output_png(slug: str, metric_slug: str, *, period_slug: str, source_slug: str,
+               label: str) -> Path:
+    """Output PNG path for a (region, metric, period, source) product.
+
+    ``label`` distinguishes products under one (region, metric, period,
+    source): a resolution tag (``"35m"``) for a single-tier legacy region, or
+    ``"adaptive"`` / a per-tier tag (``"fine_25m"``) for nested products.
+    """
+    return (OUTPUT_DIR / slug / metric_slug / period_slug / source_slug
+            / f"{metric_slug}_{slug}_{period_slug}_{source_slug}_{label}.png")
 
 
 def get_engine():
@@ -81,12 +81,17 @@ def get_engine():
     return create_engine(f"postgresql+psycopg2://{user}:{pwd}@{host}:{port}/{db}")
 
 
-def build_grid(bbox_path: Path):
-    """Return (transform, height, width, (xmin, ymin, xmax, ymax)) in GRID_CRS."""
-    bbox_utm = gpd.read_file(bbox_path).to_crs(epsg=GRID_CRS)
-    xmin, ymin, xmax, ymax = bbox_utm.total_bounds
-    width  = int(np.ceil((xmax - xmin) / GRID_RES))
-    height = int(np.ceil((ymax - ymin) / GRID_RES))
+def build_grid(bounds_geom, res_m: float):
+    """Return (transform, height, width, (xmin, ymin, xmax, ymax)).
+
+    ``bounds_geom`` is a shapely geometry already expressed in the target grid
+    CRS; its bounding box defines the raster envelope at resolution ``res_m``.
+    Resolution and CRS are caller-supplied (per-tier, per-region) rather than
+    module constants — see regions.Tier / RegionSpec.
+    """
+    xmin, ymin, xmax, ymax = bounds_geom.bounds
+    width  = int(np.ceil((xmax - xmin) / res_m))
+    height = int(np.ceil((ymax - ymin) / res_m))
     transform = from_bounds(xmin, ymin, xmax, ymax, width, height)
     return transform, height, width, (xmin, ymin, xmax, ymax)
 
@@ -115,35 +120,44 @@ def burn_values(geom_value_pairs, transform, height: int, width: int) -> np.ndar
                          transform=transform, fill=np.nan, dtype=np.float32)
 
 
-def fetch_domain_wkt(bbox_path: Path) -> str:
+def fetch_domain_wkt(bounds: tuple[float, float, float, float], *,
+                     grid_crs: int, res_m: float) -> str:
     """4326 WKT of the spatial filter used to fetch chart polygons.
 
     Must be a superset of the rasterized grid: the grid is built from the
-    UTM *envelope* of the region square (build_grid), which extends beyond
-    the square itself where the square's reprojected edges bow (~700 m at
-    the sept-iles south edge). Filtering with the square under-fetches the
-    grid-edge slivers and silently drops chart polygons from the median
-    sample (probe 010 attribution: the 2000-01-22 polygon, a +7 d artifact
-    over its footprint). The envelope box is densified so its reprojected
-    edges follow the true curve, and buffered one cell outward so residual
-    approximation error errs on over-fetch — harmless, since rasterization
-    only assigns values at in-grid cell centres.
+    *envelope* of the region geometry (build_grid), which extends beyond the
+    geometry itself where its reprojected edges bow (~700 m at the sept-iles
+    south edge). Filtering with the tight geometry under-fetches the grid-edge
+    slivers and silently drops chart polygons from the median sample (probe 010
+    attribution: the 2000-01-22 polygon, a +7 d artifact over its footprint).
+    The envelope box is densified so its reprojected edges follow the true
+    curve, and buffered one cell outward so residual approximation error errs
+    on over-fetch — harmless, since rasterization only assigns values at
+    in-grid cell centres.
+
+    ``bounds`` is (xmin, ymin, xmax, ymax) in ``grid_crs``; ``res_m`` sets the
+    densify/buffer length scale (one cell).
     """
-    bbox_utm = gpd.read_file(bbox_path).to_crs(epsg=GRID_CRS)
-    xmin, ymin, xmax, ymax = bbox_utm.total_bounds
+    xmin, ymin, xmax, ymax = bounds
     grid_box = box(xmin, ymin, xmax, ymax)
-    return (gpd.GeoSeries([grid_box], crs=GRID_CRS)
-            .segmentize(10 * GRID_RES)
-            .buffer(GRID_RES)
+    return (gpd.GeoSeries([grid_box], crs=grid_crs)
+            .segmentize(10 * res_m)
+            .buffer(res_m)
             .to_crs(epsg=4326)
             .union_all().wkt)
 
 
-def load_polygons(metric: Metric, bbox_path: Path, *, table: str,
+def load_polygons(metric: Metric, bounds: tuple[float, float, float, float], *,
+                  grid_crs: int, res_m: float, table: str,
                   season_min: str, season_max: str) -> pd.DataFrame:
-    """Pull rows from the DB per the metric's SQL; attach shapely geometries."""
-    bbox_wkt_str = fetch_domain_wkt(bbox_path)
-    sql, params = metric.sql(table=table, grid_crs=GRID_CRS,
+    """Pull rows from the DB per the metric's SQL; attach shapely geometries.
+
+    ``bounds`` is the (xmin, ymin, xmax, ymax) fetch envelope in ``grid_crs``;
+    geometries are returned (and parsed) in ``grid_crs`` so they rasterize
+    directly onto every tier's transform.
+    """
+    bbox_wkt_str = fetch_domain_wkt(bounds, grid_crs=grid_crs, res_m=res_m)
+    sql, params = metric.sql(table=table, grid_crs=grid_crs,
                              season_min=season_min, season_max=season_max)
     params = {**params, "bbox_wkt": bbox_wkt_str}
     engine = get_engine()
@@ -153,7 +167,21 @@ def load_polygons(metric: Metric, bbox_path: Path, *, table: str,
     return df.drop(columns="geom_wkt")
 
 
-def build_land_mask(mask_path: Path, transform, height: int, width: int) -> np.ndarray:
+def build_clip_mask(clip_geom, transform, height: int, width: int) -> np.ndarray:
+    """Binary in-region mask; True where ``clip_geom`` covers the cell centre.
+
+    Used to NaN cells outside an adaptive region's defining polygon (the grid
+    envelope is the polygon's bbox, so corner cells fall outside it). Returns
+    an all-True mask when ``clip_geom`` is None (legacy square: the whole
+    envelope is the analysis domain).
+    """
+    if clip_geom is None:
+        return np.ones((height, width), dtype=bool)
+    return burn([clip_geom], transform, height, width).astype(bool)
+
+
+def build_land_mask(mask_path: Path, transform, height: int, width: int,
+                    grid_crs: int = GRID_CRS) -> np.ndarray:
     """Binary land mask within the grid; True where land covers the cell.
 
     ``mask_path`` is the shared computation land mask (``sources.LAND_MASK_PATH``,
@@ -178,7 +206,7 @@ def build_land_mask(mask_path: Path, transform, height: int, width: int) -> np.n
     # TODO (perf): pre-filter the file read with a bbox in its native CRS
     # to avoid loading whole-domain polygons when only a few intersect any
     # single region.
-    land_gdf = gpd.read_file(mask_path).to_crs(epsg=GRID_CRS)
+    land_gdf = gpd.read_file(mask_path).to_crs(epsg=grid_crs)
     mask = burn(land_gdf.geometry.tolist(), transform, height, width).astype(bool)
     log.info("Land mask: %s / %s cells (%.1f%%)",
              f"{int(mask.sum()):,}", f"{height * width:,}",
@@ -266,37 +294,55 @@ def log_distribution(values: np.ndarray) -> None:
 
 
 def plot_metric(
-    values: np.ndarray,
-    bounds: tuple[float, float, float, float],
+    layers: list[tuple[np.ndarray, tuple[float, float, float, float]]],
     *,
     metric: Metric,
     png_path: Path,
     display_name: str,
     period_label: str,
     source_label: str,
+    grid_crs: int = GRID_CRS,
+    res_label: str | None = None,
 ) -> None:
-    xmin, ymin, xmax, ymax = bounds
-    vmin, vmax = percentile_range(values, low=1, high=100) # visual removal of extremas (high value pixels near coast)
+    """Render one or more raster layers, drawn back-to-front, into one map.
+
+    ``layers`` is a list of ``(values, bounds)`` ordered coarse -> fine: each
+    is drawn with the same cmap/norm, so a fine tier painted last composites
+    over the coarse tier where it has data (NaN cells stay transparent and let
+    the coarse layer or ocean show through). A single-element list reproduces
+    the legacy single-raster map. All layers must share ``grid_crs``.
+    """
+    # Shared scaling across all layers (visual removal of near-coast extremas).
+    all_values = np.concatenate([v.ravel() for v, _ in layers])
+    vmin, vmax = percentile_range(all_values, low=1, high=100)
     cmap, norm = build_cmap("cool_to_warm_7", vmin=vmin, vmax=vmax)
 
     tick_values = list(np.linspace(vmin, vmax, 6))
     tick_labels = metric.format_ticks(tick_values)
 
+    # Union extent for axis limits + land overlay read.
+    xmin = min(b[0] for _, b in layers); ymin = min(b[1] for _, b in layers)
+    xmax = max(b[2] for _, b in layers); ymax = max(b[3] for _, b in layers)
+
     fig, ax = plt.subplots(figsize=(10, 9))
     fig.patch.set_facecolor(DARK_OCEAN)
     ax.set_facecolor(DARK_OCEAN)          # dark "ocean" behind transparent cells
 
-    # Ice raster (NaN cells transparent -> ocean shows through), kept in GRID_CRS.
-    im = ax.imshow(values, origin="upper", extent=[xmin, xmax, ymin, ymax],
-                   cmap=cmap, norm=norm, interpolation="none", zorder=1)
+    # Ice rasters (NaN cells transparent -> coarse tier / ocean shows through),
+    # coarse first, fine last so the fine tier wins where it has data.
+    im = None
+    for z, (values, (lxmin, lymin, lxmax, lymax)) in enumerate(layers, start=1):
+        im = ax.imshow(values, origin="upper",
+                       extent=[lxmin, lxmax, lymin, lymax],
+                       cmap=cmap, norm=norm, interpolation="none", zorder=z)
 
     # Land mask on top -> covers dry cells only; wet cells keep the ice colors.
     # bbox-filtered read loads just the in-view polygons (file is EPSG:4326).
-    bbox_geom = gpd.GeoSeries([box(xmin, ymin, xmax, ymax)], crs=GRID_CRS)
-    land = gpd.read_file(LAND_DISPLAY_PATH, bbox=bbox_geom).to_crs(epsg=GRID_CRS)
+    bbox_geom = gpd.GeoSeries([box(xmin, ymin, xmax, ymax)], crs=grid_crs)
+    land = gpd.read_file(LAND_DISPLAY_PATH, bbox=bbox_geom).to_crs(epsg=grid_crs)
     if not land.empty:
         land.plot(ax=ax, facecolor=DARK_LAND, edgecolor=DARK_COAST,
-                  linewidth=0.4, zorder=2)
+                  linewidth=0.4, zorder=len(layers) + 1)
     ax.set_xlim(xmin, xmax)
     ax.set_ylim(ymin, ymax)
 
@@ -312,17 +358,18 @@ def plot_metric(
         f"{metric.display_label}\n{display_name} region — winters {period_label}",
         fontsize=12, pad=10, color=DARK_FG,
     )
-    ax.set_xlabel("Easting (m, NAD83 UTM 19N)", color=DARK_FG)
-    ax.set_ylabel("Northing (m, NAD83 UTM 19N)", color=DARK_FG)
+    ax.set_xlabel(f"Easting (m, EPSG:{grid_crs})", color=DARK_FG)
+    ax.set_ylabel(f"Northing (m, EPSG:{grid_crs})", color=DARK_FG)
     ax.tick_params(axis="both", colors=DARK_FG)
     ax.ticklabel_format(style="plain", axis="both")
     for spine in ax.spines.values():
         spine.set_edgecolor(DARK_LINE)
 
+    grid_note = res_label or f"{GRID_RES} m"
     fig.text(
         0.01, 0.01,
-        f"Source: {source_label} | Grid: {GRID_RES} m "
-        f"EPSG:{GRID_CRS} | Land: © OpenStreetMap contributors | ",
+        f"Source: {source_label} | Grid: {grid_note} "
+        f"EPSG:{grid_crs} | Land: © OpenStreetMap contributors | ",
         fontsize=6, color=DARK_MUTED,
     )
 

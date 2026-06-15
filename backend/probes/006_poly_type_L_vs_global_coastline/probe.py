@@ -49,7 +49,7 @@ PROJECT_ROOT = Path(__file__).parents[3]
 load_dotenv(PROJECT_ROOT / ".env")
 
 OUTPUT_DIR = Path(__file__).parent / "output"
-COAST_PATH = Path("/home/eliedl/data/reference/cis_landmasks/global_coastline.shp")
+COAST_PATH = Path("/home/eliedl/data/masks/cis_landmasks/global_coastline.shp")
 TARGET_DOY = 46  # Feb 15
 
 

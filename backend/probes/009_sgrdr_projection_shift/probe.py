@@ -34,7 +34,7 @@ load_dotenv(PROJECT_ROOT / ".env")
 OUTPUT_DIR = Path(__file__).parent / "output"
 
 GRID_CRS = 26919  # NAD83 / UTM 19N — analysis CRS, matches the climatology grid
-COASTLINE = Path("/home/eliedl/data/reference/cis_landmasks/global_coastline.shp")
+COASTLINE = Path("/home/eliedl/data/masks/cis_landmasks/global_coastline.shp")
 
 # Sept-Îles artifact neighbourhood (UTM19N)
 BBOX_UTM = box(660000, 5544000, 690000, 5566000)

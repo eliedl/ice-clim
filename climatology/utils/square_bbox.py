@@ -28,7 +28,7 @@ from shapely.affinity import rotate, translate
 from shapely.geometry import Polygon, mapping, shape
 from shapely.ops import transform as shp_transform
 
-BBOX_ROOT = Path("/home/eliedl/data/reference/climatology_bbox")
+BBOX_ROOT = Path("/home/eliedl/data/masks/climatology_bbox")
 SRC_CRS = "EPSG:4326"
 WORK_CRS = "EPSG:26919"  # matches first_ice_climatology.py GRID_CRS
 
