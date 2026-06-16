@@ -46,9 +46,14 @@ Engineering decisions behind `backend/ingestion/`; full rationale in DECISIONS.m
     rename, 4th/5th-type + `N_`/`R_`/admin dropped) (DEC-032).
 
 ## Scientific domain knowledge
-CIS SIGRID-3 Egg Code in PostGIS table `sgrda`. Two
-on-disk schema eras normalized on ingestion: SGRDAGULF (old, no CRS→assume 4326) and
-SGRDAWIS28 (new, polar stereographic→reprojected to 4326).
+CIS SIGRID-3 Egg Code in PostGIS table `sgrda`. All SGRDA charts are normalized to EPSG:4326
+on ingestion, but the archive is **not** CRS-homogeneous — three on-disk CRS regimes (probe
+014, DEC-038):
+  - **GULF 2006–2011**: CRS-less, geographic lon/lat degrees → `set_crs(4326)` (relabel, no
+    coordinate move; the only branch that *assumes* 4326).
+  - **GULF 2012–2023**: projected `WGS_1984_Lambert_Conformal_Conic` (metres) → `to_crs(4326)`.
+  - **WIS26/27/28 2023+**: `Polar_Stereographic` (metres) → `to_crs(4326)`.
+The CRS branch in `backend/ingestion/pipeline.py:39-42` is type-agnostic and handles all three.
 Fields: region wis28; geometry MultiPolygon; T1 TIMESTAMPTZ (18:00 UTC daily snapshot);
 CT total concentration; CA/CB/CC partial concentrations; SA/SB/SC stage of development;
 FA/FB/FC form of ice; POLY_TYPE ('I' ice, 'W' water/CT=0, 'N' no-data, 'L' land).
