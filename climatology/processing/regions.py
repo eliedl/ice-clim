@@ -9,7 +9,7 @@ Two region kinds share one code path downstream:
   - **Legacy square regions** (gaspe, sept-iles, ...): one tier built from the
     pre-computed ``<slug>_square.geojson`` (square_bbox.py), uniform GRID_RES,
     no polygon clip. Reproduces the historical single-raster behaviour.
-  - **Adaptive nested regions** (minganie, manicouagan): two tiers — a coarse 1 km raster
+  - **Adaptive nested regions** (minganie, manicouagan, sept-rivieres): two tiers — a coarse 1 km raster
     over the whole region polygon and a fine 100 m raster over the 10 km
     coastline buffer intersected with the region (DEC-036; 25 m is infeasible
     as a single raster per probe 011). The CIS landmask still does the land
@@ -41,9 +41,11 @@ COASTLINE_BUFFER = Path(
 )
 
 # Adaptive MRC regions (Côte-Nord) grid in Québec Lambert: it is the native CRS
-# of both source layers and these regions sit near/east of the UTM-19N central
-# meridian (Minganie ~63–64°W is UTM-20N territory), so 26919 would distort
-# (DEC-036).
+# of both source layers and gives one seamless province-wide frame. Minganie
+# (~63–64°W) is UTM-20N territory, so a UTM grid there (26920) would differ from
+# the zone-19 western regions -> multi-zone seams. NOTE: this is a homogeneity
+# argument, not a distortion one — both CRSs are conformal and 26919's point
+# scale at Minganie is actually smaller than 32198's (probe 013; DEC-036/DEC-040).
 #
 # Tiers: 1 km coarse over the whole region; 100 m fine over the coastline
 # buffer. The requested 25 m fine tier is infeasible as a single raster — its
@@ -134,6 +136,15 @@ def _manicouagan_spec() -> RegionSpec:
     return _adaptive_mrc_spec("manicouagan", "Manicouagan", "Manicouagan")
 
 
+def _sept_rivieres_polygon(grid_crs: int) -> BaseGeometry:
+    """Sept-Rivières MRC polygon (fid 70) in ``grid_crs``."""
+    return _mrc_polygon("Sept-Rivières", grid_crs)
+
+
+def _sept_rivieres_spec() -> RegionSpec:
+    return _adaptive_mrc_spec("sept-rivieres", "Sept-Rivières", "Sept-Rivières")
+
+
 def _legacy_square_spec(slug: str) -> RegionSpec:
     """Single-tier region from the pre-computed square bbox (uniform GRID_RES)."""
     bbox = BBOX_ROOT / slug / f"{slug}_square.geojson"
@@ -152,6 +163,7 @@ def _legacy_square_spec(slug: str) -> RegionSpec:
 _ADAPTIVE: dict[str, "callable[[], RegionSpec]"] = {
     "minganie": _minganie_spec,
     "manicouagan": _manicouagan_spec,
+    "sept-rivieres": _sept_rivieres_spec,
 }
 
 # Regions selectable on the CLI: legacy squares + adaptive regions.

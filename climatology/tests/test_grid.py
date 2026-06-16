@@ -101,6 +101,24 @@ def test_manicouagan_tiers():
         "refinement must lie within the region polygon"
 
 
+def test_sept_rivieres_tiers():
+    if not _regions_inputs_present():
+        print("    (skip: MRC input layer absent)")
+        return
+    from climatology.processing.regions import REGION_SLUGS, resolve_region
+
+    assert "sept-rivieres" in REGION_SLUGS, "sept-rivieres must be CLI-selectable"
+    spec = resolve_region("sept-rivieres")
+    assert spec.grid_crs == 32198 and spec.display == "Sept-Rivières"
+    assert [t.name for t in spec.tiers] == ["coarse", "fine"]
+    coarse, fine = spec.tiers
+    assert (coarse.res_m, fine.res_m) == (1000.0, 100.0), "1 km / 100 m tiers"
+    assert fine.clip_geom is not None and not fine.clip_geom.is_empty, \
+        "refinement (buffer ∩ region) must be non-empty"
+    assert coarse.clip_geom.buffer(1).contains(fine.clip_geom), \
+        "refinement must lie within the region polygon"
+
+
 def test_legacy_region_single_tier():
     from climatology.processing.regions import resolve_region
     try:
