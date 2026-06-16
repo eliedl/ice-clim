@@ -9,7 +9,7 @@ Two region kinds share one code path downstream:
   - **Legacy square regions** (gaspe, sept-iles, ...): one tier built from the
     pre-computed ``<slug>_square.geojson`` (square_bbox.py), uniform GRID_RES,
     no polygon clip. Reproduces the historical single-raster behaviour.
-  - **Adaptive nested regions** (minganie): two tiers — a coarse 1 km raster
+  - **Adaptive nested regions** (minganie, manicouagan): two tiers — a coarse 1 km raster
     over the whole region polygon and a fine 100 m raster over the 10 km
     coastline buffer intersected with the region (DEC-036; 25 m is infeasible
     as a single raster per probe 011). The CIS landmask still does the land
@@ -40,18 +40,24 @@ COASTLINE_BUFFER = Path(
     "/home/eliedl/data/masks/coastline_buffer_ldgizc/Buffer10km.shp"
 )
 
-# Minganie uses Québec Lambert: it is the native CRS of both source layers and
-# the region sits near 63–64°W (UTM 20N territory), ~5° off the UTM-19N central
-# meridian the legacy regions use (DEC-036).
+# Adaptive MRC regions (Côte-Nord) grid in Québec Lambert: it is the native CRS
+# of both source layers and these regions sit near/east of the UTM-19N central
+# meridian (Minganie ~63–64°W is UTM-20N territory), so 26919 would distort
+# (DEC-036).
 #
 # Tiers: 1 km coarse over the whole region; 100 m fine over the coastline
 # buffer. The requested 25 m fine tier is infeasible as a single raster — its
 # (n_days, H, W) median cube is 43.6 GB over the refinement bounding box (probe
 # 011). 100 m (2.7 GB cube) ships the hybrid grid now; restoring 25 m is a
 # streaming-cube optimization deferred in DEC-036.
-MINGANIE_GRID_CRS = 32198
-MINGANIE_COARSE_RES = 1000.0
-MINGANIE_FINE_RES = 100.0
+ADAPTIVE_GRID_CRS = 32198
+ADAPTIVE_COARSE_RES = 1000.0
+ADAPTIVE_FINE_RES = 100.0
+
+# Backward-compat aliases (probe 011 imports MINGANIE_GRID_CRS).
+MINGANIE_GRID_CRS = ADAPTIVE_GRID_CRS
+MINGANIE_COARSE_RES = ADAPTIVE_COARSE_RES
+MINGANIE_FINE_RES = ADAPTIVE_FINE_RES
 
 
 @dataclass(frozen=True)
@@ -77,11 +83,11 @@ class RegionSpec:
     tiers: list[Tier]
 
 
-def _minganie_polygon(grid_crs: int) -> BaseGeometry:
-    """Minganie MRC polygon (fid 71) in ``grid_crs``."""
-    gdf = gpd.read_file(MRC_GPKG, layer="mrc", where="MRS_NM_MRC = 'Minganie'")
+def _mrc_polygon(mrc_name: str, grid_crs: int) -> BaseGeometry:
+    """MRC polygon for ``MRS_NM_MRC = mrc_name`` in ``grid_crs``."""
+    gdf = gpd.read_file(MRC_GPKG, layer="mrc", where=f"MRS_NM_MRC = '{mrc_name}'")
     if gdf.empty:
-        raise ValueError(f"No MRC feature with MRS_NM_MRC='Minganie' in {MRC_GPKG}")
+        raise ValueError(f"No MRC feature with MRS_NM_MRC='{mrc_name}' in {MRC_GPKG}")
     return gdf.to_crs(epsg=grid_crs).union_all()
 
 
@@ -90,18 +96,42 @@ def _coastline_buffer(grid_crs: int) -> BaseGeometry:
     return gpd.read_file(COASTLINE_BUFFER).to_crs(epsg=grid_crs).union_all()
 
 
-def _minganie_spec() -> RegionSpec:
-    region = _minganie_polygon(MINGANIE_GRID_CRS)
-    refinement = region.intersection(_coastline_buffer(MINGANIE_GRID_CRS))
+def _adaptive_mrc_spec(slug: str, display: str, mrc_name: str) -> RegionSpec:
+    """Two-tier adaptive spec for a coastal MRC region (DEC-036).
+
+    Coarse 1 km tier over the whole MRC polygon; fine 100 m tier over the
+    10 km coastline buffer ∩ region. Both clipped to their defining polygon
+    and land-masked downstream (DEC-034).
+    """
+    region = _mrc_polygon(mrc_name, ADAPTIVE_GRID_CRS)
+    refinement = region.intersection(_coastline_buffer(ADAPTIVE_GRID_CRS))
     return RegionSpec(
-        slug="minganie",
-        display="Minganie",
-        grid_crs=MINGANIE_GRID_CRS,
+        slug=slug,
+        display=display,
+        grid_crs=ADAPTIVE_GRID_CRS,
         tiers=[
-            Tier("coarse", MINGANIE_COARSE_RES, region, region),
-            Tier("fine", MINGANIE_FINE_RES, refinement, refinement),
+            Tier("coarse", ADAPTIVE_COARSE_RES, region, region),
+            Tier("fine", ADAPTIVE_FINE_RES, refinement, refinement),
         ],
     )
+
+
+def _minganie_polygon(grid_crs: int) -> BaseGeometry:
+    """Minganie MRC polygon (fid 71) in ``grid_crs``."""
+    return _mrc_polygon("Minganie", grid_crs)
+
+
+def _minganie_spec() -> RegionSpec:
+    return _adaptive_mrc_spec("minganie", "Minganie", "Minganie")
+
+
+def _manicouagan_polygon(grid_crs: int) -> BaseGeometry:
+    """Manicouagan MRC polygon (fid 32) in ``grid_crs``."""
+    return _mrc_polygon("Manicouagan", grid_crs)
+
+
+def _manicouagan_spec() -> RegionSpec:
+    return _adaptive_mrc_spec("manicouagan", "Manicouagan", "Manicouagan")
 
 
 def _legacy_square_spec(slug: str) -> RegionSpec:
@@ -121,6 +151,7 @@ def _legacy_square_spec(slug: str) -> RegionSpec:
 
 _ADAPTIVE: dict[str, "callable[[], RegionSpec]"] = {
     "minganie": _minganie_spec,
+    "manicouagan": _manicouagan_spec,
 }
 
 # Regions selectable on the CLI: legacy squares + adaptive regions.
