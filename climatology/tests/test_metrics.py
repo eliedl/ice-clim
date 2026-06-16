@@ -22,7 +22,10 @@ import pandas as pd
 from rasterio.transform import from_bounds
 from shapely.geometry import box
 
-from climatology.processing.metrics import SeasonDurationMetric
+from climatology.processing.metrics import (
+    SeasonDurationMetric,
+    StormExposureDurationMetric,
+)
 from climatology.processing.pipeline import burn, burn_values
 
 
@@ -70,6 +73,37 @@ def test_season_duration_land_mask_nan():
     )
     assert np.all(np.isnan(out[0, :])), "land row must be NaN"
     assert np.all(out[1:, :2] == 2) and np.all(out[1:, 2:] == 0), \
+        "water cells must be unaffected by the mask"
+
+
+def test_storm_exposure_inverse_threshold():
+    """Exposure = count of admissible HDs with median CT <= 3/10 (DEC-037).
+
+    Left half is compact ice (CT='92'=1.00) on both HDs -> never exposed (0).
+    Right half is water (CT='00'=0.0) observed only on the first HD and
+    unobserved (NaN, not counted) on the second -> exposed 1 step.
+    Demonstrates the inverse-threshold semantics vs season duration, that
+    open water counts as exposed, and that unobserved steps are not."""
+    df, transform = _duration_fixture()
+    out = StormExposureDurationMetric().compute_climatology(
+        df, transform=transform, height=4, width=4,
+        burn=burn, burn_values=burn_values, land_mask=None,
+    )
+    assert np.all(out[:, :2] == 0), "compact ice must never count as exposed"
+    assert np.all(out[:, 2:] == 1), "observed open water counts; unobserved step does not"
+
+
+def test_storm_exposure_land_mask_nan():
+    """Land cells are NaN; the mask does not alter water-cell exposure counts."""
+    df, transform = _duration_fixture()
+    land = np.zeros((4, 4), dtype=bool)
+    land[0, :] = True
+    out = StormExposureDurationMetric().compute_climatology(
+        df, transform=transform, height=4, width=4,
+        burn=burn, burn_values=burn_values, land_mask=land,
+    )
+    assert np.all(np.isnan(out[0, :])), "land row must be NaN"
+    assert np.all(out[1:, :2] == 0) and np.all(out[1:, 2:] == 1), \
         "water cells must be unaffected by the mask"
 
 

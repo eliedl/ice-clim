@@ -1,0 +1,17 @@
+{
+  "metric": "freeze_up_date",
+  "region": "manicouagan",
+  "source": "sgrda",
+  "period": "2011-2020",
+  "season_min": "2010-09-01",
+  "season_max": "2019-09-01",
+  "tier": "fine",
+  "grid_res_m": 100.0,
+  "grid_crs": 32198,
+  "land_mask": "/home/eliedl/data/masks/cis_landmasks/climatology_landmask.geojson",
+  "n_rows": 8977,
+  "git_sha": "2996ca4",
+  "git_dirty": true,
+  "created": "20260616-113927",
+  "raster": "freeze_up_date_manicouagan_2011-2020_sgrda_fine_100m_20260616-113927_2996ca4.npz"
+}

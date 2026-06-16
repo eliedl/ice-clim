@@ -461,3 +461,78 @@ class SeasonDurationMetric(Metric):
 
     def format_ticks(self, tick_values):
         return [f"{int(round(d))}" for d in tick_values]
+
+
+class StormExposureDurationMetric(Metric):
+    """Climatological storm-exposure duration per cell — the count of
+    admissible observation time steps where the medianed ice concentration
+    is *low enough that waves are not attenuated by ice*.
+
+    FR product name: "Climatologie de la durée d'exposition aux tempêtes".
+
+    Physical meaning: below a threshold concentration, an ice cover no longer
+    damps incoming wave energy, so the cell remains exposed to storm wave
+    action. Wave models encode the same idea — WW3's IC0 ice source term and
+    ECCC's RDWPS treat ice as wave-transparent below ~25 % concentration. The
+    operative threshold here is **3/10 (0.30)**, recommended by an LDGIZC-lab
+    geographer; the 0.25 model convention is the noted alternative (DEC-037).
+
+    Methodology — the inverse-threshold twin of SeasonDurationMetric
+    (median-then-threshold, DEC-027 applied to a count):
+      1. For each admissible time step (WMO 80 % rule per calendar day),
+         build the median CT fraction across years — the same cube the
+         freeze-up/break-up/duration metrics scan (DEC-035).
+      2. The exposure duration is the *count* of admissible time steps where
+         the medianed field is <= exposure_threshold.
+
+    Not the strict complement of SeasonDurationMetric: the 0.30–0.40 band
+    (sparse ice that still attenuates but is below the 4/10 presence
+    threshold) is counted by neither metric. Open water (CT = 0 every step)
+    counts as fully exposed; cells under compact ice all season report 0.
+    Cells never observed (or land) report NaN.
+
+    Units are admissible *observation time steps* (days for SGRDA, weeks for
+    SGRDR — display label set per source in main.py), matching
+    SeasonDurationMetric so the two are directly comparable.
+    """
+
+    slug = "storm_exposure_duration"
+    display_label = "Storm exposure duration (observation-days, CT <= 3/10)"
+    exposure_threshold = 0.3
+
+    def sql(self, *, table, grid_crs, season_min, season_max):
+        return _all_ct_sql(
+            table=table, grid_crs=grid_crs, season_min=season_min, season_max=season_max,
+        ), {}
+
+    def reduce_season(self, season_df, *, transform, height, width, burn):
+        raise NotImplementedError(
+            "StormExposureDurationMetric overrides compute_climatology directly "
+            "(median-then-threshold per DEC-027); reduce_season is not used."
+        )
+
+    def compute_climatology(self, df, *, transform, height, width, burn, burn_values=None, land_mask=None):
+        if burn_values is None:
+            raise ValueError(
+                "StormExposureDurationMetric.compute_climatology requires burn_values "
+                "(value-keyed rasterizer) from the pipeline."
+            )
+        from climatology.processing.event_detection import (
+            admissible_calendar_days,
+            build_daily_median_ct_cube,
+        )
+        days = admissible_calendar_days(df)
+        cube = build_daily_median_ct_cube(
+            df, admissible_days=days,
+            transform=transform, height=height, width=width,
+            burn_values=burn_values, land_mask=land_mask,
+        )
+        # NaN cells (no data that day) compare False against the threshold and
+        # are not counted; perennially ice-covered cells -> 0; open water -> full.
+        exposure = np.sum(cube <= self.exposure_threshold, axis=0).astype(np.float32)
+        never_observed = np.all(np.isnan(cube), axis=0)
+        exposure[never_observed] = np.nan
+        return exposure
+
+    def format_ticks(self, tick_values):
+        return [f"{int(round(d))}" for d in tick_values]

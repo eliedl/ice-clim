@@ -35,6 +35,7 @@ from climatology.processing.metrics import (
     LastOccurrenceDateMetric,
     Metric,
     SeasonDurationMetric,
+    StormExposureDurationMetric,
 )
 from climatology.processing.pipeline import (
     archive_product,
@@ -68,6 +69,7 @@ METRICS: dict[str, Metric] = {
     FirstOccurrenceDateMetric.slug: FirstOccurrenceDateMetric(),
     LastOccurrenceDateMetric.slug:  LastOccurrenceDateMetric(),
     SeasonDurationMetric.slug:      SeasonDurationMetric(),
+    StormExposureDurationMetric.slug: StormExposureDurationMetric(),
 }
 
 
@@ -102,6 +104,8 @@ def run(metric_slug: str, region: str, source_slug: str, period: tuple[int, int]
 
     if metric_slug == SeasonDurationMetric.slug:
         metric.display_label = f"Median ice presence ({source.obs_unit}, CT >= 4/10)"
+    elif metric_slug == StormExposureDurationMetric.slug:
+        metric.display_label = f"Storm exposure duration ({source.obs_unit}, CT <= 3/10)"
 
     spec = resolve_region(region)
     log.info("Region: %s (slug=%s) | Metric: %s | Source: %s | Winters: %s | CRS: EPSG:%d | %d tier(s)",
