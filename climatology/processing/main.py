@@ -153,6 +153,7 @@ def run(metric_slug: str, region: str, source_slug: str, period: tuple[int, int]
             "metric": metric.slug, "region": region, "source": source.slug,
             "period": period_slug, "season_min": season_min, "season_max": season_max,
             "tier": tier.name, "grid_res_m": tier.res_m, "grid_crs": spec.grid_crs,
+            "bounds": [float(b) for b in bounds], "grid_shape": [h, w],
             "land_mask": str(LAND_MASK_PATH), "n_rows": len(df),
         })
         layers.append((values, bounds))
