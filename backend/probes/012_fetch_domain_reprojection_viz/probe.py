@@ -109,7 +109,7 @@ def run(slug: str = "sept-iles") -> None:
     # edges are constant lon/lat; the grid envelope (bbox of the square in
     # grid_crs) extends beyond it -> the bowed slivers the old filter dropped.
     square_geom = _to_4326(tier.bounds_geom, grid_crs)
-    prod_geom = wkt.loads(fetch_domain_wkt(bounds, grid_crs=grid_crs, res_m=res))
+    prod_geom = wkt.loads(fetch_domain_wkt(box(*bounds), grid_crs=grid_crs, res_m=res))
 
     # (1) Edge curvature, in metres: a straight envelope edge in grid_crs is a
     # *curve* in 4326. Take the 4-corner chord polygon (straight in 4326),

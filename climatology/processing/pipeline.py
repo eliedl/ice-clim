@@ -120,43 +120,45 @@ def burn_values(geom_value_pairs, transform, height: int, width: int) -> np.ndar
                          transform=transform, fill=np.nan, dtype=np.float32)
 
 
-def fetch_domain_wkt(bounds: tuple[float, float, float, float], *,
-                     grid_crs: int, res_m: float) -> str:
+def fetch_domain_wkt(geom, *, grid_crs: int, res_m: float) -> str:
     """4326 WKT of the spatial filter used to fetch chart polygons.
 
-    Must be a superset of the rasterized grid: the grid is built from the
-    *envelope* of the region geometry (build_grid), which extends beyond the
-    geometry itself where its reprojected edges bow (~700 m at the sept-iles
-    south edge). Filtering with the tight geometry under-fetches the grid-edge
-    slivers and silently drops chart polygons from the median sample (probe 010
-    attribution: the 2000-01-22 polygon, a +7 d artifact over its footprint).
-    The envelope box is densified so its reprojected edges follow the true
-    curve, and buffered one cell outward so residual approximation error errs
-    on over-fetch — harmless, since rasterization only assigns values at
-    in-grid cell centres.
+    ``geom`` is the analysis-domain polygon (the region's ``tiers[0]`` domain)
+    in ``grid_crs`` — the MRC region polygon for adaptive regions, the
+    axis-aligned bbox for legacy. It is densified (so its reprojected outline
+    follows the true curve, not straight chords between widely-spaced vertices)
+    and buffered one cell outward (a sub-cell over-fetch margin), then
+    reprojected to 4326.
 
-    ``bounds`` is (xmin, ymin, xmax, ymax) in ``grid_crs``; ``res_m`` sets the
-    densify/buffer length scale (one cell).
+    The fetch domain is therefore the **region footprint, not its bounding box**:
+    a superset of every kept cell (any chart polygon covering an in-domain cell
+    centroid intersects ``geom``), while skipping the bbox-corner polygons that
+    would only land on clipped cells — fewer rows fetched/parsed/burned for
+    elongated MRC regions (DEC-039). The probe-010 under-fetch guard still holds:
+    densify keeps the reprojected boundary faithful; ``buffer(res_m)`` errs on
+    over-fetch, harmless since rasterization assigns values only at in-grid cell
+    centres.
+
+    ``res_m`` sets the densify/buffer length scale (one cell); pass the coarsest
+    tier's resolution so the domain covers every tier.
     """
-    xmin, ymin, xmax, ymax = bounds
-    grid_box = box(xmin, ymin, xmax, ymax)
-    return (gpd.GeoSeries([grid_box], crs=grid_crs)
+    return (gpd.GeoSeries([geom], crs=grid_crs)
             .segmentize(10 * res_m)
             .buffer(res_m)
             .to_crs(epsg=4326)
             .union_all().wkt)
 
 
-def load_polygons(metric: Metric, bounds: tuple[float, float, float, float], *,
+def load_polygons(metric: Metric, fetch_geom, *,
                   grid_crs: int, res_m: float, table: str,
                   season_min: str, season_max: str) -> pd.DataFrame:
     """Pull rows from the DB per the metric's SQL; attach shapely geometries.
 
-    ``bounds`` is the (xmin, ymin, xmax, ymax) fetch envelope in ``grid_crs``;
-    geometries are returned (and parsed) in ``grid_crs`` so they rasterize
-    directly onto every tier's transform.
+    ``fetch_geom`` is the analysis-domain polygon in ``grid_crs`` (see
+    ``fetch_domain_wkt``); geometries are returned (and parsed) in ``grid_crs``
+    so they rasterize directly onto every tier's transform.
     """
-    bbox_wkt_str = fetch_domain_wkt(bounds, grid_crs=grid_crs, res_m=res_m)
+    bbox_wkt_str = fetch_domain_wkt(fetch_geom, grid_crs=grid_crs, res_m=res_m)
     sql, params = metric.sql(table=table, grid_crs=grid_crs,
                              season_min=season_min, season_max=season_max)
     params = {**params, "bbox_wkt": bbox_wkt_str}

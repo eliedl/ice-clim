@@ -112,11 +112,16 @@ def run(metric_slug: str, region: str, source_slug: str, period: tuple[int, int]
              spec.display, region, metric.slug, source.slug, period_slug,
              spec.grid_crs, len(spec.tiers))
 
-    # Fetch DB rows once over the union envelope of all tiers (coarsest res sets
-    # the fetch buffer scale); the same df rasterizes onto every tier's grid.
-    fetch_bounds = _union_bounds(spec.tiers)
+    # Fetch DB rows once over tiers[0]'s analysis-domain polygon — the whole
+    # region for adaptive (tiers[0] is the coarse whole-region tier, which
+    # contains every finer tier since refinement = region ∩ buffer ⊆ region),
+    # the bbox for legacy. Fetching the region footprint rather than its bbox
+    # skips chart polygons that only touch clipped corners (DEC-039). Coarsest
+    # res sets the densify/buffer scale; the same df rasterizes onto every tier.
+    t0 = spec.tiers[0]
+    fetch_geom = t0.clip_geom if t0.clip_geom is not None else t0.bounds_geom
     fetch_res = max(t.res_m for t in spec.tiers)
-    df = load_polygons(metric, fetch_bounds, grid_crs=spec.grid_crs, res_m=fetch_res,
+    df = load_polygons(metric, fetch_geom, grid_crs=spec.grid_crs, res_m=fetch_res,
                        table=source.table, season_min=season_min, season_max=season_max)
     log.info("Fetched %s rows.", f"{len(df):,}")
     if df.empty:
@@ -167,13 +172,6 @@ def run(metric_slug: str, region: str, source_slug: str, period: tuple[int, int]
                 period_label=f"{period[0]}–{period[1]}",
                 source_label=source.display_label,
                 grid_crs=spec.grid_crs, res_label=res_label)
-
-
-def _union_bounds(tiers) -> tuple[float, float, float, float]:
-    """(xmin, ymin, xmax, ymax) enclosing every tier's bounds geometry."""
-    bounds = [t.bounds_geom.bounds for t in tiers]
-    return (min(b[0] for b in bounds), min(b[1] for b in bounds),
-            max(b[2] for b in bounds), max(b[3] for b in bounds))
 
 
 def _parse_period(s: str) -> tuple[int, int]:
