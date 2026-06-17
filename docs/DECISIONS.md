@@ -372,4 +372,19 @@ This log records all scientific decisions, assumptions, and edge-case choices id
 
 ---
 
+## DEC-042 — GeoTIFF Product Export (per-tier, native-32198, lossless)
+
+- **Context**: PNG products are not data (probe 010) and the `archive_product` `.npz` is **not georeferenced** (stores `values` only). Lab/QGIS deliverables need a georeferenced raster of each climatology product. With the whole stack now in EPSG:32198 (DEC-040), the in-memory `values` raster is already in the deliverable CRS — a GeoTIFF is a near-direct write, not the raster→vector reformulation weighed (and rejected) in DEC-036 option 2.
+- **Options considered**:
+  1. **Per-tier GeoTIFF** — one float32 file per `Tier`; faithful to the adaptive grid (each tier keeps its native resolution), mirrors the per-tier PNG/`.npz`. An N-tier adaptive region yields N files.
+  2. **Single composite GeoTIFF** — resample the coarse tier onto the fine grid into one file; a GeoTIFF holds one regular grid, so this *requires* resampling and discards the point of the adaptive design.
+  3. **Vector variable-resolution grid (fishnet/quadtree)** — DEC-036 option 2; maximal QGIS interrogeability but a large reformulation of the raster machinery.
+- **Choice made**: **Option 1 — one GeoTIFF per tier**, opt-in via `--geotiff` (default off), written alongside the PNG. **Native-CRS write** (`crs = spec.grid_crs = 32198`): no warp/resample, the product is written bit-for-bit. **`nodata = NaN`** (matches the in-memory array; no sentinel collision). **DEFLATE + floating-point predictor (`predictor=3`) + tiled**: the predictor differences adjacent cells so the smooth interior reduces to small residuals DEFLATE crushes, while NaN runs (land/clip/ice-free — the grid majority) collapse under LZ77; lossless throughout. Run parameters (the `archive_product` manifest) travel in GeoTIFF tags so the file is self-describing in QGIS; date metrics (`*_date`) additionally carry `season_origin` + `value_encoding="day_of_season"` so day-of-season ordinals decode to calendar dates.
+- **Rationale**: Per-tier is the only lossless option (Options 2/3 resample or re-architect). Native-CRS write is unlocked by DEC-040 — pre-migration this would have required a UTM→Lambert warp; post-migration it is free. The GeoTIFF carries georeferencing inline, so it is a strictly better archival raster than the `.npz` (candidate to supersede it later; left untouched for now). Verified on synthetic date + duration rasters: lossless on finite cells, NaN preserved, `PREDICTOR=3`/DEFLATE/tiled applied (confirmed via `IMAGE_STRUCTURE` tags — GDAL does not surface the predictor in `profile`).
+- **Validation status**: **APPROVED (2026-06-17)** — user-directed; reversible software component, plan reviewed and confirmed before implementation.
+- **Implementation refs**: `climatology/processing/pipeline.py` — `write_geotiff(values, transform, *, crs, path, metric, manifest)`, `output_geotiff` / `_output_path` (extension-generic path helper); `climatology/processing/main.py` — `--geotiff` flag, `run(..., geotiff=…)`, guarded per-tier write reusing the `archive_product` manifest. Relates to DEC-040 (32198 native CRS — the enabler), DEC-036 (adaptive tiers → one file per tier; raster-vs-vector trade-off), and the `archive_product` raster cache (probe 010).
+- **Literature cross-ref**: DEFLATE = LZ77 + Huffman (RFC 1951); GeoTIFF floating-point predictor (GDAL `PREDICTOR=3`).
+
+---
+
 *Decisions are logged with their validation status. Approved entries are confirmed; PENDING entries await human validation.*

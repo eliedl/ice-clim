@@ -19,13 +19,15 @@ import geopandas as gpd
 import matplotlib.pyplot as plt
 import numpy as np
 import pandas as pd
+import rasterio
+from rasterio.crs import CRS
 from rasterio.features import rasterize as rio_rasterize
 from rasterio.transform import from_bounds
 from shapely import wkt
 from shapely.geometry import box
 from sqlalchemy import create_engine, text
 
-from climatology.processing.metrics import Metric
+from climatology.processing.metrics import SEASON_ORIGIN, Metric
 from climatology.viz.colormaps import build_cmap, percentile_range
 
 log = logging.getLogger(__name__)
@@ -58,16 +60,31 @@ REGION_DISPLAY = {
 }
 
 
-def output_png(slug: str, metric_slug: str, *, period_slug: str, source_slug: str,
-               label: str) -> Path:
-    """Output PNG path for a (region, metric, period, source) product.
+def _output_path(slug: str, metric_slug: str, *, period_slug: str,
+                 source_slug: str, label: str, ext: str) -> Path:
+    """Product path for a (region, metric, period, source, label) tuple.
 
     ``label`` distinguishes products under one (region, metric, period,
     source): a resolution tag (``"35m"``) for a single-tier legacy region, or
     ``"adaptive"`` / a per-tier tag (``"fine_25m"``) for nested products.
+    ``ext`` is the file extension without the dot (``"png"``, ``"tif"``).
     """
     return (OUTPUT_DIR / slug / metric_slug / period_slug / source_slug
-            / f"{metric_slug}_{slug}_{period_slug}_{source_slug}_{label}.png")
+            / f"{metric_slug}_{slug}_{period_slug}_{source_slug}_{label}.{ext}")
+
+
+def output_png(slug: str, metric_slug: str, *, period_slug: str, source_slug: str,
+               label: str) -> Path:
+    """PNG path for a product (see ``_output_path``)."""
+    return _output_path(slug, metric_slug, period_slug=period_slug,
+                        source_slug=source_slug, label=label, ext="png")
+
+
+def output_geotiff(slug: str, metric_slug: str, *, period_slug: str, source_slug: str,
+                   label: str) -> Path:
+    """GeoTIFF path for a product (see ``_output_path``)."""
+    return _output_path(slug, metric_slug, period_slug=period_slug,
+                        source_slug=source_slug, label=label, ext="tif")
 
 
 def get_engine():
@@ -252,6 +269,45 @@ def archive_product(values: np.ndarray, png_path: Path, manifest: dict) -> Path:
     npz.with_suffix(".json").write_text(json.dumps(manifest, indent=2, default=str))
     log.info("Archived product raster: %s", npz)
     return npz
+
+
+def write_geotiff(values: np.ndarray, transform, *, crs: int, path: Path,
+                  metric: Metric, manifest: dict) -> Path:
+    """Write a single-band float32 GeoTIFF of a product raster (one per tier).
+
+    Native-CRS write: ``values`` is already expressed in ``crs`` (the
+    computation grid CRS — EPSG:32198 / NAD83 Québec Lambert, DEC-040), so the
+    raster is the analytical product written bit-for-bit, no warp/resample.
+    ``nodata = NaN`` matches the in-memory array (no sentinel collision).
+
+    Compression is DEFLATE + the floating-point predictor (``predictor=3``):
+    the predictor differences adjacent cells so the smooth interior field
+    reduces to small residuals DEFLATE crushes, while NaN runs (land / clip /
+    ice-free — the grid majority) collapse under LZ77. Lossless throughout;
+    ``tiled`` lets QGIS read only in-view blocks.
+
+    Run parameters travel in GeoTIFF tags so the file is self-describing in
+    QGIS. Date metrics (``*_date``) additionally carry ``season_origin`` +
+    ``value_encoding`` so day-of-season ordinals decode to calendar dates.
+    """
+    height, width = values.shape
+    path.parent.mkdir(parents=True, exist_ok=True)
+
+    tags = {**manifest, "display_label": metric.display_label}
+    if metric.slug.endswith("_date"):
+        tags["value_encoding"] = "day_of_season"
+        tags["season_origin"] = SEASON_ORIGIN.isoformat()
+
+    with rasterio.open(
+        path, "w", driver="GTiff", height=height, width=width, count=1,
+        dtype="float32", crs=CRS.from_epsg(crs), transform=transform,
+        nodata=float("nan"), compress="DEFLATE", predictor=3, tiled=True,
+    ) as dst:
+        dst.write(values.astype("float32"), 1)
+        dst.set_band_description(1, metric.display_label)
+        dst.update_tags(**{k: str(v) for k, v in tags.items()})
+    log.info("GeoTIFF saved to %s", path)
+    return path
 
 
 def reduce_seasons_stack(

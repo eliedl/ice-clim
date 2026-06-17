@@ -1,10 +1,11 @@
 """Region-scale climatology — entrypoint.
 
 Selects a metric, a region, a chart source, and a climatology period;
-runs the generic pipeline, writes a PNG.
+runs the generic pipeline, writes a PNG (and, with ``--geotiff``, one
+float32 GeoTIFF per tier).
 
 Usage:
-    python climatology.py <metric-slug> <region-slug> [--source sgrda|sgrdr] [--period YYYY-YYYY]
+    python climatology.py <metric-slug> <region-slug> [--source sgrda|sgrdr] [--period YYYY-YYYY] [--geotiff]
 
 Period semantics: winters. ``--period 1991-2020`` selects season_start
 1990-09-01 .. 2019-09-01 (30 winter seasons).
@@ -46,8 +47,10 @@ from climatology.processing.pipeline import (
     burn_values,
     load_polygons,
     log_distribution,
+    output_geotiff,
     output_png,
     plot_metric,
+    write_geotiff,
 )
 from climatology.processing.regions import REGION_SLUGS, resolve_region
 from climatology.processing.sources import CHART_TABLES, LAND_MASK_PATH, ChartTable
@@ -96,7 +99,8 @@ def assert_hd_aligned(df: pd.DataFrame, source: ChartTable) -> None:
         )
 
 
-def run(metric_slug: str, region: str, source_slug: str, period: tuple[int, int]) -> None:
+def run(metric_slug: str, region: str, source_slug: str, period: tuple[int, int],
+        *, geotiff: bool = False) -> None:
     metric = METRICS[metric_slug]
     source = CHART_TABLES[source_slug]
     period_slug = f"{period[0]}-{period[1]}"
@@ -154,13 +158,19 @@ def run(metric_slug: str, region: str, source_slug: str, period: tuple[int, int]
         tier_label = f"{tier.name}_{res_tag}" if multi else res_tag
         tier_png = output_png(region, metric.slug, period_slug=period_slug,
                               source_slug=source.slug, label=tier_label)
-        archive_product(values, tier_png, manifest={
+        manifest = {
             "metric": metric.slug, "region": region, "source": source.slug,
             "period": period_slug, "season_min": season_min, "season_max": season_max,
             "tier": tier.name, "grid_res_m": tier.res_m, "grid_crs": spec.grid_crs,
             "bounds": [float(b) for b in bounds], "grid_shape": [h, w],
             "land_mask": str(LAND_MASK_PATH), "n_rows": len(df),
-        })
+        }
+        archive_product(values, tier_png, manifest=manifest)
+        if geotiff:
+            tier_tif = output_geotiff(region, metric.slug, period_slug=period_slug,
+                                      source_slug=source.slug, label=tier_label)
+            write_geotiff(values, transform, crs=spec.grid_crs, path=tier_tif,
+                          metric=metric, manifest=manifest)
         layers.append((values, bounds))
 
     # Composite PNG: coarse first, fine last (fine wins where it has data).
@@ -192,9 +202,12 @@ def _parse_args() -> argparse.Namespace:
     p.add_argument("--period", type=_parse_period, default=(2011, 2020),
                    metavar="YYYY-YYYY",
                    help="Climatology period in winters (default: 2011-2020).")
+    p.add_argument("--geotiff", action="store_true",
+                   help="Also write one float32 GeoTIFF per tier (EPSG:32198, "
+                        "NaN nodata) alongside the PNG products.")
     return p.parse_args()
 
 
 if __name__ == "__main__":
     args = _parse_args()
-    run(args.metric, args.region, args.source, args.period)
+    run(args.metric, args.region, args.source, args.period, geotiff=args.geotiff)
