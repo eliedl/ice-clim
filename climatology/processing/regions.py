@@ -29,10 +29,12 @@ from dataclasses import dataclass
 from pathlib import Path
 
 import geopandas as gpd
+from shapely import make_valid
 from shapely.geometry import shape
 from shapely.geometry.base import BaseGeometry
 
 from climatology.processing.pipeline import BBOX_ROOT, GRID_CRS, GRID_RES, REGION_DISPLAY
+from climatology.processing.sources import LAND_MASK_PATH
 
 # Adaptive-region source layers (EPSG:32198, NAD83 / Québec Lambert).
 MRC_GPKG = Path(
@@ -101,21 +103,41 @@ def _coastline_buffer(grid_crs: int) -> BaseGeometry:
     return gpd.read_file(COASTLINE_BUFFER).to_crs(epsg=grid_crs).union_all()
 
 
+def _landmask(grid_crs: int) -> BaseGeometry:
+    """CIS climate-normals landmask (DEC-034) in ``grid_crs``.
+
+    The source multipolygon is invalid (self-intersections); validate per feature
+    before the union or ``union_all`` raises a GEOS TopologyException.
+    """
+    g = gpd.read_file(LAND_MASK_PATH).to_crs(epsg=grid_crs)
+    return g.geometry.make_valid().union_all()
+
+
 def _adaptive_mrc_spec(slug: str, display: str, mrc_name: str) -> RegionSpec:
     """Two-tier adaptive spec for a coastal MRC region (DEC-036).
 
-    Coarse 1 km tier over the whole MRC polygon; fine 100 m tier over the
-    10 km coastline buffer ∩ region. Both clipped to their defining polygon
-    and land-masked downstream (DEC-034).
+    Coarse 1 km tier; fine 100 m tier over the 10 km coastline buffer ∩ region.
+
+    The coarse **grid envelope** is trimmed to the coastal/water zone for cleaner
+    framing: ``bounds_geom = region − (landmask − buffer)`` = the region minus the
+    inland land beyond the buffer = ``(region − landmask) ∪ (landmask ∩ buffer ∩
+    region)`` (region water + coastal-land band). The ``clip_geom`` is left as the
+    whole ``region`` — its effective wet footprint after the land mask is
+    ``region − landmask`` ⊆ ``bounds_geom`` (DEC-034 land mask still NaNs land).
+    The fine tier is unchanged: ``refinement = region ∩ buffer`` is already inside
+    the buffer, so trimming inland land is a no-op there.
     """
-    region = _mrc_polygon(mrc_name, ADAPTIVE_GRID_CRS)
-    refinement = region.intersection(_coastline_buffer(ADAPTIVE_GRID_CRS))
+    region = make_valid(_mrc_polygon(mrc_name, ADAPTIVE_GRID_CRS))
+    buffer = make_valid(_coastline_buffer(ADAPTIVE_GRID_CRS))
+    land = make_valid(_landmask(ADAPTIVE_GRID_CRS))
+    refinement = region.intersection(buffer)
+    coarse_bounds = region.difference(land.difference(buffer))
     return RegionSpec(
         slug=slug,
         display=display,
         grid_crs=ADAPTIVE_GRID_CRS,
         tiers=[
-            Tier("coarse", ADAPTIVE_COARSE_RES, region, region),
+            Tier("coarse", ADAPTIVE_COARSE_RES, coarse_bounds, region),
             Tier("fine", ADAPTIVE_FINE_RES, refinement, refinement),
         ],
     )
