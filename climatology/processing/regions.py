@@ -5,15 +5,18 @@ of ``Tier``s (coarse -> fine). Each tier carries its own resolution, the
 geometry whose bounding box defines the raster envelope, and an optional clip
 polygon (cells outside it are NaN'd after compute).
 
-Two region kinds share one code path downstream:
-  - **Legacy square regions** (gaspe, sept-iles, ...): one tier built from the
-    pre-computed ``<slug>_square.geojson`` (square_bbox.py), uniform GRID_RES,
-    no polygon clip. Reproduces the historical single-raster behaviour.
+Both region kinds derive their grid from a source polygon (one code path
+downstream):
+  - **Legacy bbox regions** (gaspe, sept-iles, ...): one tier built from the
+    pre-computed ``<slug>_32198_bbox.geojson`` (square_bbox.py) — the
+    axis-aligned bbox of the region polygon in the grid CRS, uniform GRID_RES,
+    **no polygon clip**, so polygon == bbox == grid (DEC-040).
   - **Adaptive nested regions** (minganie, manicouagan, sept-rivieres): two tiers — a coarse 1 km raster
     over the whole region polygon and a fine 100 m raster over the 10 km
     coastline buffer intersected with the region (DEC-036; 25 m is infeasible
-    as a single raster per probe 011). The CIS landmask still does the land
-    masking at each tier (sources.LAND_MASK_PATH, DEC-034).
+    as a single raster per probe 011). Each tier **clips** to its defining
+    polygon, so the grid bbox differs from the analysis domain. The CIS landmask
+    still does the land masking at each tier (sources.LAND_MASK_PATH, DEC-034).
 
 Centroid point-sampling (the rasterio default) is the per-cell aggregation at
 every resolution, so DEC-035's "median is a representable CT code" holds
@@ -145,18 +148,23 @@ def _sept_rivieres_spec() -> RegionSpec:
     return _adaptive_mrc_spec("sept-rivieres", "Sept-Rivières", "Sept-Rivières")
 
 
-def _legacy_square_spec(slug: str) -> RegionSpec:
-    """Single-tier region from the pre-computed square bbox (uniform GRID_RES)."""
-    bbox = BBOX_ROOT / slug / f"{slug}_square.geojson"
-    if not bbox.exists():
-        raise FileNotFoundError(f"squared bbox not found for region '{slug}': {bbox}")
-    square = gpd.read_file(bbox).to_crs(epsg=GRID_CRS).union_all()
+def _legacy_bbox_spec(slug: str) -> RegionSpec:
+    """Single-tier legacy region from the pre-computed axis-aligned bbox.
+
+    The ``<slug>_32198_bbox.geojson`` envelope (square_bbox.py) is axis-aligned
+    in GRID_CRS, so ``build_grid``'s bounds coincide with the polygon: polygon
+    == bbox == grid, uniform GRID_RES, no clip (DEC-040).
+    """
+    bbox_path = BBOX_ROOT / slug / f"{slug}_{GRID_CRS}_bbox.geojson"
+    if not bbox_path.exists():
+        raise FileNotFoundError(f"bbox envelope not found for region '{slug}': {bbox_path}")
+    bbox = gpd.read_file(bbox_path).to_crs(epsg=GRID_CRS).union_all()
     display = REGION_DISPLAY.get(slug, slug.replace("-", " ").title())
     return RegionSpec(
         slug=slug,
         display=display,
         grid_crs=GRID_CRS,
-        tiers=[Tier("full", float(GRID_RES), square, None)],
+        tiers=[Tier("full", float(GRID_RES), bbox, None)],
     )
 
 
@@ -174,4 +182,4 @@ def resolve_region(slug: str) -> RegionSpec:
     """Return the ``RegionSpec`` for a region slug (adaptive or legacy square)."""
     if slug in _ADAPTIVE:
         return _ADAPTIVE[slug]()
-    return _legacy_square_spec(slug)
+    return _legacy_bbox_spec(slug)

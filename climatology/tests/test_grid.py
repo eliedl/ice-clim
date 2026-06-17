@@ -126,7 +126,7 @@ def test_legacy_region_single_tier():
     except FileNotFoundError:
         print("    (skip: legacy square bbox absent)")
         return
-    assert spec.grid_crs == 26919, "legacy regions stay UTM 19N"
+    assert spec.grid_crs == 32198, "legacy regions migrated to Québec Lambert (DEC-040)"
     assert len(spec.tiers) == 1, "legacy region is a single tier"
     tier = spec.tiers[0]
     assert tier.name == "full" and tier.res_m == 35.0 and tier.clip_geom is None, \
