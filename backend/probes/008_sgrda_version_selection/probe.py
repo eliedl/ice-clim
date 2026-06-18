@@ -1,4 +1,4 @@
-"""Probe 008 — SGRDA / SGRDREC Version Selection.
+"""Probe 008 — SGRDA / SGRDR Version Selection.
 
 When several archive files exist for the same (region, date) — multiple clean
 revisions ``pl_a``/``pl_b``/``pl_c`` and/or timestamped production-save suffixes
@@ -10,7 +10,7 @@ reproduces the metrics that justified the selection rule already implemented in
   2. A timestamped-suffix file is used only as a fallback when no clean file
      exists for that date.
 
-Two diagnostics, per source (SGRDA GULF+WIS28, SGRDREC EC):
+Two diagnostics, per source (SGRDA GULF+WIS28, SGRDR EC):
 
   A. Suffix vs clean identity — for each (date, rev) with both a clean file and
      one or more timestamped-suffix files, compare feature counts. Suffix saves
@@ -46,7 +46,7 @@ import geopandas as gpd
 PROJECT_ROOT = Path(__file__).parents[3]
 sys.path.insert(0, str(PROJECT_ROOT))
 
-from backend.ingestion.sources import SGRDA_SOURCE, SGRDREC_SOURCE  # noqa: E402
+from backend.ingestion.sources import SGRDA_SOURCE, SGRDR_SOURCE  # noqa: E402
 
 OUTPUT_DIR = Path(__file__).parent / "output"
 _REV_ORDER = {"a": 0, "b": 1, "c": 2}
@@ -263,7 +263,7 @@ def main():
     ]
     body: list[str] = []
     for source, label in [(SGRDA_SOURCE, "SGRDA (GULF + WIS28)"),
-                          (SGRDREC_SOURCE, "SGRDREC (EC)")]:
+                          (SGRDR_SOURCE, "SGRDR (EC)")]:
         body += analyze(source, label)
 
     report = "\n".join(header + body)

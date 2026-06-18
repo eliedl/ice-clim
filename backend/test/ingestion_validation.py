@@ -8,7 +8,7 @@ Checks:
   3. T1 round-trip  — T1 parsed from filename == T1 read back from DB (UTC normalisation).
 
 Usage:
-    python backend/test/ingestion_validation.py --source sgrdrec
+    python backend/test/ingestion_validation.py --source sgrdr
     python backend/test/ingestion_validation.py --source sgrda --n 50
 """
 
@@ -25,7 +25,7 @@ sys.path.insert(0, str(Path(__file__).parent.parent.parent))
 
 from backend.ingestion.db import get_engine
 from backend.ingestion.pipeline import extract_shp
-from backend.ingestion.sources import SGRDA_SOURCE, SGRDREC_SOURCE
+from backend.ingestion.sources import SGRDA_SOURCE, SGRDR_SOURCE
 import geopandas as gpd
 
 logging.basicConfig(
@@ -35,7 +35,7 @@ logging.basicConfig(
 )
 log = logging.getLogger(__name__)
 
-SOURCES = {"sgrda": SGRDA_SOURCE, "sgrdrec": SGRDREC_SOURCE}
+SOURCES = {"sgrda": SGRDA_SOURCE, "sgrdr": SGRDR_SOURCE}
 
 
 def _to_utc(dt):

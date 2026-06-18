@@ -30,24 +30,25 @@ SGRDA_KEEP = frozenset({
     "geometry",
 })
 
-# --- SGRDREC ---
+# --- SGRDR ---
 
 # Era 1 (1968–2019): ZIP, date-only, pl_a only, NAD27 → reproject on ingest
-_SGRDREC_OLD_CLEAN_RE = re.compile(
+_SGRDR_OLD_CLEAN_RE = re.compile(
     r"^CIS_(?P<region>EC)_(?P<date>\d{8})_pl_(?P<rev>a)\.zip$",
     re.IGNORECASE,
 )
 # Era 2 (2020–present): TAR, optional timestamp, pl_a/b/c, WGS84 → reproject on ingest
-_SGRDREC_NEW_CLEAN_RE = re.compile(
+_SGRDR_NEW_CLEAN_RE = re.compile(
     r"^cis_SGRDR(?P<region>EC)_(?P<date>\d{8})(T(?P<hour>\d{2})(?P<minute>\d{2})Z)?_pl_(?P<rev>[abc])\.tar$",
     re.IGNORECASE,
 )
-_SGRDREC_NEW_SUFFIX_RE = re.compile(
+_SGRDR_NEW_SUFFIX_RE = re.compile(
     r"^cis_SGRDR(?P<region>EC)_(?P<date>\d{8})(T(?P<hour>\d{2})(?P<minute>\d{2})Z)?_pl_(?P<rev>[abc])_(?P<ts>\d{14})\.tar$",
     re.IGNORECASE,
 )
 
-SGRDREC_KEEP = frozenset({
+# See SGRDR*.xml to see a compete list of the attributes
+SGRDR_KEEP = frozenset({
     "POLY_TYPE",
     "CT", "CA", "CB", "CC", "CN",
     "SA", "SB", "SC", "CD",
@@ -144,13 +145,13 @@ SGRDA_SOURCE = ChartSource(
     region_label_map={"GULF": "gulf", "WIS28": "wis28"},
 )
 
-SGRDREC_SOURCE = ChartSource(
-    label="SGRDREC",
+SGRDR_SOURCE = ChartSource(
+    label="SGRDR",
     table="sgrdr",
-    keep_fields=SGRDREC_KEEP,
+    keep_fields=SGRDR_KEEP,
     directories=[DATA_ROOT / "SGRDR" / "EC"],
-    clean_res=[_SGRDREC_OLD_CLEAN_RE, _SGRDREC_NEW_CLEAN_RE],
-    suffix_res=[_SGRDREC_NEW_SUFFIX_RE],
+    clean_res=[_SGRDR_OLD_CLEAN_RE, _SGRDR_NEW_CLEAN_RE],
+    suffix_res=[_SGRDR_NEW_SUFFIX_RE],
     region_label_map={"EC": "ec"},
     file_globs=("*.tar", "*.zip"),
 )

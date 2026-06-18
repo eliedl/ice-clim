@@ -12,3 +12,4 @@ __pycache__/
 *.npz
 *.json
 *.tif
+*.xml

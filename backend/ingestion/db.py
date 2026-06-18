@@ -10,9 +10,9 @@ load_dotenv(Path(__file__).parent.parent.parent / ".env")
 
 def get_engine():
     host = os.getenv("POSTGRES_HOST", "localhost")
-    port = os.getenv("POSTGRES_PORT", "5434")
-    db   = os.getenv("POSTGRES_DB",   "ice_clim")
-    user = os.getenv("POSTGRES_USER", "postgres")
+    port = os.getenv("POSTGRES_PORT", "5432")
+    db   = os.getenv("POSTGRES_DB",   "cis_historical_db")
+    user = os.getenv("POSTGRES_USER", "eliedl")
     pwd  = os.getenv("POSTGRES_PASSWORD")
     if not pwd:
         sys.exit("ERROR: POSTGRES_PASSWORD not set (check .env).")
