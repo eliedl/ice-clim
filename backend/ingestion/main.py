@@ -1,22 +1,24 @@
 """
 Ingest CIS historical ice charts into PostgreSQL/PostGIS.
 
-Schema is created by initdb/00_create_tables.sql on first container start.
-Run this script after the container is healthy to ingest from raw archives.
+CLI entry point for the ingestion pipeline. Schema is created by
+initdb/00_create_tables.sql on first container start; run this after the
+container is healthy to ingest the configured source from the raw archives
+into PostGIS.
 
 Usage:
-    python scripts/populate_cis_historical_db.py
+    python backend/ingestion/main.py
 """
 
 import logging
 import sys
 from pathlib import Path
 
-sys.path.insert(0, str(Path(__file__).parent))
+sys.path.insert(0, str(Path(__file__).parent.parent))
 
 from ingestion.db import get_engine
 from ingestion.pipeline import run_source
-from ingestion.sources import SGRDA_SOURCE
+from ingestion.sources import SGRDA_SOURCE, SGRDR_SOURCE
 
 logging.basicConfig(
     level=logging.INFO,
@@ -27,8 +29,8 @@ logging.basicConfig(
 
 def main():
     engine = get_engine()
-    run_source(SGRDA_SOURCE, engine)
-
+    for source in [SGRDA_SOURCE, SGRDR_SOURCE]:
+        run_source(source, engine)
 
 if __name__ == "__main__":
     main()
