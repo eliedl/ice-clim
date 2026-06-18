@@ -20,7 +20,7 @@ local archive.
   ```
   POSTGRES_HOST=localhost
   POSTGRES_DB=cis_historical_db
-  POSTGRES_USER=eliedl
+  POSTGRES_USER=postgres
   POSTGRES_PASSWORD=<password>
   POSTGRES_PORT=5432
   ```
