@@ -7,7 +7,7 @@ from pathlib import Path
 
 log = logging.getLogger(__name__)
 
-DATA_ROOT = Path("/home/eliedl/data")
+DATA_ROOT = Path("/home/eliedl/data/CIS")
 
 _REV_RANK = {"a": 0, "b": 1, "c": 2}
 
