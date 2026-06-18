@@ -264,7 +264,9 @@ Leads surfaced during reading but not yet sourced/read. Promote to a dated entry
 ## References
 
 <!-- Define each [Author Year] anchor once. Reference-style links: the bracket text
-     above resolves to the citation below. Keep alphabetical for scannability. -->
+     above resolves to the citation below. Keep alphabetical for scannability.
+     Sources held in custody carry a → docs/normative/README.md pointer — retrievability
+     from a citation to the archived bytes; that README indexes the local copies. -->
 
 [Stern & Heide-Jørgensen 2003]: Stern, H.L. & Heide-Jørgensen, M.P. (2003). Trends and variability of sea ice in Baffin Bay and Davis Strait, 1953–2001. Polar Research 22(1), 11–18.
 
@@ -292,15 +294,15 @@ Leads surfaced during reading but not yet sourced/read. Promote to a dated entry
 
 [Galbraith et al. 2024]: Galbraith, P.S., Sévigny, C., Bourgault, D. & Dumont, D. (2024). Sea Ice Interannual Variability and Sensitivity to Fall Oceanic Conditions and Winter Air Temperature in the Gulf of St. Lawrence, Canada.
 
-[ECCC CMIP5 2023]: ECCC (2023). CMIP5 Multi-model ensembles — sea ice thickness/concentration, mean temperature and wind speed projections for Canada (1×1°, RCP scenarios, 1900–2100). [data product]
+[ECCC CMIP5 2023]: ECCC (2023). CMIP5 Multi-model ensembles — sea ice thickness/concentration, mean temperature and wind speed projections for Canada (1×1°, RCP scenarios, 1900–2100). [data product] → docs/normative/README.md
 
 [AHCCD 2023]: ECCC (2023). Adjusted and Homogenized Canadian Climate Data (AHCCD) — monthly station temperature, 1840–2018. [data product]
 
-[MSC Beaufort 2023]: ECCC (2023). Meteorological Service of Canada (MSC) Beaufort Wind and Wave Reanalysis. [data product]
+[MSC Beaufort 2023]: ECCC (2023). Meteorological Service of Canada (MSC) Beaufort Wind and Wave Reanalysis. [data product] → docs/normative/README.md
 
-[CIS Archive No.1 2006]: Canadian Ice Service (2006). Canadian Ice Service Digital Archive – Regional Charts: History, Accuracy, and Caveats. CIS Archive Documentation Series No. 1.
+[CIS Archive No.1 2006]: Canadian Ice Service (2006). Canadian Ice Service Digital Archive – Regional Charts: History, Accuracy, and Caveats. CIS Archive Documentation Series No. 1. → docs/normative/README.md
 
-[CIS Archive No.3 2007]: Canadian Ice Service (2007). Canadian Ice Service Digital Archive – Regional Charts: Canadian Ice Service Ice Regime Regions (CISIRR) and Sub-Regions with Associated Data Quality Indices. CIS Archive Documentation Series No. 3.
+[CIS Archive No.3 2007]: Canadian Ice Service (2007). Canadian Ice Service Digital Archive – Regional Charts: Canadian Ice Service Ice Regime Regions (CISIRR) and Sub-Regions with Associated Data Quality Indices. CIS Archive Documentation Series No. 3. → docs/normative/README.md
 
 [CIS Normals EC n.d.]: Canadian Ice Service (n.d.). Ice climate normals for the Canadian East Coast waters, 1991 to 2020. https://www.canada.ca/en/environment-climate-change/services/ice-forecasts-observations/latest-conditions/climatology/ice-climate-normals/canadian-east-coast-waters.html [web page; publication date unknown; automated retrieval blocked (HTTP 403) on 2026-06-10 — date to be confirmed from the page itself.]
 
@@ -313,3 +315,13 @@ Leads surfaced during reading but not yet sourced/read. Promote to a dated entry
 [Miville et al. 2002]: Miville, B., Wilson, K.J., Alt, B.T., Tivy, A., Falkingham, J., Carrieres, T., Powers, R., Hache, L. & Langlois, G. (2002). Canadian Long-range Ice Forecasting Project (CLIF). [PDF not located.]
 
 [Kinnard et al. 2006]: Kinnard, C., Zdanowicz, C.M., Fisher, D.A., Alt, B. & McCourt, S. (2006). Climatic analysis of sea-ice variability in the Canadian Arctic from operational charts, 1980–2004. *Annals of Glaciology*, 44, 391–402.
+
+[JCOMM SIGRID-3 2004]: JCOMM Expert Team on Sea Ice (2004). SIGRID-3: A Vector Archive Format for Sea Ice Charts. WMO/TD-No. 1214, JCOMM Technical Report No. 23. → docs/normative/README.md
+
+[JCOMM SIGRID-3 rev2 2010]: JCOMM Expert Team on Sea Ice (2010). SIGRID-3: A Vector Archive Format for Sea Ice Charts, Revision 2 (March 2010). WMO/TD-No. 1214, JCOMM Technical Report No. 23. → docs/normative/README.md
+
+[JCOMM SIGRID-3 v3.1 2017]: JCOMM Expert Team on Sea Ice (2017). SIGRID-3: A Vector Archive Format for Sea Ice Georeferenced Information and Data, Version 3.1 (March 2017). WMO/TD-No. 1214, JCOMM Technical Report No. 23. → docs/normative/README.md
+
+[CIS SIGRID-3 Guide 2025]: Canadian Ice Service / Environment and Climate Change Canada (2025). Service canadien des glaces — Données sur les glaces de mer et de lac : Guide de l'utilisateur SIGRID-3, Version 1.0, octobre 2025. [French-language edition.] → docs/normative/README.md
+
+[WMO Climate Normals 2017]: World Meteorological Organization (2017). WMO Guidelines on the Calculation of Climate Normals, 2017 edition. WMO-No. 1203. [Local copy is the French edition: « Directives de l'OMM pour le calcul des normales climatiques », OMM-N° 1203.] → docs/normative/README.md
