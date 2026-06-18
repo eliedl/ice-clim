@@ -17,7 +17,7 @@ spatial amendments — so a later revision is always the more correct one to kee
 
 Reuses the directory list and filename grammar from
 [`backend/ingestion/sources.py`](../../ingestion/sources.py) (`SGRDA_SOURCE`,
-`SGRDREC_SOURCE`) so the probe enumerates the same universe of files the ingestion
+`SGRDR_SOURCE`) so the probe enumerates the same universe of files the ingestion
 discovers, but keeps **all** candidates per `(region, date)` instead of selecting one.
 Each chart is read the way ingestion reads it (extract archive → `*_pl_*` polygon
 shapefile → geopandas). Metrics: `len(gdf)` (feature count) and `gdf.total_bounds`

@@ -13,8 +13,7 @@ services:
       - "${POSTGRES_PORT}:5432"
     volumes:
       - pgdata:/var/lib/postgresql/data
-      - ./initdb:/docker-entrypoint-initdb.d:ro
-      - /home/eliedl/data/backup:/backup:ro
+      - ./backend/initdb:/docker-entrypoint-initdb.d:ro
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER} -d ${POSTGRES_DB}"]
       interval: 5s
@@ -23,26 +22,21 @@ services:
 
 volumes:
   pgdata:
-    external: true
-    name: ice-clim_pgdata
 
 # ── First-run behaviour ───────────────────────────────────────────────────────
 #
 #   On first `docker compose up` (empty volume):
-#     initdb/00_init.sh runs automatically (docker-entrypoint-initdb.d mechanism).
-#     If /home/eliedl/data/backup/CIS_historical_db.dump exists and sgrda is
-#     empty → pg_restore (30–60 min).
-#     Otherwise → empty schema is created; run scripts/populate_cis_historical_db.py
-#     manually to ingest from raw archives (~4–8 hrs).
+#     Compose creates the `pgdata` volume automatically, then
+#     backend/initdb/00_create_tables.sql runs via the docker-entrypoint-initdb.d
+#     mechanism — creating an empty schema only. Mounting the directory shadows
+#     the image's default 10_postgis.sh, so only the `postgis` extension is loaded
+#     (no topology/tiger/fuzzystrmatch, no template_postgis db) — minimal install.
+#     Populate it from the host with: python backend/ingestion/main.py
+#     (see backend/QUICKSTART.md).
 #
 #   On subsequent `docker compose up` (volume has data):
-#     initdb/00_init.sh does NOT run. Existing data is preserved.
+#     The initdb script does NOT run. Existing data is preserved.
 #
 #   To reset everything: docker compose down -v
-#
-# ── Creating a backup dump ───────────────────────────────────────────────────
-#
-#   After a full ingest, run:
-#     pg_dump -Fc -h localhost -p ${POSTGRES_PORT} -U ${POSTGRES_USER} \
-#       -d ${POSTGRES_DB} -f /home/eliedl/data/backup/CIS_historical_db.dump
-#   Then upload CIS_historical_db.dump to Google Drive alongside raw archives.
+#     WARNING: `-v` deletes the compose-managed `pgdata` volume and the entire
+#     ingested DB with it. A full re-ingest is required afterwards.

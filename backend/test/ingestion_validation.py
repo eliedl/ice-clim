@@ -8,7 +8,9 @@ Checks:
   3. T1 round-trip  — T1 parsed from filename == T1 read back from DB (UTC normalisation).
 
 Usage:
-    python backend/test/ingestion_validation.py --source sgrdr
+    python backend/test/ingestion_validation.py                       # both sgrda + sgrdr (default)
+    python backend/test/ingestion_validation.py --source sgrdr        # single source
+    python backend/test/ingestion_validation.py --source sgrda sgrdr  # explicit list
     python backend/test/ingestion_validation.py --source sgrda --n 50
 """
 
@@ -106,26 +108,28 @@ def main():
     parser = argparse.ArgumentParser(
         description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter
     )
-    parser.add_argument("--source", choices=SOURCES, default="sgrda",
-                        help="Chart source to validate (default: sgrda)")
+    parser.add_argument("--source", choices=SOURCES, nargs="+",
+                        default=["sgrda", "sgrdr"],
+                        help="Chart source(s) to validate (default: sgrda sgrdr)")
     parser.add_argument("--n", type=int, default=None, metavar="N",
                         help="Limit per-date count check to first N dates (default: all)")
     args = parser.parse_args()
 
-    source = SOURCES[args.source]
     engine = get_engine()
-    files  = source.discover()
-
-    if not files:
-        log.error("No files discovered for source '%s' — check DATA_ROOT.", args.source)
-        sys.exit(1)
-
-    log.info("Validating %s: %d charts discovered.", args.source.upper(), len(files))
-
     results = []
-    results.append(check_date_coverage(files, source.table, engine))
-    results.append(check_feature_counts(files[:args.n], source.table, source.keep_fields, engine))
-    results.append(check_t1_roundtrip(files, source.table, engine))
+    for name in args.source:
+        source = SOURCES[name]
+        files  = source.discover()
+
+        if not files:
+            log.error("No files discovered for source '%s' — check DATA_ROOT.", name)
+            results.append(False)
+            continue
+
+        log.info("Validating %s: %d charts discovered.", name.upper(), len(files))
+        results.append(check_date_coverage(files, source.table, engine))
+        results.append(check_feature_counts(files[:args.n], source.table, source.keep_fields, engine))
+        results.append(check_t1_roundtrip(files, source.table, engine))
 
     passed = all(results)
     log.info("Validation: %s", "PASS" if passed else "FAIL")
