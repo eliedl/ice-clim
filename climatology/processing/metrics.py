@@ -19,6 +19,7 @@ from typing import Any
 import numpy as np
 import pandas as pd
 
+from climatology._array_types import BoolGrid, Grid, SeasonStack
 from climatology.services.units_conversion_maps import CONCENTRATION_FRACTION
 
 SEASON_ORIGIN = date(2000, 9, 1)  # any Sep-1; used only to format day-of-season as a calendar label
@@ -85,14 +86,14 @@ class Metric(ABC):
         height: int,
         width: int,
         burn,
-    ) -> np.ndarray:
+    ) -> Grid:
         """Per-season reduction: rows for one season -> (H, W) float array.
 
         ``burn`` is the pipeline's rasterisation helper; metrics call it on
         per-date geometry lists to convert polygons to pixel masks.
         """
 
-    def reduce_cross_season(self, stack: np.ndarray) -> np.ndarray:
+    def reduce_cross_season(self, stack: SeasonStack) -> Grid:
         """Cross-season reduction. Default: nan-aware median."""
         return np.nanmedian(stack, axis=0)
 
@@ -105,8 +106,8 @@ class Metric(ABC):
         width: int,
         burn,
         burn_values=None,
-        land_mask=None,
-    ) -> np.ndarray:
+        land_mask: BoolGrid | None = None,
+    ) -> Grid:
         """End-to-end climatology computation: rows -> (H, W) result raster.
 
         Default implementation: per-season reduction stacked, then cross-season

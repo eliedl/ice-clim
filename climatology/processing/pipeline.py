@@ -27,6 +27,7 @@ from shapely import wkt
 from shapely.geometry import box
 from sqlalchemy import create_engine, text
 
+from climatology._array_types import BoolGrid, ByteGrid, Grid, SeasonStack
 from climatology.processing.metrics import SEASON_ORIGIN, Metric
 from climatology.viz.colormaps import build_cmap, percentile_range
 
@@ -113,7 +114,7 @@ def build_grid(bounds_geom, res_m: float):
     return transform, height, width, (xmin, ymin, xmax, ymax)
 
 
-def burn(geoms, transform, height: int, width: int) -> np.ndarray:
+def burn(geoms, transform, height: int, width: int) -> ByteGrid:
     """Rasterize shapely geometries to a binary uint8 array (1 = covered)."""
     if len(geoms) == 0:
         return np.zeros((height, width), dtype=np.uint8)
@@ -122,7 +123,7 @@ def burn(geoms, transform, height: int, width: int) -> np.ndarray:
                          transform=transform, fill=0, dtype=np.uint8)
 
 
-def burn_values(geom_value_pairs, transform, height: int, width: int) -> np.ndarray:
+def burn_values(geom_value_pairs, transform, height: int, width: int) -> Grid:
     """Rasterize (geom, value) pairs to a float32 array; NaN where no polygon covers.
 
     Sibling of ``burn`` for metrics that need a value-keyed field (e.g. CT
@@ -186,7 +187,7 @@ def load_polygons(metric: Metric, fetch_geom, *,
     return df.drop(columns="geom_wkt")
 
 
-def build_clip_mask(clip_geom, transform, height: int, width: int) -> np.ndarray:
+def build_clip_mask(clip_geom, transform, height: int, width: int) -> BoolGrid:
     """Binary in-region mask; True where ``clip_geom`` covers the cell centre.
 
     Used to NaN cells outside an adaptive region's defining polygon (the grid
@@ -200,7 +201,7 @@ def build_clip_mask(clip_geom, transform, height: int, width: int) -> np.ndarray
 
 
 def build_land_mask(mask_path: Path, transform, height: int, width: int,
-                    grid_crs: int = GRID_CRS) -> np.ndarray:
+                    grid_crs: int = GRID_CRS) -> BoolGrid:
     """Binary land mask within the grid; True where land covers the cell.
 
     ``mask_path`` is the shared computation land mask (``sources.LAND_MASK_PATH``,
@@ -246,7 +247,7 @@ def _git_state() -> dict:
         return {"git_sha": None, "git_dirty": None}
 
 
-def archive_product(values: np.ndarray, png_path: Path, manifest: dict) -> Path:
+def archive_product(values: Grid, png_path: Path, manifest: dict) -> Path:
     """Persist the product raster + run manifest under ``archive/`` next to the PNG.
 
     The archive is a materialized cache of (code version × parameters) →
@@ -271,7 +272,7 @@ def archive_product(values: np.ndarray, png_path: Path, manifest: dict) -> Path:
     return npz
 
 
-def write_geotiff(values: np.ndarray, transform, *, crs: int, path: Path,
+def write_geotiff(values: Grid, transform, *, crs: int, path: Path,
                   metric: Metric, manifest: dict) -> Path:
     """Write a single-band float32 GeoTIFF of a product raster (one per tier).
 
@@ -316,7 +317,7 @@ def reduce_seasons_stack(
     transform,
     height: int,
     width: int,
-) -> np.ndarray:
+) -> SeasonStack:
     """Apply ``metric.reduce_season`` to each season; stack into (n_seasons, H, W).
 
     Internal helper used by the default ``Metric.compute_climatology``. Metrics
@@ -339,7 +340,7 @@ def reduce_seasons_stack(
     return np.stack(arrays, axis=0)
 
 
-def log_distribution(values: np.ndarray) -> None:
+def log_distribution(values: Grid) -> None:
     """Diagnostic: percentiles + range of a (H, W) result raster."""
     finite = values[np.isfinite(values)]
     if not finite.size:
@@ -352,7 +353,7 @@ def log_distribution(values: np.ndarray) -> None:
 
 
 def plot_metric(
-    layers: list[tuple[np.ndarray, tuple[float, float, float, float]]],
+    layers: list[tuple[Grid, tuple[float, float, float, float]]],
     *,
     metric: Metric,
     png_path: Path,

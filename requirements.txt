@@ -1,5 +1,6 @@
 geopandas
 geoalchemy2
+jaxtyping
 sqlalchemy
 psycopg2-binary
 python-dotenv

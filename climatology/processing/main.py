@@ -29,6 +29,7 @@ import numpy as np
 import pandas as pd
 from dotenv import load_dotenv
 
+from climatology._array_types import Grid
 from climatology.processing.metrics import (
     BreakupDateMetric,
     FirstOccurrenceDateMetric,
@@ -136,7 +137,7 @@ def run(metric_slug: str, region: str, source_slug: str, period: tuple[int, int]
         assert_hd_aligned(df, source)
 
     multi = len(spec.tiers) > 1
-    layers: list[tuple[np.ndarray, tuple[float, float, float, float]]] = []
+    layers: list[tuple[Grid, tuple[float, float, float, float]]] = []
     for tier in spec.tiers:
         transform, h, w, bounds = build_grid(tier.bounds_geom, tier.res_m)
         log.info("Tier '%s': %d × %d cells (%d total) @ %g m",

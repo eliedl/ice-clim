@@ -24,7 +24,9 @@ from typing import Literal
 
 import numpy as np
 import pandas as pd
+from jaxtyping import Float
 
+from climatology._array_types import BoolCube, BoolGrid, DayCube, Grid
 from climatology.services.units_conversion_maps import CONCENTRATION_FRACTION
 
 # Sep-1-anchored day ordinal: day 0 = Sep 1, day 102 = Dec 11, day 259 = May 17.
@@ -44,7 +46,7 @@ def day_of_season(month_day: str) -> int:
     return _ice_season_ordinal(month_day)
 
 
-def _nanmedian_high(a: np.ndarray) -> np.ndarray:
+def _nanmedian_high(a: Float[np.ndarray, "n *rest"]) -> Float[np.ndarray, "*rest"]:
     """Nan-aware upper-middle median along axis 0 (DEC-035).
 
     Exact median for odd sample counts; the *upper* of the two middle values
@@ -94,8 +96,8 @@ def build_daily_median_ct_cube(
     height: int,
     width: int,
     burn_values,
-    land_mask: np.ndarray | None = None,
-) -> np.ndarray:
+    land_mask: BoolGrid | None = None,
+) -> DayCube:
     """Build (n_admissible_days, H, W) median CT cube.
 
     For each admissible calendar day, rasterize each year's (geom, CT)
@@ -149,11 +151,11 @@ def build_daily_median_ct_cube(
 
 
 def extract_event_date(
-    boolean_cube: np.ndarray,
+    boolean_cube: BoolCube,
     *,
     day_ordinals: list[int],
     mode: Literal["first_above", "last_above"],
-) -> np.ndarray:
+) -> Grid:
     """For each (H, W) cell, return the day ordinal of the relevant event.
 
     boolean_cube : (n_days, H, W), typically (median_ct_cube >= threshold).
