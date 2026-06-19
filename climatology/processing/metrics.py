@@ -1,13 +1,13 @@
 """Metric strategies for region-scale climatologies.
 
-Each Metric encapsulates four pieces of metric-specific behaviour:
+Each Metric encapsulates three pieces of metric-specific behaviour:
   1. the SQL needed to pull the right SIGRID3 rows for the metric;
-  2. the per-season reduction (rows for one season -> a (H, W) array);
-  3. the cross-season reduction (a (n_seasons, H, W) stack -> a (H, W) array);
-  4. colorbar tick formatting in the metric's natural units.
+  2. compute_climatology: rows -> (H, W) result raster, via the CIS-aligned
+     median-then-threshold methodology (DEC-027/DEC-035);
+  3. colorbar tick formatting in the metric's natural units.
 
 The pipeline in climatology_pipeline.py is metric-agnostic: it orchestrates
-the four steps without inspecting their content.
+these steps without inspecting their content.
 """
 
 from __future__ import annotations
@@ -19,7 +19,7 @@ from typing import Any
 import numpy as np
 import pandas as pd
 
-from climatology._array_types import BoolGrid, Grid, SeasonStack
+from climatology._array_types import BoolGrid, Grid
 from climatology.services.units_conversion_maps import CONCENTRATION_FRACTION
 
 SEASON_ORIGIN = date(2000, 9, 1)  # any Sep-1; used only to format day-of-season as a calendar label
@@ -74,29 +74,10 @@ class Metric(ABC):
         The pipeline injects ``bbox_wkt`` into the param dict before binding.
         The SQL must yield at minimum ``geom_wkt``, ``obs_date``,
         ``season_start``. Concrete metrics may yield additional columns
-        consumed by ``reduce_season``.
+        consumed by ``compute_climatology``.
         """
 
     @abstractmethod
-    def reduce_season(
-        self,
-        season_df: pd.DataFrame,
-        *,
-        transform,
-        height: int,
-        width: int,
-        burn,
-    ) -> Grid:
-        """Per-season reduction: rows for one season -> (H, W) float array.
-
-        ``burn`` is the pipeline's rasterisation helper; metrics call it on
-        per-date geometry lists to convert polygons to pixel masks.
-        """
-
-    def reduce_cross_season(self, stack: SeasonStack) -> Grid:
-        """Cross-season reduction. Default: nan-aware median."""
-        return np.nanmedian(stack, axis=0)
-
     def compute_climatology(
         self,
         df: pd.DataFrame,
@@ -110,24 +91,16 @@ class Metric(ABC):
     ) -> Grid:
         """End-to-end climatology computation: rows -> (H, W) result raster.
 
-        Default implementation: per-season reduction stacked, then cross-season
-        reduction. Subclasses whose methodology does not factor into
-        per-season + cross-season (e.g. CIS-aligned median-then-threshold,
-        which medians across years per calendar-day before thresholding) may
-        override this method directly and ignore ``reduce_season`` /
-        ``reduce_cross_season``.
+        All current metrics use the CIS-aligned median-then-threshold
+        methodology (DEC-027/DEC-035): they median the CT field across years
+        per calendar-day (``build_daily_median_ct_cube``) before applying the
+        metric's event/count logic. Concrete metrics implement this directly.
 
-        ``burn_values`` is provided for metrics that rasterize value-keyed
-        polygons (e.g. CT-valued fields). Per-season metrics typically only
-        need the binary ``burn``.
-
-        ``land_mask`` (H, W bool, True on land) is provided by the pipeline
-        for metrics that benefit from skipping land cells from intermediate
-        aggregations (median-then-threshold). Per-season metrics ignore it.
+        ``burn_values`` is the pipeline's value-keyed rasterizer (e.g. CT-valued
+        fields); ``burn`` is the binary rasterizer. ``land_mask`` (H, W bool,
+        True on land) lets metrics skip land cells from intermediate
+        aggregations (median-then-threshold).
         """
-        from climatology.processing.pipeline import reduce_seasons_stack
-        stack = reduce_seasons_stack(self, df, transform, height, width)
-        return self.reduce_cross_season(stack)
 
     @abstractmethod
     def format_ticks(self, tick_values: list[float]) -> list[str]:
@@ -173,12 +146,6 @@ class FreezeUpDateMetric(Metric):
         return _all_ct_sql(
             table=table, grid_crs=grid_crs, season_min=season_min, season_max=season_max,
         ), {}
-
-    def reduce_season(self, season_df, *, transform, height, width, burn):
-        raise NotImplementedError(
-            "FreezeUpDateMetric overrides compute_climatology directly "
-            "(median-then-threshold per DEC-027); reduce_season is not used."
-        )
 
     def compute_climatology(self, df, *, transform, height, width, burn, burn_values=None, land_mask=None):
         if burn_values is None:
@@ -253,12 +220,6 @@ class BreakupDateMetric(Metric):
             table=table, grid_crs=grid_crs, season_min=season_min, season_max=season_max,
         ), {}
 
-    def reduce_season(self, season_df, *, transform, height, width, burn):
-        raise NotImplementedError(
-            "BreakupDateMetric overrides compute_climatology directly "
-            "(median-then-threshold per DEC-027); reduce_season is not used."
-        )
-
     def compute_climatology(self, df, *, transform, height, width, burn, burn_values=None, land_mask=None):
         if burn_values is None:
             raise ValueError(
@@ -308,12 +269,6 @@ class FirstOccurrenceDateMetric(Metric):
             table=table, grid_crs=grid_crs, season_min=season_min, season_max=season_max,
         ), {}
 
-    def reduce_season(self, season_df, *, transform, height, width, burn):
-        raise NotImplementedError(
-            "FirstOccurrenceDateMetric overrides compute_climatology directly "
-            "(median-then-threshold per DEC-027); reduce_season is not used."
-        )
-
     def compute_climatology(self, df, *, transform, height, width, burn, burn_values=None, land_mask=None):
         if burn_values is None:
             raise ValueError(
@@ -362,12 +317,6 @@ class LastOccurrenceDateMetric(Metric):
         return _all_ct_sql(
             table=table, grid_crs=grid_crs, season_min=season_min, season_max=season_max,
         ), {}
-
-    def reduce_season(self, season_df, *, transform, height, width, burn):
-        raise NotImplementedError(
-            "LastOccurrenceDateMetric overrides compute_climatology directly "
-            "(median-then-threshold per DEC-027); reduce_season is not used."
-        )
 
     def compute_climatology(self, df, *, transform, height, width, burn, burn_values=None, land_mask=None):
         if burn_values is None:
@@ -432,12 +381,6 @@ class SeasonDurationMetric(Metric):
         return _all_ct_sql(
             table=table, grid_crs=grid_crs, season_min=season_min, season_max=season_max,
         ), {}
-
-    def reduce_season(self, season_df, *, transform, height, width, burn):
-        raise NotImplementedError(
-            "SeasonDurationMetric overrides compute_climatology directly "
-            "(median-then-threshold per DEC-027); reduce_season is not used."
-        )
 
     def compute_climatology(self, df, *, transform, height, width, burn, burn_values=None, land_mask=None):
         if burn_values is None:
@@ -505,12 +448,6 @@ class StormExposureDurationMetric(Metric):
         return _all_ct_sql(
             table=table, grid_crs=grid_crs, season_min=season_min, season_max=season_max,
         ), {}
-
-    def reduce_season(self, season_df, *, transform, height, width, burn):
-        raise NotImplementedError(
-            "StormExposureDurationMetric overrides compute_climatology directly "
-            "(median-then-threshold per DEC-027); reduce_season is not used."
-        )
 
     def compute_climatology(self, df, *, transform, height, width, burn, burn_values=None, land_mask=None):
         if burn_values is None:

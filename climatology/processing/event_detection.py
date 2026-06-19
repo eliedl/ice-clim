@@ -26,7 +26,7 @@ import numpy as np
 import pandas as pd
 from jaxtyping import Float
 
-from climatology._array_types import BoolCube, BoolGrid, DayCube, Grid
+from climatology._array_types import BoolCube, BoolGrid, DataCube, Grid
 from climatology.services.units_conversion_maps import CONCENTRATION_FRACTION
 
 # Sep-1-anchored day ordinal: day 0 = Sep 1, day 102 = Dec 11, day 259 = May 17.
@@ -97,7 +97,7 @@ def build_daily_median_ct_cube(
     width: int,
     burn_values,
     land_mask: BoolGrid | None = None,
-) -> DayCube:
+) -> DataCube:
     """Build (n_admissible_days, H, W) median CT cube.
 
     For each admissible calendar day, rasterize each year's (geom, CT)

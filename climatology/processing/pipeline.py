@@ -27,7 +27,7 @@ from shapely import wkt
 from shapely.geometry import box
 from sqlalchemy import create_engine, text
 
-from climatology._array_types import BoolGrid, ByteGrid, Grid, SeasonStack
+from climatology._array_types import BoolGrid, ByteGrid, Grid
 from climatology.processing.metrics import SEASON_ORIGIN, Metric
 from climatology.viz.colormaps import build_cmap, percentile_range
 
@@ -309,35 +309,6 @@ def write_geotiff(values: Grid, transform, *, crs: int, path: Path,
         dst.update_tags(**{k: str(v) for k, v in tags.items()})
     log.info("GeoTIFF saved to %s", path)
     return path
-
-
-def reduce_seasons_stack(
-    metric: Metric,
-    df: pd.DataFrame,
-    transform,
-    height: int,
-    width: int,
-) -> SeasonStack:
-    """Apply ``metric.reduce_season`` to each season; stack into (n_seasons, H, W).
-
-    Internal helper used by the default ``Metric.compute_climatology``. Metrics
-    that override ``compute_climatology`` (CIS-aligned median-then-threshold)
-    bypass this entirely.
-    """
-    seasons = sorted(df["season_start"].unique())
-    log.info("Processing %d seasons...", len(seasons))
-    arrays = []
-    for season_start in seasons:
-        sdf = df[df["season_start"] == season_start]
-        arr = metric.reduce_season(
-            sdf, transform=transform, height=height, width=width, burn=burn,
-        )
-        n_cells = int(np.sum(~np.isnan(arr)))
-        log.info("  Season %s (winter %d): %d dates, %s cells",
-                 season_start, season_start.year + 1,
-                 sdf["obs_date"].nunique(), f"{n_cells:,}")
-        arrays.append(arr)
-    return np.stack(arrays, axis=0)
 
 
 def log_distribution(values: Grid) -> None:

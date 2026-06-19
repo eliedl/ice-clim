@@ -8,7 +8,6 @@ shape prose out of the docstrings.
 
 Dimension vocabulary
   H, W        grid height / width (cells)
-  n_seasons   winter seasons in the climatology period
   n_days      admissible calendar days (WMO 80% mask)
   n_years     years contributing to one calendar day
 
@@ -26,6 +25,5 @@ BoolGrid = Bool[np.ndarray, "H W"]   # land / clip masks (True = land / in-domai
 ByteGrid = UInt8[np.ndarray, "H W"]  # burn() binary coverage (1 = covered)
 
 # stacks / cubes (axis 0 = the reduced sample axis)
-SeasonStack = Float[np.ndarray, "n_seasons H W"]  # per-season reductions
-DayCube = Float[np.ndarray, "n_days H W"]          # daily median CT field
+DataCube = Float[np.ndarray, "n_days H W"]          # daily median CT field
 BoolCube = Bool[np.ndarray, "n_days H W"]          # thresholded cube
