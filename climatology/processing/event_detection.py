@@ -34,16 +34,16 @@ from climatology.services.units_conversion_maps import CONCENTRATION_FRACTION
 SEASON_ORIGIN = date(2000, 9, 1)
 
 
-def _ice_season_ordinal(month_day: str) -> int:
-    """Sort key for ice-season order. "12-11" precedes "01-01"."""
+def day_of_season(month_day: str) -> int:
+    """Sep-1-anchored day ordinal for an "MM-DD" string.
+
+    Day 0 = Sep 1, 102 = Dec 11, 259 = May 17. Doubles as the ice-season sort
+    key ("12-11" precedes "01-01") and as the cube's day-axis value (decoded
+    back to a calendar label via SEASON_ORIGIN in metrics.format_ticks).
+    """
     m, d = int(month_day[:2]), int(month_day[3:5])
     year = 2001 if m >= 9 else 2002
     return (date(year, m, d) - date(2001, 9, 1)).days
-
-
-def day_of_season(month_day: str) -> int:
-    """Day ordinal from SEASON_ORIGIN. Suitable for the colorbar tick formatter."""
-    return _ice_season_ordinal(month_day)
 
 
 def winter_season(obs_date: pd.Series) -> pd.Series:
@@ -101,7 +101,7 @@ def admissible_days_of_season(df: pd.DataFrame, *, coverage: float = 0.8) -> lis
     min_seasons = int(np.ceil(coverage * n_seasons))
     coverage_per_date = df.groupby("month_day")["season"].nunique()
     admissible = coverage_per_date[coverage_per_date >= min_seasons].index.tolist()
-    return sorted(admissible, key=_ice_season_ordinal)
+    return sorted(admissible, key=day_of_season)
 
 
 def build_median_ct_cube(
