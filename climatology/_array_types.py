@@ -16,14 +16,13 @@ The axis-0 reducer ``_nanmedian_high`` is deliberately annotated inline
 once, and the shared ``*rest`` symbol — the collapse relationship — only reads
 clearly when both ends sit in the same signature.
 """
-from jaxtyping import Bool, Float, UInt8
+from jaxtyping import Bool, Float
 import numpy as np
 
-# full-grid rasters (H, W)
-Grid = Float[np.ndarray, "H W"]      # float32 result raster; NaN = nodata
-BoolGrid = Bool[np.ndarray, "H W"]   # land / clip masks (True = land / in-domain)
-ByteGrid = UInt8[np.ndarray, "H W"]  # burn() binary coverage (1 = covered)
+# rasters (H, W)
+DataGrid = Float[np.ndarray, "H W"]         # float32 result raster; NaN = nodata
+BoolGrid = Bool[np.ndarray, "H W"]          # land / clip masks (True = land / in-domain)
 
-# stacks / cubes (axis 0 = the reduced sample axis)
-DataCube = Float[np.ndarray, "n_days H W"]          # daily median CT field
-BoolCube = Bool[np.ndarray, "n_days H W"]          # thresholded cube
+# climatological cubes
+DataCube = Float[np.ndarray, "n_days H W"]   # daily median CT field
+BoolCube = Bool[np.ndarray, "n_days H W"]    # thresholded cube

@@ -26,7 +26,7 @@ import numpy as np
 import pandas as pd
 from jaxtyping import Float
 
-from climatology._array_types import BoolCube, BoolGrid, DataCube, Grid
+from climatology._array_types import BoolCube, BoolGrid, DataCube, DataGrid
 from climatology.services.units_conversion_maps import CONCENTRATION_FRACTION
 
 # Sep-1-anchored day ordinal: day 0 = Sep 1, day 102 = Dec 11, day 259 = May 17.
@@ -155,7 +155,7 @@ def extract_event_date(
     *,
     day_ordinals: list[int],
     mode: Literal["first_above", "last_above"],
-) -> Grid:
+) -> DataGrid:
     """For each (H, W) cell, return the day ordinal of the relevant event.
 
     boolean_cube : (n_days, H, W), typically (median_ct_cube >= threshold).

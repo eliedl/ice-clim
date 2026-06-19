@@ -27,7 +27,7 @@ from shapely import wkt
 from shapely.geometry import box
 from sqlalchemy import create_engine, text
 
-from climatology._array_types import BoolGrid, ByteGrid, Grid
+from climatology._array_types import BoolGrid, DataGrid
 from climatology.processing.metrics import SEASON_ORIGIN, Metric
 from climatology.viz.colormaps import build_cmap, percentile_range
 
@@ -114,19 +114,24 @@ def build_grid(bounds_geom, res_m: float):
     return transform, height, width, (xmin, ymin, xmax, ymax)
 
 
-def burn(geoms, transform, height: int, width: int) -> ByteGrid:
-    """Rasterize shapely geometries to a binary uint8 array (1 = covered)."""
+def burn_mask(geoms, transform, height: int, width: int) -> BoolGrid:
+    """Rasterize shapely geometries to a binary coverage mask (True = covered).
+
+    Sibling of ``burn_values``: same rasterize call, but ``fill=0`` (not NaN)
+    so uncovered cells read False. The uint8 raster is transient — cast to bool
+    here so callers never handle the intermediate dtype.
+    """
     if len(geoms) == 0:
-        return np.zeros((height, width), dtype=np.uint8)
+        return np.zeros((height, width), dtype=bool)
     shapes = [(g.__geo_interface__, 1) for g in geoms]
     return rio_rasterize(shapes, out_shape=(height, width),
-                         transform=transform, fill=0, dtype=np.uint8)
+                         transform=transform, fill=0, dtype=np.uint8).astype(bool)
 
 
-def burn_values(geom_value_pairs, transform, height: int, width: int) -> Grid:
+def burn_values(geom_value_pairs, transform, height: int, width: int) -> DataGrid:
     """Rasterize (geom, value) pairs to a float32 array; NaN where no polygon covers.
 
-    Sibling of ``burn`` for metrics that need a value-keyed field (e.g. CT
+    Sibling of ``burn_mask`` for metrics that need a value-keyed field (e.g. CT
     fractions) rather than a binary coverage mask. Used by median-then-
     threshold metrics that build a daily median field across years before
     extracting event dates (DEC-027).
@@ -197,7 +202,7 @@ def build_clip_mask(clip_geom, transform, height: int, width: int) -> BoolGrid:
     """
     if clip_geom is None:
         return np.ones((height, width), dtype=bool)
-    return burn([clip_geom], transform, height, width).astype(bool)
+    return burn_mask([clip_geom], transform, height, width)
 
 
 def build_land_mask(mask_path: Path, transform, height: int, width: int,
@@ -227,7 +232,7 @@ def build_land_mask(mask_path: Path, transform, height: int, width: int,
     # to avoid loading whole-domain polygons when only a few intersect any
     # single region.
     land_gdf = gpd.read_file(mask_path).to_crs(epsg=grid_crs)
-    mask = burn(land_gdf.geometry.tolist(), transform, height, width).astype(bool)
+    mask = burn_mask(land_gdf.geometry.tolist(), transform, height, width)
     log.info("Land mask: %s / %s cells (%.1f%%)",
              f"{int(mask.sum()):,}", f"{height * width:,}",
              100.0 * mask.sum() / (height * width))
@@ -247,7 +252,7 @@ def _git_state() -> dict:
         return {"git_sha": None, "git_dirty": None}
 
 
-def archive_product(values: Grid, png_path: Path, manifest: dict) -> Path:
+def archive_product(values: DataGrid, png_path: Path, manifest: dict) -> Path:
     """Persist the product raster + run manifest under ``archive/`` next to the PNG.
 
     The archive is a materialized cache of (code version × parameters) →
@@ -272,7 +277,7 @@ def archive_product(values: Grid, png_path: Path, manifest: dict) -> Path:
     return npz
 
 
-def write_geotiff(values: Grid, transform, *, crs: int, path: Path,
+def write_geotiff(values: DataGrid, transform, *, crs: int, path: Path,
                   metric: Metric, manifest: dict) -> Path:
     """Write a single-band float32 GeoTIFF of a product raster (one per tier).
 
@@ -311,7 +316,7 @@ def write_geotiff(values: Grid, transform, *, crs: int, path: Path,
     return path
 
 
-def log_distribution(values: Grid) -> None:
+def log_distribution(values: DataGrid) -> None:
     """Diagnostic: percentiles + range of a (H, W) result raster."""
     finite = values[np.isfinite(values)]
     if not finite.size:
@@ -324,7 +329,7 @@ def log_distribution(values: Grid) -> None:
 
 
 def plot_metric(
-    layers: list[tuple[Grid, tuple[float, float, float, float]]],
+    layers: list[tuple[DataGrid, tuple[float, float, float, float]]],
     *,
     metric: Metric,
     png_path: Path,

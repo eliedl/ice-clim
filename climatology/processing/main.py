@@ -29,7 +29,7 @@ import numpy as np
 import pandas as pd
 from dotenv import load_dotenv
 
-from climatology._array_types import Grid
+from climatology._array_types import DataGrid
 from climatology.processing.metrics import (
     BreakupDateMetric,
     FirstOccurrenceDateMetric,
@@ -44,7 +44,7 @@ from climatology.processing.pipeline import (
     build_clip_mask,
     build_grid,
     build_land_mask,
-    burn,
+    burn_mask,
     burn_values,
     load_polygons,
     log_distribution,
@@ -137,7 +137,7 @@ def run(metric_slug: str, region: str, source_slug: str, period: tuple[int, int]
         assert_hd_aligned(df, source)
 
     multi = len(spec.tiers) > 1
-    layers: list[tuple[Grid, tuple[float, float, float, float]]] = []
+    layers: list[tuple[DataGrid, tuple[float, float, float, float]]] = []
     for tier in spec.tiers:
         transform, h, w, bounds = build_grid(tier.bounds_geom, tier.res_m)
         log.info("Tier '%s': %d × %d cells (%d total) @ %g m",
@@ -148,7 +148,7 @@ def run(metric_slug: str, region: str, source_slug: str, period: tuple[int, int]
 
         values = metric.compute_climatology(
             df, transform=transform, height=h, width=w,
-            burn=burn, burn_values=burn_values, land_mask=land_mask,
+            burn=burn_mask, burn_values=burn_values, land_mask=land_mask,
         )
         values[~clip_mask] = np.nan
         log.info("  Tier '%s' cells with data: %s / %s", tier.name,

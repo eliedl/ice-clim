@@ -19,7 +19,7 @@ from typing import Any
 import numpy as np
 import pandas as pd
 
-from climatology._array_types import BoolGrid, Grid
+from climatology._array_types import BoolGrid, DataGrid
 from climatology.services.units_conversion_maps import CONCENTRATION_FRACTION
 
 SEASON_ORIGIN = date(2000, 9, 1)  # any Sep-1; used only to format day-of-season as a calendar label
@@ -88,7 +88,7 @@ class Metric(ABC):
         burn,
         burn_values=None,
         land_mask: BoolGrid | None = None,
-    ) -> Grid:
+    ) -> DataGrid:
         """End-to-end climatology computation: rows -> (H, W) result raster.
 
         All current metrics use the CIS-aligned median-then-threshold
