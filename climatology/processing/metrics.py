@@ -87,8 +87,6 @@ class Metric(ABC):
         transform,
         height: int,
         width: int,
-        burn,
-        burn_values=None,
         land_mask: BoolGrid | None = None,
     ) -> DataGrid:
         """End-to-end climatology computation: rows -> (H, W) result raster.
@@ -98,10 +96,8 @@ class Metric(ABC):
         per calendar-day (``build_median_ct_cube``) before applying the
         metric's event/count logic. Concrete metrics implement this directly.
 
-        ``burn_values`` is the pipeline's value-keyed rasterizer (e.g. CT-valued
-        fields); ``burn`` is the binary rasterizer. ``land_mask`` (H, W bool,
-        True on land) lets metrics skip land cells from intermediate
-        aggregations (median-then-threshold).
+        ``land_mask`` (H, W bool, True on land) lets metrics skip land cells
+        from intermediate aggregations (median-then-threshold).
         """
 
     @abstractmethod
@@ -151,12 +147,7 @@ class FreezeUpDateMetric(Metric):
             climatology_end_date=climatology_end_date,
         ), {}
 
-    def compute_climatology(self, df, *, transform, height, width, burn, burn_values=None, land_mask=None):
-        if burn_values is None:
-            raise ValueError(
-                "FreezeUpDateMetric.compute_climatology requires burn_values "
-                "(value-keyed rasterizer) from the pipeline."
-            )
+    def compute_climatology(self, df, *, transform, height, width, land_mask=None):
         from climatology.processing.event_detection import (
             admissible_days_of_season,
             build_median_ct_cube,
@@ -167,7 +158,7 @@ class FreezeUpDateMetric(Metric):
         cube = build_median_ct_cube(
             df, admissible_days=days,
             transform=transform, height=height, width=width,
-            burn_values=burn_values, land_mask=land_mask,
+            land_mask=land_mask,
         )
         bool_cube = cube >= self.ct_threshold
         day_ordinals = [day_of_season(d) for d in days]
@@ -226,12 +217,7 @@ class BreakupDateMetric(Metric):
             climatology_end_date=climatology_end_date,
         ), {}
 
-    def compute_climatology(self, df, *, transform, height, width, burn, burn_values=None, land_mask=None):
-        if burn_values is None:
-            raise ValueError(
-                "BreakupDateMetric.compute_climatology requires burn_values "
-                "(value-keyed rasterizer) from the pipeline."
-            )
+    def compute_climatology(self, df, *, transform, height, width, land_mask=None):
         from climatology.processing.event_detection import (
             admissible_days_of_season,
             build_median_ct_cube,
@@ -242,7 +228,7 @@ class BreakupDateMetric(Metric):
         cube = build_median_ct_cube(
             df, admissible_days=days,
             transform=transform, height=height, width=width,
-            burn_values=burn_values, land_mask=land_mask,
+            land_mask=land_mask,
         )
         bool_cube = cube >= self.ct_threshold
         day_ordinals = [day_of_season(d) for d in days]
@@ -277,12 +263,7 @@ class FirstOccurrenceDateMetric(Metric):
             climatology_end_date=climatology_end_date,
         ), {}
 
-    def compute_climatology(self, df, *, transform, height, width, burn, burn_values=None, land_mask=None):
-        if burn_values is None:
-            raise ValueError(
-                "FirstOccurrenceDateMetric.compute_climatology requires burn_values "
-                "(value-keyed rasterizer) from the pipeline."
-            )
+    def compute_climatology(self, df, *, transform, height, width, land_mask=None):
         from climatology.processing.event_detection import (
             admissible_days_of_season,
             build_median_ct_cube,
@@ -293,7 +274,7 @@ class FirstOccurrenceDateMetric(Metric):
         cube = build_median_ct_cube(
             df, admissible_days=days,
             transform=transform, height=height, width=width,
-            burn_values=burn_values, land_mask=land_mask,
+            land_mask=land_mask,
         )
         bool_cube = cube >= self.ct_threshold
         day_ordinals = [day_of_season(d) for d in days]
@@ -328,12 +309,7 @@ class LastOccurrenceDateMetric(Metric):
             climatology_end_date=climatology_end_date,
         ), {}
 
-    def compute_climatology(self, df, *, transform, height, width, burn, burn_values=None, land_mask=None):
-        if burn_values is None:
-            raise ValueError(
-                "LastOccurrenceDateMetric.compute_climatology requires burn_values "
-                "(value-keyed rasterizer) from the pipeline."
-            )
+    def compute_climatology(self, df, *, transform, height, width, land_mask=None):
         from climatology.processing.event_detection import (
             admissible_days_of_season,
             build_median_ct_cube,
@@ -344,7 +320,7 @@ class LastOccurrenceDateMetric(Metric):
         cube = build_median_ct_cube(
             df, admissible_days=days,
             transform=transform, height=height, width=width,
-            burn_values=burn_values, land_mask=land_mask,
+            land_mask=land_mask,
         )
         bool_cube = cube >= self.ct_threshold
         day_ordinals = [day_of_season(d) for d in days]
@@ -394,12 +370,7 @@ class SeasonDurationMetric(Metric):
             climatology_end_date=climatology_end_date,
         ), {}
 
-    def compute_climatology(self, df, *, transform, height, width, burn, burn_values=None, land_mask=None):
-        if burn_values is None:
-            raise ValueError(
-                "SeasonDurationMetric.compute_climatology requires burn_values "
-                "(value-keyed rasterizer) from the pipeline."
-            )
+    def compute_climatology(self, df, *, transform, height, width, land_mask=None):
         from climatology.processing.event_detection import (
             admissible_days_of_season,
             build_median_ct_cube,
@@ -408,7 +379,7 @@ class SeasonDurationMetric(Metric):
         cube = build_median_ct_cube(
             df, admissible_days=days,
             transform=transform, height=height, width=width,
-            burn_values=burn_values, land_mask=land_mask,
+            land_mask=land_mask,
         )
         duration = np.sum(cube >= self.ct_threshold, axis=0).astype(np.float32)
         never_observed = np.all(np.isnan(cube), axis=0)
@@ -463,12 +434,7 @@ class StormExposureDurationMetric(Metric):
             climatology_end_date=climatology_end_date,
         ), {}
 
-    def compute_climatology(self, df, *, transform, height, width, burn, burn_values=None, land_mask=None):
-        if burn_values is None:
-            raise ValueError(
-                "StormExposureDurationMetric.compute_climatology requires burn_values "
-                "(value-keyed rasterizer) from the pipeline."
-            )
+    def compute_climatology(self, df, *, transform, height, width, land_mask=None):
         from climatology.processing.event_detection import (
             admissible_days_of_season,
             build_median_ct_cube,
@@ -477,7 +443,7 @@ class StormExposureDurationMetric(Metric):
         cube = build_median_ct_cube(
             df, admissible_days=days,
             transform=transform, height=height, width=width,
-            burn_values=burn_values, land_mask=land_mask,
+            land_mask=land_mask,
         )
         # NaN cells (no data that day) compare False against the threshold and
         # are not counted; perennially ice-covered cells -> 0; open water -> full.

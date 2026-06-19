@@ -27,23 +27,25 @@ import pandas as pd
 from jaxtyping import Float
 
 from climatology._array_types import BoolCube, BoolGrid, DataCube, DataGrid
+from climatology.processing.rasterize import burn_values
 from climatology.services.units_conversion_maps import CONCENTRATION_FRACTION
-
-# Sep-1-anchored day ordinal: day 0 = Sep 1, day 102 = Dec 11, day 259 = May 17.
-# Matches the existing colorbar tick formatter in metrics.py.
-SEASON_ORIGIN = date(2000, 9, 1)
 
 
 def day_of_season(month_day: str) -> int:
     """Sep-1-anchored day ordinal for an "MM-DD" string.
 
-    Day 0 = Sep 1, 102 = Dec 11, 259 = May 17. Doubles as the ice-season sort
+    Day 0 = Sep 1, 101 = Dec 11, 258 = May 17. Doubles as the ice-season sort
     key ("12-11" precedes "01-01") and as the cube's day-axis value (decoded
     back to a calendar label via SEASON_ORIGIN in metrics.format_ticks).
     """
     m, d = int(month_day[:2]), int(month_day[3:5])
-    year = 2001 if m >= 9 else 2002
-    return (date(year, m, d) - date(2001, 9, 1)).days
+    # The *winter* year (Jan-Aug) must be non-leap: a leap winter puts Feb 29
+    # inside the Sep->Aug span, shifting every Mar 1+ ordinal by +1. 2001 is
+    # non-leap. The fall year being leap (2000) is irrelevant — we measure
+    # distance *from* Sep 1, so its Feb 29 sits upstream of the origin and
+    # cancels in the subtraction. Origin matches SEASON_ORIGIN in metrics.py.
+    year = 2000 if m >= 9 else 2001
+    return (date(year, m, d) - date(2000, 9, 1)).days
 
 
 def winter_season(obs_date: pd.Series) -> pd.Series:
@@ -111,7 +113,6 @@ def build_median_ct_cube(
     transform,
     height: int,
     width: int,
-    burn_values,
     land_mask: BoolGrid | None = None,
 ) -> DataCube:
     """Build (n_admissible_days, H, W) median CT cube.

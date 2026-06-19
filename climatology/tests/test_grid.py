@@ -21,7 +21,7 @@ import numpy as np
 from rasterio.transform import from_bounds
 from shapely.geometry import box
 
-from climatology.processing.pipeline import build_clip_mask, build_grid
+from climatology.processing.rasterize import build_clip_mask, build_grid
 
 
 def test_build_grid_cell_count_math():

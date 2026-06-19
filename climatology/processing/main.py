@@ -42,17 +42,17 @@ from climatology.processing.metrics import (
 )
 from climatology.processing.pipeline import (
     archive_product,
-    build_clip_mask,
-    build_grid,
-    build_land_mask,
-    burn_mask,
-    burn_values,
     load_polygons,
     log_distribution,
     output_geotiff,
     output_png,
     plot_metric,
     write_geotiff,
+)
+from climatology.processing.rasterize import (
+    build_clip_mask,
+    build_grid,
+    build_land_mask,
 )
 from climatology.processing.regions import REGION_SLUGS, resolve_region
 from climatology.processing.sources import CHART_TABLES, LAND_MASK_PATH, ChartTable
@@ -156,7 +156,7 @@ def run(metric_slug: str, region: str, source_slug: str, period: tuple[int, int]
 
         values = metric.compute_climatology(
             df, transform=transform, height=h, width=w,
-            burn=burn_mask, burn_values=burn_values, land_mask=land_mask,
+            land_mask=land_mask,
         )
         values[~clip_mask] = np.nan
         log.info("  Tier '%s' cells with data: %s / %s", tier.name,

@@ -26,7 +26,6 @@ from climatology.processing.metrics import (
     SeasonDurationMetric,
     StormExposureDurationMetric,
 )
-from climatology.processing.pipeline import burn_mask, burn_values
 
 
 def _duration_fixture():
@@ -54,7 +53,7 @@ def test_season_duration_median_then_threshold():
     df, transform = _duration_fixture()
     out = SeasonDurationMetric().compute_climatology(
         df, transform=transform, height=4, width=4,
-        burn=burn_mask, burn_values=burn_values, land_mask=None,
+        land_mask=None,
     )
     assert np.all(out[:, :2] == 2), "ice on both HDs must count 2"
     assert np.all(out[:, 2:] == 0), "observed ice-free water must count 0"
@@ -67,7 +66,7 @@ def test_season_duration_land_mask_nan():
     land[0, :] = True
     out = SeasonDurationMetric().compute_climatology(
         df, transform=transform, height=4, width=4,
-        burn=burn_mask, burn_values=burn_values, land_mask=land,
+        land_mask=land,
     )
     assert np.all(np.isnan(out[0, :])), "land row must be NaN"
     assert np.all(out[1:, :2] == 2) and np.all(out[1:, 2:] == 0), \
@@ -85,7 +84,7 @@ def test_storm_exposure_inverse_threshold():
     df, transform = _duration_fixture()
     out = StormExposureDurationMetric().compute_climatology(
         df, transform=transform, height=4, width=4,
-        burn=burn_mask, burn_values=burn_values, land_mask=None,
+        land_mask=None,
     )
     assert np.all(out[:, :2] == 0), "compact ice must never count as exposed"
     assert np.all(out[:, 2:] == 1), "observed open water counts; unobserved step does not"
@@ -98,7 +97,7 @@ def test_storm_exposure_land_mask_nan():
     land[0, :] = True
     out = StormExposureDurationMetric().compute_climatology(
         df, transform=transform, height=4, width=4,
-        burn=burn_mask, burn_values=burn_values, land_mask=land,
+        land_mask=land,
     )
     assert np.all(np.isnan(out[0, :])), "land row must be NaN"
     assert np.all(out[1:, :2] == 0) and np.all(out[1:, 2:] == 1), \
