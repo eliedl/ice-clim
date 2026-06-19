@@ -3,7 +3,8 @@
 Helpers for the median-then-threshold methodology used by FreezeUpDateMetric
 and BreakupDateMetric (DEC-027). Given polygon rows over a climatology period,
 build a (n_admissible_days, H, W) cube of medianed CT fractions and extract
-per-cell event dates (first day above threshold, last day above threshold).
+per-cell event dates (first day above threshold, last day above threshold, sum 
+of days above/below threshold).
 
 Generic enough to reuse for any future metric of the form "first/last day in
 the admissible window where the medianed field satisfies condition X". The
@@ -105,7 +106,7 @@ def build_daily_median_ct_cube(
     CT codes are parsed to fractions via CONCENTRATION_FRACTION (single source
     of truth).
     Unmapped codes drop out as NaN and are excluded from the year's
-    contribution to the median.
+    contribution to the median (should not happen since CONCENTRATION_FRACTION was derived from probe 003).
 
     If ``land_mask`` is provided, the nan-median is computed only over the
     water (non-land) subset of cells, and land cells are initialized to NaN.
@@ -123,30 +124,27 @@ def build_daily_median_ct_cube(
     not_land = ~land_mask if land_mask is not None else None
 
     cube_slices = []
-    with warnings.catch_warnings():
-        # Residual All-NaN slices can occur at chart-coverage edges even
-        # outside land; they correctly produce NaN. Silence the noise.
-        warnings.filterwarnings(
-            "ignore", message="All-NaN slice encountered", category=RuntimeWarning,
-        )
-        for md in admissible_days:
-            day_df = df[df["month_day"] == md]
-            years = sorted(day_df["year"].unique())
-            year_rasters = [
-                burn_values(
-                    list(zip(day_df.loc[day_df["year"] == y, "geometry"],
-                             day_df.loc[day_df["year"] == y, "ct"])),
-                    transform, height, width,
-                )
-                for y in years
-            ]
-            stack = np.stack(year_rasters, axis=0)
-            if not_land is not None:
-                median_slice = np.full((height, width), np.nan, dtype=np.float32)
-                median_slice[not_land] = _nanmedian_high(stack[:, not_land])
-            else:
-                median_slice = _nanmedian_high(stack)
-            cube_slices.append(median_slice)
+    
+    for md in admissible_days:
+        day_df = df[df["month_day"] == md]
+        years = sorted(day_df["year"].unique())
+        year_rasters = [
+            burn_values(
+                list(zip(day_df.loc[day_df["year"] == y, "geometry"],
+                            day_df.loc[day_df["year"] == y, "ct"])),
+                transform, height, width,
+            )
+            for y in years
+        ]
+        stack = np.stack(year_rasters, axis=0)
+        if not_land is not None:
+            median_slice = np.full((height, width), np.nan, dtype=np.float32)
+            median_slice[not_land] = _nanmedian_high(stack[:, not_land])
+        else:
+            median_slice = _nanmedian_high(stack)
+        
+        cube_slices.append(median_slice)
+        
     return np.stack(cube_slices, axis=0)
 
 
