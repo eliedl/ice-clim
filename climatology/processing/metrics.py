@@ -20,45 +20,10 @@ import numpy as np
 import pandas as pd
 
 from climatology._array_types import BoolGrid, DataGrid
+from climatology.processing.db import all_ct_sql
 from climatology.services.units_conversion_maps import CONCENTRATION_FRACTION
 
 SEASON_ORIGIN = date(2000, 9, 1)  # any Sep-1; used only to format day-of-season as a calendar label
-
-
-def _all_ct_sql(*, table: str, grid_crs: int,
-                climatology_start_date: str, climatology_end_date: str) -> str:
-    """All ice and water SIGRID3 polygons inside the bbox over the climatology window.
-
-    No CT pre-filter — the median-then-threshold methodology needs every
-    observed CT value (including 0 from water polygons) to compute an
-    unbiased median across seasons. CT is returned as the raw SIGRID3 code;
-    parsing to a fraction happens in Python via CONCENTRATION_FRACTION
-    (single source of truth at services/units_conversion_maps.py).
-
-    The climatology window is a **half-open ``T1`` date range**
-    [climatology_start_date, climatology_end_date): the caller
-    (``climatology_date_window`` in main.py) maps a winter-year period to its
-    Sep-1 bounds. Season *identity* is a Python concern
-    (``event_detection.winter_season``), so the SQL stays a plain date-range
-    fetch with no fall/winter anchoring logic in DML.
-
-    POLY_TYPE filter:
-      - 'I' (ice)   -> CT > 0
-      - 'W' (water) -> CT = 0  (must contribute to the median, else upward bias)
-      - 'N' (no data), 'L' (land), NULL -> excluded
-    """
-    return f"""
-        SELECT
-            ST_AsText(ST_Transform(geometry, {grid_crs})) AS geom_wkt,
-            "T1"::date AS obs_date,
-            "CT" AS ct_code
-        FROM {table}
-        WHERE "POLY_TYPE" IN ('I', 'W')
-          AND ST_Intersects(geometry, ST_GeomFromText(:bbox_wkt, 4326))
-          AND "T1" >= '{climatology_start_date}'
-          AND "T1" <  '{climatology_end_date}'
-        ORDER BY obs_date;
-    """
 
 
 class Metric(ABC):
@@ -141,7 +106,7 @@ class FreezeUpDateMetric(Metric):
     ct_threshold = 0.4
 
     def sql(self, *, table, grid_crs, climatology_start_date, climatology_end_date):
-        return _all_ct_sql(
+        return all_ct_sql(
             table=table, grid_crs=grid_crs,
             climatology_start_date=climatology_start_date,
             climatology_end_date=climatology_end_date,
@@ -211,7 +176,7 @@ class BreakupDateMetric(Metric):
     ct_threshold = 0.4
 
     def sql(self, *, table, grid_crs, climatology_start_date, climatology_end_date):
-        return _all_ct_sql(
+        return all_ct_sql(
             table=table, grid_crs=grid_crs,
             climatology_start_date=climatology_start_date,
             climatology_end_date=climatology_end_date,
@@ -257,7 +222,7 @@ class FirstOccurrenceDateMetric(Metric):
     ct_threshold = 0.1
 
     def sql(self, *, table, grid_crs, climatology_start_date, climatology_end_date):
-        return _all_ct_sql(
+        return all_ct_sql(
             table=table, grid_crs=grid_crs,
             climatology_start_date=climatology_start_date,
             climatology_end_date=climatology_end_date,
@@ -303,7 +268,7 @@ class LastOccurrenceDateMetric(Metric):
     ct_threshold = 0.1
 
     def sql(self, *, table, grid_crs, climatology_start_date, climatology_end_date):
-        return _all_ct_sql(
+        return all_ct_sql(
             table=table, grid_crs=grid_crs,
             climatology_start_date=climatology_start_date,
             climatology_end_date=climatology_end_date,
@@ -364,7 +329,7 @@ class SeasonDurationMetric(Metric):
     ct_threshold = 0.4
 
     def sql(self, *, table, grid_crs, climatology_start_date, climatology_end_date):
-        return _all_ct_sql(
+        return all_ct_sql(
             table=table, grid_crs=grid_crs,
             climatology_start_date=climatology_start_date,
             climatology_end_date=climatology_end_date,
@@ -428,7 +393,7 @@ class StormExposureDurationMetric(Metric):
     exposure_threshold = 0.3
 
     def sql(self, *, table, grid_crs, climatology_start_date, climatology_end_date):
-        return _all_ct_sql(
+        return all_ct_sql(
             table=table, grid_crs=grid_crs,
             climatology_start_date=climatology_start_date,
             climatology_end_date=climatology_end_date,

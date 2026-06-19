@@ -9,21 +9,16 @@ from __future__ import annotations
 
 import json
 import logging
-import os
 import subprocess
-import sys
 from datetime import datetime
 from pathlib import Path
 
 import geopandas as gpd
 import matplotlib.pyplot as plt
 import numpy as np
-import pandas as pd
 import rasterio
 from rasterio.crs import CRS
-from shapely import wkt
 from shapely.geometry import box
-from sqlalchemy import create_engine, text
 
 from climatology._array_types import DataGrid
 from climatology.processing.metrics import SEASON_ORIGIN, Metric
@@ -84,67 +79,6 @@ def output_geotiff(slug: str, metric_slug: str, *, period_slug: str, source_slug
     """GeoTIFF path for a product (see ``_output_path``)."""
     return _output_path(slug, metric_slug, period_slug=period_slug,
                         source_slug=source_slug, label=label, ext="tif")
-
-
-def get_engine():
-    host = os.getenv("POSTGRES_HOST", "localhost")
-    port = os.getenv("POSTGRES_PORT", "5434")
-    db   = os.getenv("POSTGRES_DB",   "ice_clim")
-    user = os.getenv("POSTGRES_USER", "postgres")
-    pwd  = os.getenv("POSTGRES_PASSWORD")
-    if not pwd:
-        sys.exit("ERROR: POSTGRES_PASSWORD not set (check .env).")
-    return create_engine(f"postgresql+psycopg2://{user}:{pwd}@{host}:{port}/{db}")
-
-
-def fetch_domain_wkt(geom, *, grid_crs: int, res_m: float) -> str:
-    """4326 WKT of the spatial filter used to fetch chart polygons.
-
-    ``geom`` is the analysis-domain polygon (the region's ``tiers[0]`` domain)
-    in ``grid_crs`` — the MRC region polygon for adaptive regions, the
-    axis-aligned bbox for legacy. It is densified (so its reprojected outline
-    follows the true curve, not straight chords between widely-spaced vertices)
-    and buffered one cell outward (a sub-cell over-fetch margin), then
-    reprojected to 4326.
-
-    The fetch domain is therefore the **region footprint, not its bounding box**:
-    a superset of every kept cell (any chart polygon covering an in-domain cell
-    centroid intersects ``geom``), while skipping the bbox-corner polygons that
-    would only land on clipped cells — fewer rows fetched/parsed/burned for
-    elongated MRC regions (DEC-039). The probe-010 under-fetch guard still holds:
-    densify keeps the reprojected boundary faithful; ``buffer(res_m)`` errs on
-    over-fetch, harmless since rasterization assigns values only at in-grid cell
-    centres.
-
-    ``res_m`` sets the densify/buffer length scale (one cell); pass the coarsest
-    tier's resolution so the domain covers every tier.
-    """
-    return (gpd.GeoSeries([geom], crs=grid_crs)
-            .segmentize(10 * res_m)
-            .buffer(res_m)
-            .to_crs(epsg=4326)
-            .union_all().wkt)
-
-
-def load_polygons(metric: Metric, fetch_geom, *,
-                  grid_crs: int, res_m: float, table: str,
-                  climatology_start_date: str, climatology_end_date: str) -> pd.DataFrame:
-    """Pull rows from the DB per the metric's SQL; attach shapely geometries.
-
-    ``fetch_geom`` is the analysis-domain polygon in ``grid_crs`` (see
-    ``fetch_domain_wkt``); geometries are returned (and parsed) in ``grid_crs``
-    so they rasterize directly onto every tier's transform.
-    """
-    bbox_wkt_str = fetch_domain_wkt(fetch_geom, grid_crs=grid_crs, res_m=res_m)
-    sql, params = metric.sql(table=table, grid_crs=grid_crs,
-                             climatology_start_date=climatology_start_date,
-                             climatology_end_date=climatology_end_date)
-    params = {**params, "bbox_wkt": bbox_wkt_str}
-    engine = get_engine()
-    with engine.connect() as conn:
-        df = pd.read_sql(text(sql), conn, params=params)
-    df["geometry"] = df["geom_wkt"].apply(wkt.loads)
-    return df.drop(columns="geom_wkt")
 
 
 def _git_state() -> dict:

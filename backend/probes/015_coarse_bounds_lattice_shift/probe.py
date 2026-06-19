@@ -39,7 +39,7 @@ import matplotlib.pyplot as plt
 PROJECT_ROOT = Path(__file__).parents[3]
 sys.path.insert(0, str(PROJECT_ROOT))
 
-from climatology.processing.pipeline import build_grid  # noqa: E402
+from climatology.processing.rasterize import build_grid  # noqa: E402
 from climatology.processing.regions import resolve_region  # noqa: E402
 
 OUTPUT_DIR = Path(__file__).parent / "output"

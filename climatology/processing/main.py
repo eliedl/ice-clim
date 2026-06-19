@@ -40,9 +40,9 @@ from climatology.processing.metrics import (
     SeasonDurationMetric,
     StormExposureDurationMetric,
 )
+from climatology.processing.db import load_polygons
 from climatology.processing.pipeline import (
     archive_product,
-    load_polygons,
     log_distribution,
     output_geotiff,
     output_png,
