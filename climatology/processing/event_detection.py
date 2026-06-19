@@ -1,10 +1,10 @@
-"""Temporal event-date detection on daily-median climatology cubes.
+"""Temporal event-date detection on per-date median climatology cubes.
 
 Helpers for the median-then-threshold methodology used by FreezeUpDateMetric
 and BreakupDateMetric (DEC-027). Given polygon rows over a climatology period,
-build a (n_admissible_days, H, W) cube of medianed CT fractions and extract
-per-cell event dates (first day above threshold, last day above threshold, sum 
-of days above/below threshold).
+build a (n_dates, H, W) cube of medianed CT fractions and extract
+per-cell event dates (first date above threshold, last date above threshold, sum
+of dates above/below threshold).
 
 Generic enough to reuse for any future metric of the form "first/last day in
 the admissible window where the medianed field satisfies condition X". The
@@ -46,7 +46,7 @@ def day_of_season(month_day: str) -> int:
     return _ice_season_ordinal(month_day)
 
 
-def _nanmedian_high(a: Float[np.ndarray, "n *rest"]) -> Float[np.ndarray, "*rest"]:
+def _nanmedian_high(a: Float[np.ndarray, "n_seasons *rest"]) -> Float[np.ndarray, "*rest"]:
     """Nan-aware upper-middle median along axis 0 (DEC-035).
 
     Exact median for odd sample counts; the *upper* of the two middle values
@@ -64,7 +64,7 @@ def _nanmedian_high(a: Float[np.ndarray, "n *rest"]) -> Float[np.ndarray, "*rest
     return out
 
 
-def admissible_calendar_days(df: pd.DataFrame, *, coverage: float = 0.8) -> list[str]:
+def admissible_days_of_season(df: pd.DataFrame, *, coverage: float = 0.8) -> list[str]:
     """Calendar days passing the WMO data-availability rule over the climatology
     period implicit in ``df``.
 
@@ -83,12 +83,12 @@ def admissible_calendar_days(df: pd.DataFrame, *, coverage: float = 0.8) -> list
     df = df[df["month_day"] != "02-29"]
     n_seasons = df["season_start"].nunique()
     min_seasons = int(np.ceil(coverage * n_seasons))
-    coverage_per_day = df.groupby("month_day")["season_start"].nunique()
-    admissible = coverage_per_day[coverage_per_day >= min_seasons].index.tolist()
+    coverage_per_date = df.groupby("month_day")["season_start"].nunique()
+    admissible = coverage_per_date[coverage_per_date >= min_seasons].index.tolist()
     return sorted(admissible, key=_ice_season_ordinal)
 
 
-def build_daily_median_ct_cube(
+def build_median_ct_cube(
     df: pd.DataFrame,
     *,
     admissible_days: list[str],
@@ -158,8 +158,8 @@ def extract_event_date(
 ) -> DataGrid:
     """For each (H, W) cell, return the day ordinal of the relevant event.
 
-    boolean_cube : (n_days, H, W), typically (median_ct_cube >= threshold).
-    day_ordinals : per-day ordinals corresponding to the day axis of the cube
+    boolean_cube : (n_dates, H, W), typically (median_ct_cube >= threshold).
+    day_ordinals : per-date ordinals corresponding to the date axis of the cube
                    (use ``day_of_season`` to derive from "MM-DD" strings).
     mode :
         'first_above' -> day ordinal of first True per cell (NaN if never).
@@ -169,16 +169,16 @@ def extract_event_date(
                          Naturally NaN for cells whose median never crosses,
                          no precondition mask needed.
     """
-    n_days, H, W = boolean_cube.shape
+    n_dates, H, W = boolean_cube.shape
     result = np.full((H, W), np.nan, dtype=np.float32)
     if mode == "first_above":
         already_found = np.zeros((H, W), dtype=bool)
-        for i in range(n_days):
+        for i in range(n_dates):
             condition = boolean_cube[i] & ~already_found
             result[condition] = day_ordinals[i]
             already_found |= condition
     elif mode == "last_above":
-        for i in range(n_days):
+        for i in range(n_dates):
             result[boolean_cube[i]] = day_ordinals[i]
     else:
         raise ValueError(f"unknown mode: {mode!r} (expected 'first_above' or 'last_above')")

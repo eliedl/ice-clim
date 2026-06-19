@@ -133,7 +133,7 @@ def burn_values(geom_value_pairs, transform, height: int, width: int) -> DataGri
 
     Sibling of ``burn_mask`` for metrics that need a value-keyed field (e.g. CT
     fractions) rather than a binary coverage mask. Used by median-then-
-    threshold metrics that build a daily median field across years before
+    threshold metrics that build a per-date median field across years before
     extracting event dates (DEC-027).
     """
     if not geom_value_pairs:
@@ -213,12 +213,6 @@ def build_land_mask(mask_path: Path, transform, height: int, width: int,
     DEC-034): `climatology_landmask.geojson` — the CIS "climate normals coastline"
     (EC 1991–2020 normals landmask that takes into consideration the evolution of the landmask across eras of chart production).
 
-    The whole file is loaded and reprojected to GRID_CRS; rasterio's
-    `transform`-driven spatial filtering bbox-rejects out-of-grid
-    polygons at the rasterize step (the bbox lives in `transform`). Pre-
-    filtering the load via bbox would speed up the load slightly — see
-    TODO.
-
     Used by median-then-threshold metrics to:
       - skip land cells from the nan-median computation (reduces nanmedian
         cost by the land fraction; for sept-iles ≈ 60% of cells),
@@ -228,9 +222,7 @@ def build_land_mask(mask_path: Path, transform, height: int, width: int,
     Returns an all-False mask if no land polygon intersects the grid
     (fully-pelagic region).
     """
-    # TODO (perf): pre-filter the file read with a bbox in its native CRS
-    # to avoid loading whole-domain polygons when only a few intersect any
-    # single region.
+
     land_gdf = gpd.read_file(mask_path).to_crs(epsg=grid_crs)
     mask = burn_mask(land_gdf.geometry.tolist(), transform, height, width)
     log.info("Land mask: %s / %s cells (%.1f%%)",

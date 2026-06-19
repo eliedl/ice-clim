@@ -54,7 +54,7 @@ COASTLINE_BUFFER = Path(
 #
 # Tiers: 1 km coarse over the whole region; 100 m fine over the coastline
 # buffer. The requested 25 m fine tier is infeasible as a single raster — its
-# (n_days, H, W) median cube is 43.6 GB over the refinement bounding box (probe
+# (n_dates, H, W) median cube is 43.6 GB over the refinement bounding box (probe
 # 011). 100 m (2.7 GB cube) ships the hybrid grid now; restoring 25 m is a
 # streaming-cube optimization deferred in DEC-036.
 ADAPTIVE_GRID_CRS = 32198

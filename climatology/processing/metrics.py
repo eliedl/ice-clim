@@ -93,7 +93,7 @@ class Metric(ABC):
 
         All current metrics use the CIS-aligned median-then-threshold
         methodology (DEC-027/DEC-035): they median the CT field across years
-        per calendar-day (``build_daily_median_ct_cube``) before applying the
+        per calendar-day (``build_median_ct_cube``) before applying the
         metric's event/count logic. Concrete metrics implement this directly.
 
         ``burn_values`` is the pipeline's value-keyed rasterizer (e.g. CT-valued
@@ -154,13 +154,13 @@ class FreezeUpDateMetric(Metric):
                 "(value-keyed rasterizer) from the pipeline."
             )
         from climatology.processing.event_detection import (
-            admissible_calendar_days,
-            build_daily_median_ct_cube,
+            admissible_days_of_season,
+            build_median_ct_cube,
             day_of_season,
             extract_event_date,
         )
-        days = admissible_calendar_days(df)
-        cube = build_daily_median_ct_cube(
+        days = admissible_days_of_season(df)
+        cube = build_median_ct_cube(
             df, admissible_days=days,
             transform=transform, height=height, width=width,
             burn_values=burn_values, land_mask=land_mask,
@@ -227,13 +227,13 @@ class BreakupDateMetric(Metric):
                 "(value-keyed rasterizer) from the pipeline."
             )
         from climatology.processing.event_detection import (
-            admissible_calendar_days,
-            build_daily_median_ct_cube,
+            admissible_days_of_season,
+            build_median_ct_cube,
             day_of_season,
             extract_event_date,
         )
-        days = admissible_calendar_days(df)
-        cube = build_daily_median_ct_cube(
+        days = admissible_days_of_season(df)
+        cube = build_median_ct_cube(
             df, admissible_days=days,
             transform=transform, height=height, width=width,
             burn_values=burn_values, land_mask=land_mask,
@@ -276,13 +276,13 @@ class FirstOccurrenceDateMetric(Metric):
                 "(value-keyed rasterizer) from the pipeline."
             )
         from climatology.processing.event_detection import (
-            admissible_calendar_days,
-            build_daily_median_ct_cube,
+            admissible_days_of_season,
+            build_median_ct_cube,
             day_of_season,
             extract_event_date,
         )
-        days = admissible_calendar_days(df)
-        cube = build_daily_median_ct_cube(
+        days = admissible_days_of_season(df)
+        cube = build_median_ct_cube(
             df, admissible_days=days,
             transform=transform, height=height, width=width,
             burn_values=burn_values, land_mask=land_mask,
@@ -325,13 +325,13 @@ class LastOccurrenceDateMetric(Metric):
                 "(value-keyed rasterizer) from the pipeline."
             )
         from climatology.processing.event_detection import (
-            admissible_calendar_days,
-            build_daily_median_ct_cube,
+            admissible_days_of_season,
+            build_median_ct_cube,
             day_of_season,
             extract_event_date,
         )
-        days = admissible_calendar_days(df)
-        cube = build_daily_median_ct_cube(
+        days = admissible_days_of_season(df)
+        cube = build_median_ct_cube(
             df, admissible_days=days,
             transform=transform, height=height, width=width,
             burn_values=burn_values, land_mask=land_mask,
@@ -374,7 +374,7 @@ class SeasonDurationMetric(Metric):
     """
 
     slug = "season_duration"
-    display_label = "Median ice presence (observation-days, CT >= 4/10)"
+    display_label = "Median ice presence (observation time steps, CT >= 4/10)"
     ct_threshold = 0.4
 
     def sql(self, *, table, grid_crs, season_min, season_max):
@@ -389,11 +389,11 @@ class SeasonDurationMetric(Metric):
                 "(value-keyed rasterizer) from the pipeline."
             )
         from climatology.processing.event_detection import (
-            admissible_calendar_days,
-            build_daily_median_ct_cube,
+            admissible_days_of_season,
+            build_median_ct_cube,
         )
-        days = admissible_calendar_days(df)
-        cube = build_daily_median_ct_cube(
+        days = admissible_days_of_season(df)
+        cube = build_median_ct_cube(
             df, admissible_days=days,
             transform=transform, height=height, width=width,
             burn_values=burn_values, land_mask=land_mask,
@@ -441,7 +441,7 @@ class StormExposureDurationMetric(Metric):
     """
 
     slug = "storm_exposure_duration"
-    display_label = "Storm exposure duration (observation-days, CT <= 3/10)"
+    display_label = "Storm exposure duration (observation time steps, CT <= 3/10)"
     exposure_threshold = 0.3
 
     def sql(self, *, table, grid_crs, season_min, season_max):
@@ -456,11 +456,11 @@ class StormExposureDurationMetric(Metric):
                 "(value-keyed rasterizer) from the pipeline."
             )
         from climatology.processing.event_detection import (
-            admissible_calendar_days,
-            build_daily_median_ct_cube,
+            admissible_days_of_season,
+            build_median_ct_cube,
         )
-        days = admissible_calendar_days(df)
-        cube = build_daily_median_ct_cube(
+        days = admissible_days_of_season(df)
+        cube = build_median_ct_cube(
             df, admissible_days=days,
             transform=transform, height=height, width=width,
             burn_values=burn_values, land_mask=land_mask,
