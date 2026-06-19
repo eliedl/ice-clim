@@ -174,7 +174,7 @@ def fetch_domain_wkt(geom, *, grid_crs: int, res_m: float) -> str:
 
 def load_polygons(metric: Metric, fetch_geom, *,
                   grid_crs: int, res_m: float, table: str,
-                  season_min: str, season_max: str) -> pd.DataFrame:
+                  climatology_start_date: str, climatology_end_date: str) -> pd.DataFrame:
     """Pull rows from the DB per the metric's SQL; attach shapely geometries.
 
     ``fetch_geom`` is the analysis-domain polygon in ``grid_crs`` (see
@@ -183,7 +183,8 @@ def load_polygons(metric: Metric, fetch_geom, *,
     """
     bbox_wkt_str = fetch_domain_wkt(fetch_geom, grid_crs=grid_crs, res_m=res_m)
     sql, params = metric.sql(table=table, grid_crs=grid_crs,
-                             season_min=season_min, season_max=season_max)
+                             climatology_start_date=climatology_start_date,
+                             climatology_end_date=climatology_end_date)
     params = {**params, "bbox_wkt": bbox_wkt_str}
     engine = get_engine()
     with engine.connect() as conn:

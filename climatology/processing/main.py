@@ -7,8 +7,9 @@ float32 GeoTIFF per tier).
 Usage:
     python climatology.py <metric-slug> <region-slug> [--source sgrda|sgrdr] [--period YYYY-YYYY] [--geotiff]
 
-Period semantics: winters. ``--period 1991-2020`` selects season_start
-1990-09-01 .. 2019-09-01 (30 winter seasons).
+Period semantics: winters. ``--period 1991-2020`` fetches charts in the
+half-open T1 window [1990-09-01, 2020-09-01) — the 30 winter seasons 1991..2020
+(each labelled by its winter year; see ``event_detection.winter_season``).
 """
 
 from __future__ import annotations
@@ -77,10 +78,16 @@ METRICS: dict[str, Metric] = {
 }
 
 
-def season_bounds(period: tuple[int, int]) -> tuple[str, str]:
-    """Winters (y1, y2) -> (season_min, season_max) season_start bounds."""
+def climatology_date_window(period: tuple[int, int]) -> tuple[str, str]:
+    """Winters (y1, y2) -> half-open ``T1`` date window [start, end).
+
+    A "y1-y2" climatology is the winters y1..y2 inclusive. Winter y1 starts on
+    Sep 1 of y1-1; winter y2 ends Aug 31 of y2, so the exclusive upper bound is
+    Sep 1 of y2. E.g. (2011, 2020) -> ("2010-09-01", "2020-09-01"). Season
+    *labels* are recovered downstream by ``event_detection.winter_season``.
+    """
     y1, y2 = period
-    return f"{y1 - 1}-09-01", f"{y2 - 1}-09-01"
+    return f"{y1 - 1}-09-01", f"{y2}-09-01"
 
 
 def assert_hd_aligned(df: pd.DataFrame, source: ChartTable) -> None:
@@ -105,7 +112,7 @@ def run(metric_slug: str, region: str, source_slug: str, period: tuple[int, int]
     metric = METRICS[metric_slug]
     source = CHART_TABLES[source_slug]
     period_slug = f"{period[0]}-{period[1]}"
-    season_min, season_max = season_bounds(period)
+    clim_start, clim_end = climatology_date_window(period)
 
     if metric_slug == SeasonDurationMetric.slug:
         metric.display_label = f"Median ice presence ({source.obs_unit}, CT >= 4/10)"
@@ -127,10 +134,11 @@ def run(metric_slug: str, region: str, source_slug: str, period: tuple[int, int]
     fetch_geom = t0.clip_geom if t0.clip_geom is not None else t0.bounds_geom
     fetch_res = max(t.res_m for t in spec.tiers)
     df = load_polygons(metric, fetch_geom, grid_crs=spec.grid_crs, res_m=fetch_res,
-                       table=source.table, season_min=season_min, season_max=season_max)
+                       table=source.table,
+                       climatology_start_date=clim_start, climatology_end_date=clim_end)
     log.info("Fetched %s rows.", f"{len(df):,}")
     if df.empty:
-        log.error("No rows returned — check metric SQL, region bounds, season range.")
+        log.error("No rows returned — check metric SQL, region bounds, climatology window.")
         return
 
     if source.cadence == "hd_weekly":
@@ -161,7 +169,7 @@ def run(metric_slug: str, region: str, source_slug: str, period: tuple[int, int]
                               source_slug=source.slug, label=tier_label)
         manifest = {
             "metric": metric.slug, "region": region, "source": source.slug,
-            "period": period_slug, "season_min": season_min, "season_max": season_max,
+            "period": period_slug, "climatology_start": clim_start, "climatology_end": clim_end,
             "tier": tier.name, "grid_res_m": tier.res_m, "grid_crs": spec.grid_crs,
             "bounds": [float(b) for b in bounds], "grid_shape": [h, w],
             "land_mask": str(LAND_MASK_PATH), "n_rows": len(df),

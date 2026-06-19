@@ -25,14 +25,22 @@ from climatology.services.units_conversion_maps import CONCENTRATION_FRACTION
 SEASON_ORIGIN = date(2000, 9, 1)  # any Sep-1; used only to format day-of-season as a calendar label
 
 
-def _all_ct_sql(*, table: str, grid_crs: int, season_min: str, season_max: str) -> str:
-    """All ice and water SIGRID3 polygons inside the bbox over the climatology period.
+def _all_ct_sql(*, table: str, grid_crs: int,
+                climatology_start_date: str, climatology_end_date: str) -> str:
+    """All ice and water SIGRID3 polygons inside the bbox over the climatology window.
 
     No CT pre-filter — the median-then-threshold methodology needs every
     observed CT value (including 0 from water polygons) to compute an
-    unbiased median across years. CT is returned as the raw SIGRID3 code;
+    unbiased median across seasons. CT is returned as the raw SIGRID3 code;
     parsing to a fraction happens in Python via CONCENTRATION_FRACTION
     (single source of truth at services/units_conversion_maps.py).
+
+    The climatology window is a **half-open ``T1`` date range**
+    [climatology_start_date, climatology_end_date): the caller
+    (``climatology_date_window`` in main.py) maps a winter-year period to its
+    Sep-1 bounds. Season *identity* is a Python concern
+    (``event_detection.winter_season``), so the SQL stays a plain date-range
+    fetch with no fall/winter anchoring logic in DML.
 
     POLY_TYPE filter:
       - 'I' (ice)   -> CT > 0
@@ -43,21 +51,13 @@ def _all_ct_sql(*, table: str, grid_crs: int, season_min: str, season_max: str) 
         SELECT
             ST_AsText(ST_Transform(geometry, {grid_crs})) AS geom_wkt,
             "T1"::date AS obs_date,
-            "CT" AS ct_code,
-            CASE
-                WHEN EXTRACT(MONTH FROM "T1") >= 9
-                THEN (EXTRACT(YEAR FROM "T1")::text || '-09-01')::date
-                ELSE ((EXTRACT(YEAR FROM "T1")::int - 1)::text || '-09-01')::date
-            END AS season_start
+            "CT" AS ct_code
         FROM {table}
         WHERE "POLY_TYPE" IN ('I', 'W')
           AND ST_Intersects(geometry, ST_GeomFromText(:bbox_wkt, 4326))
-          AND CASE
-                  WHEN EXTRACT(MONTH FROM "T1") >= 9
-                  THEN (EXTRACT(YEAR FROM "T1")::text || '-09-01')::date
-                  ELSE ((EXTRACT(YEAR FROM "T1")::int - 1)::text || '-09-01')::date
-              END BETWEEN '{season_min}' AND '{season_max}'
-        ORDER BY season_start, obs_date;
+          AND "T1" >= '{climatology_start_date}'
+          AND "T1" <  '{climatology_end_date}'
+        ORDER BY obs_date;
     """
 
 
@@ -68,13 +68,15 @@ class Metric(ABC):
     display_label: str
 
     @abstractmethod
-    def sql(self, *, table: str, grid_crs: int, season_min: str, season_max: str) -> tuple[str, dict[str, Any]]:
+    def sql(self, *, table: str, grid_crs: int, climatology_start_date: str,
+            climatology_end_date: str) -> tuple[str, dict[str, Any]]:
         """Return ``(parameterized_sql, default_params)``.
 
         The pipeline injects ``bbox_wkt`` into the param dict before binding.
-        The SQL must yield at minimum ``geom_wkt``, ``obs_date``,
-        ``season_start``. Concrete metrics may yield additional columns
-        consumed by ``compute_climatology``.
+        The SQL must yield at minimum ``geom_wkt``, ``obs_date``, ``ct_code``;
+        season identity is derived in Python from ``obs_date``
+        (``event_detection.winter_season``). Concrete metrics may yield
+        additional columns consumed by ``compute_climatology``.
         """
 
     @abstractmethod
@@ -92,7 +94,7 @@ class Metric(ABC):
         """End-to-end climatology computation: rows -> (H, W) result raster.
 
         All current metrics use the CIS-aligned median-then-threshold
-        methodology (DEC-027/DEC-035): they median the CT field across years
+        methodology (DEC-027/DEC-035): they median the CT field across seasons
         per calendar-day (``build_median_ct_cube``) before applying the
         metric's event/count logic. Concrete metrics implement this directly.
 
@@ -142,9 +144,11 @@ class FreezeUpDateMetric(Metric):
     display_label = "Freeze-up climatology"
     ct_threshold = 0.4
 
-    def sql(self, *, table, grid_crs, season_min, season_max):
+    def sql(self, *, table, grid_crs, climatology_start_date, climatology_end_date):
         return _all_ct_sql(
-            table=table, grid_crs=grid_crs, season_min=season_min, season_max=season_max,
+            table=table, grid_crs=grid_crs,
+            climatology_start_date=climatology_start_date,
+            climatology_end_date=climatology_end_date,
         ), {}
 
     def compute_climatology(self, df, *, transform, height, width, burn, burn_values=None, land_mask=None):
@@ -215,9 +219,11 @@ class BreakupDateMetric(Metric):
     display_label = "Median date of break-up (CT >= 4/10)"
     ct_threshold = 0.4
 
-    def sql(self, *, table, grid_crs, season_min, season_max):
+    def sql(self, *, table, grid_crs, climatology_start_date, climatology_end_date):
         return _all_ct_sql(
-            table=table, grid_crs=grid_crs, season_min=season_min, season_max=season_max,
+            table=table, grid_crs=grid_crs,
+            climatology_start_date=climatology_start_date,
+            climatology_end_date=climatology_end_date,
         ), {}
 
     def compute_climatology(self, df, *, transform, height, width, burn, burn_values=None, land_mask=None):
@@ -264,9 +270,11 @@ class FirstOccurrenceDateMetric(Metric):
     display_label = "Median date of first ice occurrence (CT >= 1/10)"
     ct_threshold = 0.1
 
-    def sql(self, *, table, grid_crs, season_min, season_max):
+    def sql(self, *, table, grid_crs, climatology_start_date, climatology_end_date):
         return _all_ct_sql(
-            table=table, grid_crs=grid_crs, season_min=season_min, season_max=season_max,
+            table=table, grid_crs=grid_crs,
+            climatology_start_date=climatology_start_date,
+            climatology_end_date=climatology_end_date,
         ), {}
 
     def compute_climatology(self, df, *, transform, height, width, burn, burn_values=None, land_mask=None):
@@ -313,9 +321,11 @@ class LastOccurrenceDateMetric(Metric):
     display_label = "Median date of last ice occurrence (CT >= 1/10)"
     ct_threshold = 0.1
 
-    def sql(self, *, table, grid_crs, season_min, season_max):
+    def sql(self, *, table, grid_crs, climatology_start_date, climatology_end_date):
         return _all_ct_sql(
-            table=table, grid_crs=grid_crs, season_min=season_min, season_max=season_max,
+            table=table, grid_crs=grid_crs,
+            climatology_start_date=climatology_start_date,
+            climatology_end_date=climatology_end_date,
         ), {}
 
     def compute_climatology(self, df, *, transform, height, width, burn, burn_values=None, land_mask=None):
@@ -377,9 +387,11 @@ class SeasonDurationMetric(Metric):
     display_label = "Median ice presence (observation time steps, CT >= 4/10)"
     ct_threshold = 0.4
 
-    def sql(self, *, table, grid_crs, season_min, season_max):
+    def sql(self, *, table, grid_crs, climatology_start_date, climatology_end_date):
         return _all_ct_sql(
-            table=table, grid_crs=grid_crs, season_min=season_min, season_max=season_max,
+            table=table, grid_crs=grid_crs,
+            climatology_start_date=climatology_start_date,
+            climatology_end_date=climatology_end_date,
         ), {}
 
     def compute_climatology(self, df, *, transform, height, width, burn, burn_values=None, land_mask=None):
@@ -444,9 +456,11 @@ class StormExposureDurationMetric(Metric):
     display_label = "Storm exposure duration (observation time steps, CT <= 3/10)"
     exposure_threshold = 0.3
 
-    def sql(self, *, table, grid_crs, season_min, season_max):
+    def sql(self, *, table, grid_crs, climatology_start_date, climatology_end_date):
         return _all_ct_sql(
-            table=table, grid_crs=grid_crs, season_min=season_min, season_max=season_max,
+            table=table, grid_crs=grid_crs,
+            climatology_start_date=climatology_start_date,
+            climatology_end_date=climatology_end_date,
         ), {}
 
     def compute_climatology(self, df, *, transform, height, width, burn, burn_values=None, land_mask=None):

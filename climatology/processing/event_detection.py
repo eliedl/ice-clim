@@ -46,6 +46,21 @@ def day_of_season(month_day: str) -> int:
     return _ice_season_ordinal(month_day)
 
 
+def winter_season(obs_date: pd.Series) -> pd.Series:
+    """Winter-year season identifier for each observation date.
+
+    A season is labelled by the calendar year of its *winter*: autumn charts
+    (month >= 9) roll forward to the next year, so 2010-11-15 and 2011-01-15
+    both belong to season 2011 (the 2010-2011 winter). This is the canonical
+    season identity for the whole pipeline; it makes a "y1-y2" climatology span
+    seasons y1..y2 directly (no fall-year shift). The SQL fetch stays a plain
+    half-open ``T1`` date window (``climatology_date_window`` in main.py), so
+    season anchoring lives here in Python, not in DML.
+    """
+    dt = pd.to_datetime(obs_date)
+    return dt.dt.year + (dt.dt.month >= 9).astype(int)
+
+
 def _nanmedian_high(a: Float[np.ndarray, "n_seasons *rest"]) -> Float[np.ndarray, "*rest"]:
     """Nan-aware upper-middle median along axis 0 (DEC-035).
 
@@ -72,7 +87,7 @@ def admissible_days_of_season(df: pd.DataFrame, *, coverage: float = 0.8) -> lis
     is dropped a priori (its coverage is structurally capped at ~25% of any
     period, well below the WMO threshold).
 
-    The denominator counts **winter seasons** (``season_start``), not calendar
+    The denominator counts **winter seasons** (``winter_season``), not calendar
     years: a 10-winter climatology spans 11 calendar years (Sep year-1 ->
     Aug year+10), which would inflate the WMO threshold. For 10 winters and
     coverage=0.8, min_seasons = 8; for 30 winters, min_seasons = 24.
@@ -80,10 +95,11 @@ def admissible_days_of_season(df: pd.DataFrame, *, coverage: float = 0.8) -> lis
     df = df.copy()
     df["obs_date_dt"] = pd.to_datetime(df["obs_date"])
     df["month_day"] = df["obs_date_dt"].dt.strftime("%m-%d")
+    df["season"] = winter_season(df["obs_date"])
     df = df[df["month_day"] != "02-29"]
-    n_seasons = df["season_start"].nunique()
+    n_seasons = df["season"].nunique()
     min_seasons = int(np.ceil(coverage * n_seasons))
-    coverage_per_date = df.groupby("month_day")["season_start"].nunique()
+    coverage_per_date = df.groupby("month_day")["season"].nunique()
     admissible = coverage_per_date[coverage_per_date >= min_seasons].index.tolist()
     return sorted(admissible, key=_ice_season_ordinal)
 
@@ -100,14 +116,14 @@ def build_median_ct_cube(
 ) -> DataCube:
     """Build (n_admissible_days, H, W) median CT cube.
 
-    For each admissible calendar day, rasterize each year's (geom, CT)
-    polygons to (H, W), then nan-aware upper-middle median across the year
+    For each admissible calendar day, rasterize each season's (geom, CT)
+    polygons to (H, W), then nan-aware upper-middle median across the season
     axis (``_nanmedian_high``, CIS convention per DEC-035). Streamed so
-    memory holds at most ~n_years rasters per iteration.
+    memory holds at most ~n_seasons rasters per iteration.
 
     CT codes are parsed to fractions via CONCENTRATION_FRACTION (single source
     of truth).
-    Unmapped codes drop out as NaN and are excluded from the year's
+    Unmapped codes drop out as NaN and are excluded from the season's
     contribution to the median (should not happen since CONCENTRATION_FRACTION was derived from probe 003).
 
     If ``land_mask`` is provided, the nan-median is computed only over the
@@ -119,26 +135,26 @@ def build_median_ct_cube(
     df = df.copy()
     df["obs_date_dt"] = pd.to_datetime(df["obs_date"])
     df["month_day"] = df["obs_date_dt"].dt.strftime("%m-%d")
-    df["year"] = df["obs_date_dt"].dt.year
+    df["season"] = winter_season(df["obs_date"])
     df["ct"] = df["ct_code"].map(CONCENTRATION_FRACTION)
     df = df.dropna(subset=["ct"])
 
     not_land = ~land_mask if land_mask is not None else None
 
     cube_slices = []
-    
+
     for md in admissible_days:
         day_df = df[df["month_day"] == md]
-        years = sorted(day_df["year"].unique())
-        year_rasters = [
+        seasons = sorted(day_df["season"].unique())
+        season_rasters = [
             burn_values(
-                list(zip(day_df.loc[day_df["year"] == y, "geometry"],
-                            day_df.loc[day_df["year"] == y, "ct"])),
+                list(zip(day_df.loc[day_df["season"] == s, "geometry"],
+                            day_df.loc[day_df["season"] == s, "ct"])),
                 transform, height, width,
             )
-            for y in years
+            for s in seasons
         ]
-        stack = np.stack(year_rasters, axis=0)
+        stack = np.stack(season_rasters, axis=0)
         if not_land is not None:
             median_slice = np.full((height, width), np.nan, dtype=np.float32)
             median_slice[not_land] = _nanmedian_high(stack[:, not_land])

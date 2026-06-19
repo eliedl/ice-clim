@@ -73,7 +73,7 @@ EC_FREEZE = Path("/home/eliedl/data/1991-2020_climatology_shapefiles/EC/freezeup
 
 REGION = "sept-iles"
 SOURCE = CHART_TABLES["sgrdr"]
-SEASON_MIN, SEASON_MAX = "1990-09-01", "2019-09-01"   # winters 1991-2020
+CLIM_START, CLIM_END = "1990-09-01", "2020-09-01"   # winters 1991-2020 (half-open T1 window)
 PERIOD_SLUG = "1991-2020"
 
 
@@ -102,7 +102,7 @@ def compute_ours(transform, h, w, *, recompute: bool,
                                    period_slug=PERIOD_SLUG, source_slug=SOURCE.slug)
     land_mask = build_land_mask(LAND_MASK_PATH, transform, h, w)
     df = load_polygons(metric, bbox_path, table=SOURCE.table,
-                       season_min=SEASON_MIN, season_max=SEASON_MAX)
+                       climatology_start_date=CLIM_START, climatology_end_date=CLIM_END)
     if df.empty:
         sys.exit("ERROR: no rows returned — check DB / season range.")
     values = metric.compute_climatology(
@@ -231,7 +231,7 @@ def point_ct_series(eng, pt_ll) -> pd.DataFrame:
             WHERE "POLY_TYPE" IN ('I','W')
             AND ST_Intersects(geometry, ST_GeomFromText(:p, 4326))
             AND "T1" BETWEEN :smin AND :smax"""),
-            conn, params={"p": pt_ll.wkt, "smin": SEASON_MIN, "smax": "2020-08-31"})
+            conn, params={"p": pt_ll.wkt, "smin": CLIM_START, "smax": "2020-08-31"})
     s["md"] = pd.to_datetime(s.d).dt.strftime("%m-%d")
     s["yr"] = pd.to_datetime(s.d).dt.year
     s["frac"] = s.ct.map(CONCENTRATION_FRACTION)

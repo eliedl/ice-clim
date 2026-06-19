@@ -40,13 +40,11 @@ def _duration_fixture():
     left, right = box(0, 0, 2, 4), box(2, 0, 4, 4)
     rows = []
     for yr in (2001, 2002):
-        season = pd.Timestamp(f"{yr - 1}-09-01")
+        # Jan dates -> winter_season == yr; two distinct seasons (derived from obs_date).
         for d in (f"{yr}-01-01", f"{yr}-01-08"):
-            rows.append({"obs_date": d, "ct_code": "92", "geometry": left,
-                         "season_start": season})
+            rows.append({"obs_date": d, "ct_code": "92", "geometry": left})
             if d.endswith("01-01"):
-                rows.append({"obs_date": d, "ct_code": "00", "geometry": right,
-                             "season_start": season})
+                rows.append({"obs_date": d, "ct_code": "00", "geometry": right})
     return pd.DataFrame(rows), transform
 
 
