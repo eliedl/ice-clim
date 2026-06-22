@@ -111,7 +111,7 @@ backend/
 climatology/
   services/units_conversion_maps.py           ← parse maps; single source of truth
   processing/  (metrics, event_detection, pipeline, main)  ← date metrics (DEC-027)
-  utils/ (raster_to_vector, square_bbox)   viz/ (colormaps)   tests/ (parity_check)
+  utils/ (raster_to_vector, square_bbox)   viz/ (colormaps)   tests/ (test_metrics, test_grid)
   (volume reduce_season — specified in DEC-029, not yet implemented)
 scripts/ (audit)   refs/ (WMO PDF)   docker-compose.yml · .env
 
