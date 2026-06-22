@@ -33,8 +33,8 @@ from shapely import make_valid
 from shapely.geometry import shape
 from shapely.geometry.base import BaseGeometry
 
-from climatology.processing.pipeline import BBOX_ROOT, GRID_RES, REGION_DISPLAY
-from climatology.processing.rasterize import GRID_CRS
+from climatology.processing.pipeline import BBOX_ROOT, REGION_DISPLAY
+from climatology.processing.rasterize import GRID_CRS, GRID_RES
 from climatology.processing.sources import LAND_MASK_PATH
 
 # Adaptive-region source layers (EPSG:32198, NAD83 / Québec Lambert).

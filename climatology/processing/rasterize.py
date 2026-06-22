@@ -28,6 +28,7 @@ log = logging.getLogger(__name__)
 # Canonical analysis CRS — geometries are rasterized, written and
 # plotted in it (DEC-040; was 26919 UTM-19N).
 GRID_CRS = 32198  # NAD83 / Québec Lambert
+GRID_RES = 35     # default grid resolution (m); legacy single-tier regions
 
 
 def burn_mask(geoms, transform, height: int, width: int) -> BoolGrid:
