@@ -25,6 +25,10 @@ from climatology._array_types import BoolGrid, DataGrid
 
 log = logging.getLogger(__name__)
 
+# Canonical analysis CRS — geometries are rasterized, written and
+# plotted in it (DEC-040; was 26919 UTM-19N).
+GRID_CRS = 32198  # NAD83 / Québec Lambert
+
 
 def burn_mask(geoms, transform, height: int, width: int) -> BoolGrid:
     """Rasterize shapely geometries to a binary coverage mask (True = covered).

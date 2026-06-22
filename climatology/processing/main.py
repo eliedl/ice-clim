@@ -39,7 +39,7 @@ from climatology.processing.metrics import (
     SeasonDurationMetric,
     StormExposureDurationMetric,
 )
-from climatology.processing.db import load_polygons
+from climatology.processing.db import fetch_domain_wkt, load_polygons
 from climatology.processing.pipeline import (
     archive_product,
     log_distribution,
@@ -103,9 +103,10 @@ def run(metric_slug: str, region: str, source_slug: str, period: tuple[int, int]
     t0 = spec.tiers[0]
     fetch_geom = t0.clip_geom if t0.clip_geom is not None else t0.bounds_geom
     fetch_res = max(t.res_m for t in spec.tiers)
-    df = load_polygons(metric, fetch_geom, grid_crs=spec.grid_crs, res_m=fetch_res,
-                       table=source.table,
-                       climatology_start_date=clim_start, climatology_end_date=clim_end)
+    bbox_wkt = fetch_domain_wkt(fetch_geom, res_m=fetch_res)
+    sql = metric.sql(table=source.table, bbox_wkt=bbox_wkt,
+                     climatology_start_date=clim_start, climatology_end_date=clim_end)
+    df = load_polygons(sql)
     log.info("Fetched %s rows.", f"{len(df):,}")
     if df.empty:
         log.error("No rows returned — check metric SQL, region bounds, climatology window.")

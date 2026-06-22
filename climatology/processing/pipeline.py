@@ -22,6 +22,7 @@ from shapely.geometry import box
 
 from climatology._array_types import DataGrid
 from climatology.processing.metrics import Metric
+from climatology.processing.rasterize import GRID_CRS
 from climatology.services.temporal import SEASON_ORIGIN
 from climatology.viz.colormaps import build_cmap, percentile_range
 
@@ -35,7 +36,6 @@ OUTPUT_DIR = Path(__file__).parents[1] / "output"
 LAND_DISPLAY_PATH = Path("/home/eliedl/data/masks/osm_land_polygons/osm_land_gulf.shp")
 
 GRID_RES   = 35
-GRID_CRS   = 32198          # NAD83 / Québec Lambert (DEC-040; was 26919 UTM-19N)
 
 # Dark "Mapbox-style" theme. Ocean = axes background (shows through NaN /
 # ice-free cells); land polygons are painted on top so they cover dry cells only.
