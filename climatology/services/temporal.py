@@ -5,10 +5,13 @@ it: the season epoch and day-of-season ordinal, the winter-year season identity,
 the climatology date window, the WMO data-availability rule, and the CIS
 Historical Date (HD) calendar.
 
-These are domain-aware (they know the ice season, the winter-year convention, the
-CIS HD cadence) but stateless and I/O-free, hence ``services`` not ``utils``.
-Consumed by the processing pipeline (``processing.metrics``,
-``processing.event_detection``, ``processing.main``) and by cadence probes.
+These are domain-aware — they encode the ice season, the winter-year convention,
+and the CIS HD cadence — hence ``services`` (a domain source of truth), not
+``utils`` (domain-agnostic primitives). This module happens to be stateless and
+I/O-free; that is a property of the module, not a contract of ``services`` (which
+also holds the I/O-bound ``db``). Consumed by the processing pipeline
+(``processing.metrics``, ``processing.event_detection``, ``processing.main``) and
+by cadence probes.
 
 CIS HD calendar (DEC-027, READING_LOG e116): 52 fixed month-days per year. Weekly
 except the Nov 26 -> Dec 4 8-day jump; the leap-year exception is the

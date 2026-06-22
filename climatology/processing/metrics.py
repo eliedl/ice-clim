@@ -19,7 +19,7 @@ import numpy as np
 import pandas as pd
 
 from climatology._array_types import BoolGrid, DataGrid
-from climatology.processing.db import all_ct_sql
+from climatology.services.db import all_ct_sql
 from climatology.services.temporal import SEASON_ORIGIN
 from climatology.services.units_conversion_maps import CONCENTRATION_FRACTION
 
@@ -31,11 +31,11 @@ class Metric(ABC):
     display_label: str
 
     @abstractmethod
-    def sql(self, *, table: str, bbox_wkt: str, climatology_start_date: str,
-            climatology_end_date: str) -> str:
+    def sql(self, *, table: str, grid_crs: int, bbox_wkt: str,
+            climatology_start_date: str, climatology_end_date: str) -> str:
         """Return a complete SQL statement, ready to execute as-is.
 
-        ``bbox_wkt`` is the 4326 spatial filter polygon (``db.fetch_domain_wkt``).
+        ``bbox_wkt`` is the 4326 spatial filter polygon (``rasterize.fetch_domain_wkt``).
         The SQL must yield at minimum ``geom_wkt``, ``obs_date``, ``ct_code``;
         season identity is derived in Python from ``obs_date``
         (``services.temporal.winter_season``). Concrete metrics may yield
@@ -103,9 +103,9 @@ class FreezeUpDateMetric(Metric):
     display_label = "Freeze-up climatology"
     ct_threshold = 0.4
 
-    def sql(self, *, table, bbox_wkt, climatology_start_date, climatology_end_date):
+    def sql(self, *, table, grid_crs, bbox_wkt, climatology_start_date, climatology_end_date):
         return all_ct_sql(
-            table=table, bbox_wkt=bbox_wkt,
+            table=table, grid_crs=grid_crs, bbox_wkt=bbox_wkt,
             climatology_start_date=climatology_start_date,
             climatology_end_date=climatology_end_date,
         )
@@ -175,9 +175,9 @@ class BreakupDateMetric(Metric):
     display_label = "Median date of break-up (CT >= 4/10)"
     ct_threshold = 0.4
 
-    def sql(self, *, table, bbox_wkt, climatology_start_date, climatology_end_date):
+    def sql(self, *, table, grid_crs, bbox_wkt, climatology_start_date, climatology_end_date):
         return all_ct_sql(
-            table=table, bbox_wkt=bbox_wkt,
+            table=table, grid_crs=grid_crs, bbox_wkt=bbox_wkt,
             climatology_start_date=climatology_start_date,
             climatology_end_date=climatology_end_date,
         )
@@ -223,9 +223,9 @@ class FirstOccurrenceDateMetric(Metric):
     display_label = "Median date of first ice occurrence (CT >= 1/10)"
     ct_threshold = 0.1
 
-    def sql(self, *, table, bbox_wkt, climatology_start_date, climatology_end_date):
+    def sql(self, *, table, grid_crs, bbox_wkt, climatology_start_date, climatology_end_date):
         return all_ct_sql(
-            table=table, bbox_wkt=bbox_wkt,
+            table=table, grid_crs=grid_crs, bbox_wkt=bbox_wkt,
             climatology_start_date=climatology_start_date,
             climatology_end_date=climatology_end_date,
         )
@@ -271,9 +271,9 @@ class LastOccurrenceDateMetric(Metric):
     display_label = "Median date of last ice occurrence (CT >= 1/10)"
     ct_threshold = 0.1
 
-    def sql(self, *, table, bbox_wkt, climatology_start_date, climatology_end_date):
+    def sql(self, *, table, grid_crs, bbox_wkt, climatology_start_date, climatology_end_date):
         return all_ct_sql(
-            table=table, bbox_wkt=bbox_wkt,
+            table=table, grid_crs=grid_crs, bbox_wkt=bbox_wkt,
             climatology_start_date=climatology_start_date,
             climatology_end_date=climatology_end_date,
         )
@@ -334,9 +334,9 @@ class SeasonDurationMetric(Metric):
     display_label = "Median ice presence (observation time steps, CT >= 4/10)"
     ct_threshold = 0.4
 
-    def sql(self, *, table, bbox_wkt, climatology_start_date, climatology_end_date):
+    def sql(self, *, table, grid_crs, bbox_wkt, climatology_start_date, climatology_end_date):
         return all_ct_sql(
-            table=table, bbox_wkt=bbox_wkt,
+            table=table, grid_crs=grid_crs, bbox_wkt=bbox_wkt,
             climatology_start_date=climatology_start_date,
             climatology_end_date=climatology_end_date,
         )
@@ -396,9 +396,9 @@ class StormExposureDurationMetric(Metric):
     display_label = "Storm exposure duration (observation time steps, CT <= 3/10)"
     exposure_threshold = 0.3
 
-    def sql(self, *, table, bbox_wkt, climatology_start_date, climatology_end_date):
+    def sql(self, *, table, grid_crs, bbox_wkt, climatology_start_date, climatology_end_date):
         return all_ct_sql(
-            table=table, bbox_wkt=bbox_wkt,
+            table=table, grid_crs=grid_crs, bbox_wkt=bbox_wkt,
             climatology_start_date=climatology_start_date,
             climatology_end_date=climatology_end_date,
         )

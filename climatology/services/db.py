@@ -1,4 +1,4 @@
-"""Database access for the climatology processing layer.
+"""Database access for the climatology stack.
 
 Env-driven engine construction, the shared row-fetch SQL builder, and the
 row-fetch-and-parse (``load_polygons``). The metric strategies import
@@ -15,8 +15,6 @@ import pandas as pd
 from shapely import wkt
 from sqlalchemy import create_engine, text
 
-from climatology.processing.rasterize import GRID_CRS
-
 
 def get_engine():
     host = os.getenv("POSTGRES_HOST", "localhost")
@@ -29,7 +27,7 @@ def get_engine():
     return create_engine(f"postgresql+psycopg2://{user}:{pwd}@{host}:{port}/{db}")
 
 
-def all_ct_sql(*, table: str, bbox_wkt: str,
+def all_ct_sql(*, table: str, grid_crs: int, bbox_wkt: str,
                climatology_start_date: str, climatology_end_date: str) -> str:
     """Complete DML: all ice and water SIGRID3 polygons inside ``bbox_wkt`` over
     the climatology window — ready to execute as-is.
@@ -40,7 +38,7 @@ def all_ct_sql(*, table: str, bbox_wkt: str,
     parsing to a fraction happens in Python via CONCENTRATION_FRACTION
     (single source of truth at services/units_conversion_maps.py).
 
-    Geometries are transposed to ``GRID_CRS`` (the canonical analysis CRS) and
+    Geometries are transposed to ``grid_crs`` (the caller's analysis CRS) and
     filtered to ``bbox_wkt`` (a 4326 WKT polygon from ``fetch_domain_wkt``). The
     climatology window is a **half-open ``T1`` date range**
     [climatology_start_date, climatology_end_date): the caller
@@ -60,7 +58,7 @@ def all_ct_sql(*, table: str, bbox_wkt: str,
     """
     return f"""
         SELECT
-            ST_AsText(ST_Transform(geometry, {GRID_CRS})) AS geom_wkt,
+            ST_AsText(ST_Transform(geometry, {grid_crs})) AS geom_wkt,
             "T1"::date AS obs_date,
             "CT" AS ct_code
         FROM {table}
@@ -77,7 +75,7 @@ def load_polygons(sql: str) -> pd.DataFrame:
 
     Metric-agnostic executor: the SQL (built by ``Metric.sql`` from
     ``all_ct_sql`` + ``fetch_domain_wkt``) must yield a ``geom_wkt`` column in
-    ``GRID_CRS``; this opens a connection, runs it, and parses ``geom_wkt`` into
+    the analysis CRS; this opens a connection, runs it, and parses ``geom_wkt`` into
     a shapely ``geometry`` column so the rows rasterize onto every tier's
     transform.
     """

@@ -50,7 +50,7 @@ PROJECT_ROOT = Path(__file__).parents[3]
 sys.path.insert(0, str(PROJECT_ROOT))
 load_dotenv(PROJECT_ROOT / ".env")
 
-from climatology.processing.db import get_engine  # noqa: E402
+from climatology.services.db import get_engine  # noqa: E402
 from climatology.processing.rasterize import build_grid, fetch_domain_wkt  # noqa: E402
 from climatology.processing.regions import resolve_region  # noqa: E402
 

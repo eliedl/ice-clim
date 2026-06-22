@@ -39,7 +39,7 @@ from climatology.processing.metrics import (
     SeasonDurationMetric,
     StormExposureDurationMetric,
 )
-from climatology.processing.db import load_polygons
+from climatology.services.db import load_polygons
 from climatology.processing.pipeline import (
     archive_product,
     log_distribution,
@@ -49,6 +49,7 @@ from climatology.processing.pipeline import (
     write_geotiff,
 )
 from climatology.processing.rasterize import (
+    GRID_CRS,
     build_clip_mask,
     build_grid,
     build_land_mask,
@@ -105,7 +106,7 @@ def run(metric_slug: str, region: str, source_slug: str, period: tuple[int, int]
     fetch_geom = t0.clip_geom if t0.clip_geom is not None else t0.bounds_geom
     fetch_res = max(t.res_m for t in spec.tiers)
     bbox_wkt = fetch_domain_wkt(fetch_geom, res_m=fetch_res)
-    sql = metric.sql(table=source.table, bbox_wkt=bbox_wkt,
+    sql = metric.sql(table=source.table, grid_crs=GRID_CRS, bbox_wkt=bbox_wkt,
                      climatology_start_date=clim_start, climatology_end_date=clim_end)
     df = load_polygons(sql)
     log.info("Fetched %s rows.", f"{len(df):,}")
