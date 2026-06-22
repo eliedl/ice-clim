@@ -13,7 +13,7 @@ these steps without inspecting their content.
 from __future__ import annotations
 
 from abc import ABC, abstractmethod
-from datetime import date, timedelta
+from datetime import timedelta
 from typing import Any
 
 import numpy as np
@@ -21,9 +21,8 @@ import pandas as pd
 
 from climatology._array_types import BoolGrid, DataGrid
 from climatology.processing.db import all_ct_sql
+from climatology.services.temporal import SEASON_ORIGIN
 from climatology.services.units_conversion_maps import CONCENTRATION_FRACTION
-
-SEASON_ORIGIN = date(2000, 9, 1)  # any Sep-1; used only to format day-of-season as a calendar label
 
 
 class Metric(ABC):

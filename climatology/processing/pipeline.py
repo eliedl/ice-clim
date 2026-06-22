@@ -21,7 +21,8 @@ from rasterio.crs import CRS
 from shapely.geometry import box
 
 from climatology._array_types import DataGrid
-from climatology.processing.metrics import SEASON_ORIGIN, Metric
+from climatology.processing.metrics import Metric
+from climatology.services.temporal import SEASON_ORIGIN
 from climatology.viz.colormaps import build_cmap, percentile_range
 
 log = logging.getLogger(__name__)

@@ -4,7 +4,7 @@ Rasterizes the CIS 1991-2020 EC freeze-up normals (freeze.shp, weekly HD
 classes) onto the climatology grid and differences them against our own
 freeze-up climatology (FreezeUpDateMetric, sgrdr, winters 1991-2020) computed
 through the production pipeline. Both rasters share the Sep-1-anchored
-day-of-season ordinal axis (event_detection.SEASON_ORIGIN).
+day-of-season ordinal axis (services.temporal.SEASON_ORIGIN).
 
 Outputs per-cell signed difference (ours - CIS, days; positive = ours later),
 maps, histogram, and agreement statistics keyed to the CIS weekly
@@ -48,8 +48,7 @@ from dotenv import load_dotenv
 from shapely import wkt as swkt
 from sqlalchemy import text
 
-from climatology.processing.metrics import SEASON_ORIGIN
-from climatology.services.temporal import day_of_season
+from climatology.services.temporal import SEASON_ORIGIN, day_of_season
 from climatology.processing.metrics import FreezeUpDateMetric
 from climatology.processing.pipeline import (
     GRID_CRS,
