@@ -74,6 +74,35 @@ def build_grid(bounds_geom, res_m: float):
     return transform, height, width, (xmin, ymin, xmax, ymax)
 
 
+def fetch_domain_wkt(geom, *, res_m: float) -> str:
+    """4326 WKT of the spatial filter used to fetch chart polygons.
+
+    ``geom`` is the analysis-domain polygon (the region's ``tiers[0]`` domain)
+    in ``GRID_CRS`` — the MRC region polygon for adaptive regions, the
+    axis-aligned bbox for legacy. It is densified (so its reprojected outline
+    follows the true curve, not straight chords between widely-spaced vertices)
+    and buffered one cell outward (a sub-cell over-fetch margin), then
+    reprojected to 4326.
+
+    The fetch domain is therefore the **region footprint, not its bounding box**:
+    a superset of every kept cell (any chart polygon covering an in-domain cell
+    centroid intersects ``geom``), while skipping the bbox-corner polygons that
+    would only land on clipped cells — fewer rows fetched/parsed/burned for
+    elongated MRC regions (DEC-039). The probe-010 under-fetch guard still holds:
+    densify keeps the reprojected boundary faithful; ``buffer(res_m)`` errs on
+    over-fetch, harmless since rasterization assigns values only at in-grid cell
+    centres.
+
+    ``res_m`` sets the densify/buffer length scale (one cell); pass the coarsest
+    tier's resolution so the domain covers every tier.
+    """
+    return (gpd.GeoSeries([geom], crs=GRID_CRS)
+            .segmentize(10 * res_m)
+            .buffer(res_m)
+            .to_crs(epsg=4326)
+            .union_all().wkt)
+
+
 def build_clip_mask(clip_geom, transform, height: int, width: int) -> BoolGrid:
     """Binary in-region mask; True where ``clip_geom`` covers the cell centre.
 

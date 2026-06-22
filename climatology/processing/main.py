@@ -39,7 +39,7 @@ from climatology.processing.metrics import (
     SeasonDurationMetric,
     StormExposureDurationMetric,
 )
-from climatology.processing.db import fetch_domain_wkt, load_polygons
+from climatology.processing.db import load_polygons
 from climatology.processing.pipeline import (
     archive_product,
     log_distribution,
@@ -52,6 +52,7 @@ from climatology.processing.rasterize import (
     build_clip_mask,
     build_grid,
     build_land_mask,
+    fetch_domain_wkt,
 )
 from climatology.processing.regions import REGION_SLUGS, resolve_region
 from climatology.processing.sources import CHART_TABLES, LAND_MASK_PATH
