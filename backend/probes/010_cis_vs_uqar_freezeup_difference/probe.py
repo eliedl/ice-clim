@@ -48,7 +48,8 @@ from dotenv import load_dotenv
 from shapely import wkt as swkt
 from sqlalchemy import text
 
-from climatology.processing.event_detection import SEASON_ORIGIN, day_of_season
+from climatology.processing.metrics import SEASON_ORIGIN
+from climatology.services.temporal import day_of_season
 from climatology.processing.metrics import FreezeUpDateMetric
 from climatology.processing.pipeline import (
     GRID_CRS,

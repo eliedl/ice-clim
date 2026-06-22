@@ -114,10 +114,12 @@ class FreezeUpDateMetric(Metric):
 
     def compute_climatology(self, df, *, transform, height, width, land_mask=None):
         from climatology.processing.event_detection import (
-            admissible_days_of_season,
             build_median_ct_cube,
-            day_of_season,
             extract_event_date,
+        )
+        from climatology.services.temporal import (
+            admissible_days_of_season,
+            day_of_season,
         )
         days = admissible_days_of_season(df)
         cube = build_median_ct_cube(
@@ -184,10 +186,12 @@ class BreakupDateMetric(Metric):
 
     def compute_climatology(self, df, *, transform, height, width, land_mask=None):
         from climatology.processing.event_detection import (
-            admissible_days_of_season,
             build_median_ct_cube,
-            day_of_season,
             extract_event_date,
+        )
+        from climatology.services.temporal import (
+            admissible_days_of_season,
+            day_of_season,
         )
         days = admissible_days_of_season(df)
         cube = build_median_ct_cube(
@@ -230,10 +234,12 @@ class FirstOccurrenceDateMetric(Metric):
 
     def compute_climatology(self, df, *, transform, height, width, land_mask=None):
         from climatology.processing.event_detection import (
-            admissible_days_of_season,
             build_median_ct_cube,
-            day_of_season,
             extract_event_date,
+        )
+        from climatology.services.temporal import (
+            admissible_days_of_season,
+            day_of_season,
         )
         days = admissible_days_of_season(df)
         cube = build_median_ct_cube(
@@ -276,10 +282,12 @@ class LastOccurrenceDateMetric(Metric):
 
     def compute_climatology(self, df, *, transform, height, width, land_mask=None):
         from climatology.processing.event_detection import (
-            admissible_days_of_season,
             build_median_ct_cube,
-            day_of_season,
             extract_event_date,
+        )
+        from climatology.services.temporal import (
+            admissible_days_of_season,
+            day_of_season,
         )
         days = admissible_days_of_season(df)
         cube = build_median_ct_cube(
@@ -336,10 +344,8 @@ class SeasonDurationMetric(Metric):
         ), {}
 
     def compute_climatology(self, df, *, transform, height, width, land_mask=None):
-        from climatology.processing.event_detection import (
-            admissible_days_of_season,
-            build_median_ct_cube,
-        )
+        from climatology.processing.event_detection import build_median_ct_cube
+        from climatology.services.temporal import admissible_days_of_season
         days = admissible_days_of_season(df)
         cube = build_median_ct_cube(
             df, admissible_days=days,
@@ -400,10 +406,8 @@ class StormExposureDurationMetric(Metric):
         ), {}
 
     def compute_climatology(self, df, *, transform, height, width, land_mask=None):
-        from climatology.processing.event_detection import (
-            admissible_days_of_season,
-            build_median_ct_cube,
-        )
+        from climatology.processing.event_detection import build_median_ct_cube
+        from climatology.services.temporal import admissible_days_of_season
         days = admissible_days_of_season(df)
         cube = build_median_ct_cube(
             df, admissible_days=days,

@@ -8,18 +8,16 @@ of dates above/below threshold).
 
 Generic enough to reuse for any future metric of the form "first/last day in
 the admissible window where the medianed field satisfies condition X". The
-WMO 80% data-availability rule is applied per calendar day, derived from the
-climatology period implicit in the input DataFrame.
+admissible-day set (WMO 80% data-availability rule) and the season time axis are
+supplied by the caller — see ``services.temporal``.
 
 See:
   - docs/DECISIONS.md DEC-027 for the methodology rationale
-  - backend/probes/005_sgrda_chart_cadence/ for the WMO mask validation
+  - backend/probes/005_chart_cadence/ for the WMO/HD mask validation
 """
 
 from __future__ import annotations
 
-import warnings
-from datetime import date
 from typing import Literal
 
 import numpy as np
@@ -28,39 +26,8 @@ from jaxtyping import Float
 
 from climatology._array_types import BoolCube, BoolGrid, DataCube, DataGrid
 from climatology.processing.rasterize import burn_values
+from climatology.services.temporal import winter_season
 from climatology.services.units_conversion_maps import CONCENTRATION_FRACTION
-
-
-def day_of_season(month_day: str) -> int:
-    """Sep-1-anchored day ordinal for an "MM-DD" string.
-
-    Day 0 = Sep 1, 101 = Dec 11, 258 = May 17. Doubles as the ice-season sort
-    key ("12-11" precedes "01-01") and as the cube's day-axis value (decoded
-    back to a calendar label via SEASON_ORIGIN in metrics.format_ticks).
-    """
-    m, d = int(month_day[:2]), int(month_day[3:5])
-    # The *winter* year (Jan-Aug) must be non-leap: a leap winter puts Feb 29
-    # inside the Sep->Aug span, shifting every Mar 1+ ordinal by +1. 2001 is
-    # non-leap. The fall year being leap (2000) is irrelevant — we measure
-    # distance *from* Sep 1, so its Feb 29 sits upstream of the origin and
-    # cancels in the subtraction. Origin matches SEASON_ORIGIN in metrics.py.
-    year = 2000 if m >= 9 else 2001
-    return (date(year, m, d) - date(2000, 9, 1)).days
-
-
-def winter_season(obs_date: pd.Series) -> pd.Series:
-    """Winter-year season identifier for each observation date.
-
-    A season is labelled by the calendar year of its *winter*: autumn charts
-    (month >= 9) roll forward to the next year, so 2010-11-15 and 2011-01-15
-    both belong to season 2011 (the 2010-2011 winter). This is the canonical
-    season identity for the whole pipeline; it makes a "y1-y2" climatology span
-    seasons y1..y2 directly (no fall-year shift). The SQL fetch stays a plain
-    half-open ``T1`` date window (``climatology_date_window`` in main.py), so
-    season anchoring lives here in Python, not in DML.
-    """
-    dt = pd.to_datetime(obs_date)
-    return dt.dt.year + (dt.dt.month >= 9).astype(int)
 
 
 def _nanmedian_high(a: Float[np.ndarray, "n_seasons *rest"]) -> Float[np.ndarray, "*rest"]:
@@ -79,31 +46,6 @@ def _nanmedian_high(a: Float[np.ndarray, "n_seasons *rest"]) -> Float[np.ndarray
     out = np.take_along_axis(s, idx[None, ...], axis=0)[0]
     out[n == 0] = np.nan
     return out
-
-
-def admissible_days_of_season(df: pd.DataFrame, *, coverage: float = 0.8) -> list[str]:
-    """Calendar days passing the WMO data-availability rule over the climatology
-    period implicit in ``df``.
-
-    Returns "MM-DD" strings sorted in ice-season order (Sep -> Aug). Feb 29
-    is dropped a priori (its coverage is structurally capped at ~25% of any
-    period, well below the WMO threshold).
-
-    The denominator counts **winter seasons** (``winter_season``), not calendar
-    years: a 10-winter climatology spans 11 calendar years (Sep year-1 ->
-    Aug year+10), which would inflate the WMO threshold. For 10 winters and
-    coverage=0.8, min_seasons = 8; for 30 winters, min_seasons = 24.
-    """
-    df = df.copy()
-    df["obs_date_dt"] = pd.to_datetime(df["obs_date"])
-    df["month_day"] = df["obs_date_dt"].dt.strftime("%m-%d")
-    df["season"] = winter_season(df["obs_date"])
-    df = df[df["month_day"] != "02-29"]
-    n_seasons = df["season"].nunique()
-    min_seasons = int(np.ceil(coverage * n_seasons))
-    coverage_per_date = df.groupby("month_day")["season"].nunique()
-    admissible = coverage_per_date[coverage_per_date >= min_seasons].index.tolist()
-    return sorted(admissible, key=day_of_season)
 
 
 def build_median_ct_cube(

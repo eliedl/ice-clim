@@ -32,7 +32,7 @@ PROJECT_ROOT = Path(__file__).parents[3]
 sys.path.insert(0, str(PROJECT_ROOT))
 load_dotenv(PROJECT_ROOT / ".env")
 
-from climatology.services.hd_calendar import HD_LABELS, HD_MONTH_DAYS  # noqa: E402
+from climatology.services.temporal import HD_LABELS, HD_MONTH_DAYS  # noqa: E402
 
 OUTPUT_DIR = Path(__file__).parent / "output"
 

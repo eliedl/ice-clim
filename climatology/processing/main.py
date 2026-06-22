@@ -9,7 +9,7 @@ Usage:
 
 Period semantics: winters. ``--period 1991-2020`` fetches charts in the
 half-open T1 window [1990-09-01, 2020-09-01) — the 30 winter seasons 1991..2020
-(each labelled by its winter year; see ``event_detection.winter_season``).
+(each labelled by its winter year; see ``services.temporal.winter_season``).
 """
 
 from __future__ import annotations
@@ -27,7 +27,6 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).parents[2]))
 
 import numpy as np
-import pandas as pd
 from dotenv import load_dotenv
 
 from climatology._array_types import DataGrid
@@ -55,8 +54,8 @@ from climatology.processing.rasterize import (
     build_land_mask,
 )
 from climatology.processing.regions import REGION_SLUGS, resolve_region
-from climatology.processing.sources import CHART_TABLES, LAND_MASK_PATH, ChartTable
-from climatology.services.hd_calendar import off_hd_month_days
+from climatology.processing.sources import CHART_TABLES, LAND_MASK_PATH
+from climatology.services.temporal import assert_hd_aligned, climatology_date_window
 
 load_dotenv(Path(__file__).parents[2] / ".env")
 
@@ -76,35 +75,6 @@ METRICS: dict[str, Metric] = {
     SeasonDurationMetric.slug:      SeasonDurationMetric(),
     StormExposureDurationMetric.slug: StormExposureDurationMetric(),
 }
-
-
-def climatology_date_window(period: tuple[int, int]) -> tuple[str, str]:
-    """Winters (y1, y2) -> half-open ``T1`` date window [start, end).
-
-    A "y1-y2" climatology is the winters y1..y2 inclusive. Winter y1 starts on
-    Sep 1 of y1-1; winter y2 ends Aug 31 of y2, so the exclusive upper bound is
-    Sep 1 of y2. E.g. (2011, 2020) -> ("2010-09-01", "2020-09-01"). Season
-    *labels* are recovered downstream by ``event_detection.winter_season``.
-    """
-    y1, y2 = period
-    return f"{y1 - 1}-09-01", f"{y2}-09-01"
-
-
-def assert_hd_aligned(df: pd.DataFrame, source: ChartTable) -> None:
-    """HD validation guard for weekly sources (DEC-027/DEC-033, probe 005).
-
-    SGRDR charts are exactly on-HD through 2020; off-HD dates mean the period
-    reaches into the post-2020 Monday publication cadence (or a regression in
-    the archive) and the HD time axis no longer holds — fail loudly.
-    """
-    month_days = pd.to_datetime(df["obs_date"]).dt.strftime("%m-%d")
-    off = off_hd_month_days(month_days)
-    if off:
-        sys.exit(
-            f"ERROR: {len(off)} chart month-days off the HD calendar for "
-            f"source '{source.slug}' (e.g. {off[:5]}). Periods extending past "
-            "2020 require an HD-binning strategy (see DEC-027)."
-        )
 
 
 def run(metric_slug: str, region: str, source_slug: str, period: tuple[int, int],
@@ -142,7 +112,10 @@ def run(metric_slug: str, region: str, source_slug: str, period: tuple[int, int]
         return
 
     if source.cadence == "hd_weekly":
-        assert_hd_aligned(df, source)
+        try:
+            assert_hd_aligned(df, source_slug=source.slug)
+        except ValueError as e:
+            sys.exit(f"ERROR: {e}")
 
     multi = len(spec.tiers) > 1
     layers: list[tuple[DataGrid, tuple[float, float, float, float]]] = []

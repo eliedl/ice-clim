@@ -44,9 +44,9 @@ def all_ct_sql(*, table: str, grid_crs: int,
 
     The climatology window is a **half-open ``T1`` date range**
     [climatology_start_date, climatology_end_date): the caller
-    (``climatology_date_window`` in main.py) maps a winter-year period to its
-    Sep-1 bounds. Season *identity* is a Python concern
-    (``event_detection.winter_season``), so the SQL stays a plain date-range
+    (``services.temporal.climatology_date_window``) maps a winter-year period to
+    its Sep-1 bounds. Season *identity* is a Python concern
+    (``services.temporal.winter_season``), so the SQL stays a plain date-range
     fetch with no fall/winter anchoring logic in DML.
 
     POLY_TYPE filter:
