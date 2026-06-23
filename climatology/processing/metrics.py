@@ -18,6 +18,7 @@ from datetime import timedelta
 import numpy as np
 import pandas as pd
 
+from climatology.processing.sources import ChartTable
 from climatology.utils._types import BoolGrid, DataGrid
 from climatology.services.db import all_ct_sql
 from climatology.services.temporal import SEASON_ORIGIN
@@ -66,6 +67,14 @@ class Metric(ABC):
     @abstractmethod
     def format_ticks(self, tick_values: list[float]) -> list[str]:
         """Colorbar tick labels in the metric's natural units."""
+
+    def display_label_for(self, source: ChartTable) -> str:
+        """Display label under a given chart source.
+
+        Default is the static ``display_label``; metrics whose unit depends on
+        the source's observation cadence (days vs weeks) override this.
+        """
+        return self.display_label
 
 
 class FreezeUpDateMetric(Metric):
@@ -334,6 +343,9 @@ class SeasonDurationMetric(Metric):
     display_label = "Median ice presence (observation time steps, CT >= 4/10)"
     ct_threshold = 0.4
 
+    def display_label_for(self, source: ChartTable) -> str:
+        return f"Median ice presence ({source.obs_unit}, CT >= 4/10)"
+
     def sql(self, *, table, grid_crs, bbox_wkt, climatology_start_date, climatology_end_date):
         return all_ct_sql(
             table=table, grid_crs=grid_crs, bbox_wkt=bbox_wkt,
@@ -395,6 +407,9 @@ class StormExposureDurationMetric(Metric):
     slug = "storm_exposure_duration"
     display_label = "Storm exposure duration (observation time steps, CT <= 3/10)"
     exposure_threshold = 0.3
+
+    def display_label_for(self, source: ChartTable) -> str:
+        return f"Storm exposure duration ({source.obs_unit}, CT <= 3/10)"
 
     def sql(self, *, table, grid_crs, bbox_wkt, climatology_start_date, climatology_end_date):
         return all_ct_sql(
