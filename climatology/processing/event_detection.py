@@ -22,30 +22,12 @@ from typing import Literal
 
 import numpy as np
 import pandas as pd
-from jaxtyping import Float
 
 from climatology._array_types import BoolCube, BoolGrid, DataCube, DataGrid
 from climatology.processing.rasterize import burn_values
 from climatology.services.temporal import winter_season
 from climatology.services.units_conversion_maps import CONCENTRATION_FRACTION
-
-
-def _nanmedian_high(a: Float[np.ndarray, "n_seasons *rest"]) -> Float[np.ndarray, "*rest"]:
-    """Nan-aware upper-middle median along axis 0 (DEC-035).
-
-    Exact median for odd sample counts; the *upper* of the two middle values
-    for even counts (``sorted[n // 2]``), unlike ``np.nanmedian`` which
-    interpolates the pair. Matches the CIS normals convention (probe 010:
-    99.6% exact cell agreement vs 86.8% interpolated): the median of a
-    discrete-coded CT field is always a representable code value, never an
-    interpolated midpoint.
-    """
-    s = np.sort(a, axis=0)                 # NaNs sort to the end
-    n = np.sum(~np.isnan(a), axis=0)
-    idx = np.where(n > 0, n // 2, 0)
-    out = np.take_along_axis(s, idx[None, ...], axis=0)[0]
-    out[n == 0] = np.nan
-    return out
+from climatology.utils.arithmetics import _nanmedian_high
 
 
 def build_median_ct_cube(

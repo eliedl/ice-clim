@@ -40,7 +40,7 @@ from climatology.processing.metrics import (
     StormExposureDurationMetric,
 )
 from climatology.services.db import load_polygons
-from climatology.processing.pipeline import plot_metric
+from climatology.services.plot import plot_metric
 from climatology.processing.rasterize import (
     GRID_CRS,
     build_clip_mask,
@@ -171,10 +171,11 @@ def run(metric_slug: str, region: str, source_slug: str, period: tuple[int, int]
     png_label = "adaptive" if multi else f"{int(round(spec.tiers[0].res_m))}m"
     composite_png = output_png(region, metric.slug, period_slug=period_slug,
                                source_slug=source.slug, label=png_label)
-    plot_metric(layers, metric=metric, png_path=composite_png, display_name=spec.display,
+    plot_metric(layers, png_path=composite_png, display_name=spec.display,
                 period_label=f"{period[0]}–{period[1]}",
                 source_label=source.display_label,
-                grid_crs=spec.grid_crs, res_label=res_label)
+                grid_crs=spec.grid_crs, res_label=res_label,
+                display_label=metric.display_label, format_ticks=metric.format_ticks)
 
 
 def _parse_period(s: str) -> tuple[int, int]:

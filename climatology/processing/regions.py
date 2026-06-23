@@ -33,9 +33,18 @@ from shapely import make_valid
 from shapely.geometry import shape
 from shapely.geometry.base import BaseGeometry
 
-from climatology.processing.pipeline import BBOX_ROOT, REGION_DISPLAY
 from climatology.processing.rasterize import GRID_CRS, GRID_RES
 from climatology.processing.sources import LAND_MASK_PATH
+
+BBOX_ROOT = Path("/home/eliedl/data/masks/climatology_bbox")
+
+REGION_DISPLAY = {
+    "gaspe":                 "Gaspé",
+    "iles-de-la-madeleine":  "Îles-de-la-Madeleine",
+    "mingan":                "Mingan",
+    "rimouski":              "Rimouski",
+    "sept-iles":             "Sept-Îles",
+}
 
 # Adaptive-region source layers (EPSG:32198, NAD83 / Québec Lambert).
 MRC_GPKG = Path(
