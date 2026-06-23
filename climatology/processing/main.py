@@ -40,14 +40,7 @@ from climatology.processing.metrics import (
     StormExposureDurationMetric,
 )
 from climatology.services.db import load_polygons
-from climatology.processing.pipeline import (
-    archive_product,
-    log_distribution,
-    output_geotiff,
-    output_png,
-    plot_metric,
-    write_geotiff,
-)
+from climatology.processing.pipeline import plot_metric
 from climatology.processing.rasterize import (
     GRID_CRS,
     build_clip_mask,
@@ -57,7 +50,18 @@ from climatology.processing.rasterize import (
 )
 from climatology.processing.regions import REGION_SLUGS, resolve_region
 from climatology.processing.sources import CHART_TABLES, LAND_MASK_PATH
-from climatology.services.temporal import assert_hd_aligned, climatology_date_window
+from climatology.services.temporal import (
+    SEASON_ORIGIN,
+    assert_hd_aligned,
+    climatology_date_window,
+)
+from climatology.utils.export import (
+    archive_product,
+    log_distribution,
+    output_geotiff,
+    output_png,
+    write_geotiff,
+)
 
 load_dotenv(Path(__file__).parents[2] / ".env")
 
@@ -154,8 +158,12 @@ def run(metric_slug: str, region: str, source_slug: str, period: tuple[int, int]
         if geotiff:
             tier_tif = output_geotiff(region, metric.slug, period_slug=period_slug,
                                       source_slug=source.slug, label=tier_label)
+            tags = {**manifest, "display_label": metric.display_label}
+            if metric.slug.endswith("_date"):
+                tags["value_encoding"] = "day_of_season"
+                tags["season_origin"] = SEASON_ORIGIN.isoformat()
             write_geotiff(values, transform, crs=spec.grid_crs, path=tier_tif,
-                          metric=metric, manifest=manifest)
+                          band_description=metric.display_label, tags=tags)
         layers.append((values, bounds))
 
     # Composite PNG: coarse first, fine last (fine wins where it has data).
