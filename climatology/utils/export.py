@@ -18,7 +18,7 @@ import numpy as np
 import rasterio
 from rasterio.crs import CRS
 
-from climatology._array_types import DataGrid
+from climatology.utils._array_types import DataGrid
 
 log = logging.getLogger(__name__)
 

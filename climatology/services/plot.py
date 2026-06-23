@@ -24,7 +24,7 @@ import numpy as np
 from matplotlib.colors import Colormap, LinearSegmentedColormap, Normalize
 from shapely.geometry import box
 
-from climatology._array_types import DataGrid
+from climatology.utils._array_types import DataGrid
 from climatology.utils.arithmetics import percentile_range
 
 log = logging.getLogger(__name__)

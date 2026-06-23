@@ -18,7 +18,7 @@ from datetime import timedelta
 import numpy as np
 import pandas as pd
 
-from climatology._array_types import BoolGrid, DataGrid
+from climatology.utils._array_types import BoolGrid, DataGrid
 from climatology.services.db import all_ct_sql
 from climatology.services.temporal import SEASON_ORIGIN
 from climatology.services.units_conversion_maps import CONCENTRATION_FRACTION

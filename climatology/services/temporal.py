@@ -9,9 +9,9 @@ These are domain-aware — they encode the ice season, the winter-year conventio
 and the CIS HD cadence — hence ``services`` (a domain source of truth), not
 ``utils`` (domain-agnostic primitives). This module happens to be stateless and
 I/O-free; that is a property of the module, not a contract of ``services`` (which
-also holds the I/O-bound ``db``). Consumed by the processing pipeline
-(``processing.metrics``, ``processing.event_detection``, ``processing.main``) and
-by cadence probes.
+also holds the I/O-bound ``db``). Consumed by the processing layer
+(``processing.metrics``, ``processing.event_detection``) and the ``main``
+entrypoint, plus cadence probes.
 
 CIS HD calendar (DEC-027, READING_LOG e116): 52 fixed month-days per year. Weekly
 except the Nov 26 -> Dec 4 8-day jump; the leap-year exception is the

@@ -23,7 +23,7 @@ from typing import Literal
 import numpy as np
 import pandas as pd
 
-from climatology._array_types import BoolCube, BoolGrid, DataCube, DataGrid
+from climatology.utils._array_types import BoolCube, BoolGrid, DataCube, DataGrid
 from climatology.processing.rasterize import burn_values
 from climatology.services.temporal import winter_season
 from climatology.services.units_conversion_maps import CONCENTRATION_FRACTION

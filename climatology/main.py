@@ -5,7 +5,7 @@ runs the generic pipeline, writes a PNG (and, with ``--geotiff``, one
 float32 GeoTIFF per tier).
 
 Usage:
-    python climatology.py <metric-slug> <region-slug> [--source sgrda|sgrdr] [--period YYYY-YYYY] [--geotiff]
+    python climatology/main.py <metric-slug> <region-slug> [--source sgrda|sgrdr] [--period YYYY-YYYY] [--geotiff]
 
 Period semantics: winters. ``--period 1991-2020`` fetches charts in the
 half-open T1 window [1990-09-01, 2020-09-01) — the 30 winter seasons 1991..2020
@@ -20,16 +20,16 @@ import re
 import sys
 from pathlib import Path
 
-# Allow running as a script (`python climatology/processing/main.py ...`) by
+# Allow running as a script (`python climatology/main.py ...`) by
 # putting the project root on sys.path before importing project modules.
-# Running as a module (`python -m climatology.processing.main ...`) is also
+# Running as a module (`python -m climatology.main ...`) is also
 # supported and doesn't depend on this insertion.
-sys.path.insert(0, str(Path(__file__).parents[2]))
+sys.path.insert(0, str(Path(__file__).parents[1]))
 
 import numpy as np
 from dotenv import load_dotenv
 
-from climatology._array_types import DataGrid
+from climatology.utils._array_types import DataGrid
 from climatology.processing.metrics import (
     BreakupDateMetric,
     FirstOccurrenceDateMetric,
@@ -63,7 +63,7 @@ from climatology.utils.export import (
     write_geotiff,
 )
 
-load_dotenv(Path(__file__).parents[2] / ".env")
+load_dotenv(Path(__file__).parents[1] / ".env")
 
 logging.basicConfig(
     level=logging.INFO,
