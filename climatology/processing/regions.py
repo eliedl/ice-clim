@@ -25,6 +25,7 @@ unchanged — the tiers differ only in cell size.
 
 from __future__ import annotations
 
+import logging
 from dataclasses import dataclass
 from functools import cached_property
 from pathlib import Path
@@ -39,6 +40,8 @@ from climatology.processing.rasterize import (
     GRID_CRS, GRID_RES, Grid, build_clip_mask, build_grid, build_land_mask,
 )
 from climatology.processing.sources import LAND_MASK_PATH
+
+log = logging.getLogger(__name__)
 
 BBOX_ROOT = Path("/home/eliedl/data/masks/climatology_bbox")
 
@@ -102,7 +105,10 @@ class Tier:
         A pure projection of ``bounds_geom`` at ``res_m`` — computed once and
         shared by compute and emit; no I/O.
         """
-        return build_grid(self.bounds_geom, self.res_m)
+        g = build_grid(self.bounds_geom, self.res_m)
+        log.info("Tier '%s': %d × %d cells (%d total) @ %g m",
+                 self.name, g.width, g.height, g.width * g.height, self.res_m)
+        return g
 
     @cached_property
     def land_mask(self) -> np.ndarray:

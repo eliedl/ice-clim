@@ -12,13 +12,17 @@ these steps without inspecting their content.
 
 from __future__ import annotations
 
+import logging
 from abc import ABC, abstractmethod
 from datetime import timedelta
 
 import numpy as np
 import pandas as pd
 
+from climatology.processing.regions import Tier
 from climatology.processing.sources import ChartTable
+
+log = logging.getLogger(__name__)
 from climatology.utils._types import BoolGrid, DataGrid
 from climatology.services.db import all_ct_sql
 from climatology.services.temporal import SEASON_ORIGIN
@@ -43,8 +47,24 @@ class Metric(ABC):
         additional columns consumed by ``compute_climatology``.
         """
 
+    def compute_climatology(self, df: pd.DataFrame, tier: Tier) -> DataGrid:
+        """End-to-end climatology computation: rows -> (H, W) result raster.
+
+        Extracts grid geometry and masks from ``tier``, delegates the
+        metric-specific computation to ``_compute``, then applies the clip mask
+        so cells outside the analysis polygon are NaN'd once, here, regardless
+        of metric.
+        """
+        grid = tier.grid
+        values = self._compute(df, transform=grid.transform, height=grid.height,
+                               width=grid.width, land_mask=tier.land_mask)
+        values[~tier.clip_mask] = np.nan
+        log.info("  Tier '%s' cells with data: %s / %s", tier.name,
+                 f"{int((~np.isnan(values)).sum()):,}", f"{grid.height * grid.width:,}")
+        return values
+
     @abstractmethod
-    def compute_climatology(
+    def _compute(
         self,
         df: pd.DataFrame,
         *,
@@ -53,15 +73,12 @@ class Metric(ABC):
         width: int,
         land_mask: BoolGrid | None = None,
     ) -> DataGrid:
-        """End-to-end climatology computation: rows -> (H, W) result raster.
+        """Metric-specific computation: rows -> (H, W) result raster.
 
         All current metrics use the CIS-aligned median-then-threshold
-        methodology (DEC-027/DEC-035): they median the CT field across seasons
-        per calendar-day (``build_median_ct_cube``) before applying the
-        metric's event/count logic. Concrete metrics implement this directly.
-
-        ``land_mask`` (H, W bool, True on land) lets metrics skip land cells
-        from intermediate aggregations (median-then-threshold).
+        methodology (DEC-027/DEC-035): median CT across seasons per
+        calendar-day (``build_median_ct_cube``), then apply the metric's
+        event/count logic.
         """
 
     @abstractmethod
@@ -119,7 +136,7 @@ class FreezeUpDateMetric(Metric):
             climatology_end_date=climatology_end_date,
         )
 
-    def compute_climatology(self, df, *, transform, height, width, land_mask=None):
+    def _compute(self, df, *, transform, height, width, land_mask=None):
         from climatology.processing.event_detection import (
             build_median_ct_cube,
             extract_event_date,
@@ -191,7 +208,7 @@ class BreakupDateMetric(Metric):
             climatology_end_date=climatology_end_date,
         )
 
-    def compute_climatology(self, df, *, transform, height, width, land_mask=None):
+    def _compute(self, df, *, transform, height, width, land_mask=None):
         from climatology.processing.event_detection import (
             build_median_ct_cube,
             extract_event_date,
@@ -239,7 +256,7 @@ class FirstOccurrenceDateMetric(Metric):
             climatology_end_date=climatology_end_date,
         )
 
-    def compute_climatology(self, df, *, transform, height, width, land_mask=None):
+    def _compute(self, df, *, transform, height, width, land_mask=None):
         from climatology.processing.event_detection import (
             build_median_ct_cube,
             extract_event_date,
@@ -287,7 +304,7 @@ class LastOccurrenceDateMetric(Metric):
             climatology_end_date=climatology_end_date,
         )
 
-    def compute_climatology(self, df, *, transform, height, width, land_mask=None):
+    def _compute(self, df, *, transform, height, width, land_mask=None):
         from climatology.processing.event_detection import (
             build_median_ct_cube,
             extract_event_date,
@@ -353,7 +370,7 @@ class SeasonDurationMetric(Metric):
             climatology_end_date=climatology_end_date,
         )
 
-    def compute_climatology(self, df, *, transform, height, width, land_mask=None):
+    def _compute(self, df, *, transform, height, width, land_mask=None):
         from climatology.processing.event_detection import build_median_ct_cube
         from climatology.services.temporal import admissible_days_of_season
         days = admissible_days_of_season(df)
@@ -418,7 +435,7 @@ class StormExposureDurationMetric(Metric):
             climatology_end_date=climatology_end_date,
         )
 
-    def compute_climatology(self, df, *, transform, height, width, land_mask=None):
+    def _compute(self, df, *, transform, height, width, land_mask=None):
         from climatology.processing.event_detection import build_median_ct_cube
         from climatology.services.temporal import admissible_days_of_season
         days = admissible_days_of_season(df)

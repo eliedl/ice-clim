@@ -16,7 +16,6 @@ from __future__ import annotations
 import logging
 from dataclasses import dataclass
 
-import numpy as np
 import pandas as pd
 
 from climatology.processing.metrics import METRICS, Metric
@@ -195,27 +194,10 @@ def _validate(fetch: FetchResult, ctx: RunContext) -> None:
         assert_hd_aligned(fetch.df, source_slug=ctx.source.slug)
 
 
-def _compute_tier(fetch: FetchResult, tier: Tier, ctx: RunContext) -> TierProduct:
-    """Compute one tier's result raster — no output I/O; returns a value object."""
-    grid = tier.grid
-    log.info("Tier '%s': %d × %d cells (%d total) @ %g m",
-             tier.name, grid.width, grid.height, grid.width * grid.height, tier.res_m)
-
-    values = ctx.metric.compute_climatology(
-        fetch.df, transform=grid.transform, height=grid.height, width=grid.width,
-        land_mask=tier.land_mask,
-    )
-    values[~tier.clip_mask] = np.nan
-    log.info("  Tier '%s' cells with data: %s / %s", tier.name,
-             f"{int((~np.isnan(values)).sum()):,}", f"{grid.height * grid.width:,}")
-    log_distribution(values)
-
-    return TierProduct(tier=tier, values=values)
-
-
 def _compute_tiers(fetch: FetchResult, ctx: RunContext) -> list[TierProduct]:
-    """Compute one product per region tier (the pure compute pass)."""
-    return [_compute_tier(fetch, tier, ctx) for tier in ctx.spec.tiers]
+    """Compute one product per region tier."""
+    return [TierProduct(tier=tier, values=ctx.metric.compute_climatology(fetch.df, tier))
+            for tier in ctx.spec.tiers]
 
 
 def _emit_tier(product: TierProduct, ctx: RunContext, fetch: FetchResult,
