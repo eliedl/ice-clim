@@ -25,3 +25,6 @@ BoolGrid = Bool[np.ndarray, "H W"]          # land / clip masks (True = land / i
 # climatological cubes
 DataCube = Float[np.ndarray, "n_dates H W"]   # per-date median CT field
 BoolCube = Bool[np.ndarray, "n_dates H W"]    # thresholded cube
+
+# spatial extent
+GridBounds = tuple[float, float, float, float]   # (xmin, ymin, xmax, ymax) in grid-CRS units

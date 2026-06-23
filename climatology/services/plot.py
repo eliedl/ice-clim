@@ -24,7 +24,7 @@ import numpy as np
 from matplotlib.colors import Colormap, LinearSegmentedColormap, Normalize
 from shapely.geometry import box
 
-from climatology.utils._array_types import DataGrid
+from climatology.utils._array_types import DataGrid, GridBounds
 from climatology.utils.arithmetics import percentile_range
 
 log = logging.getLogger(__name__)
@@ -114,7 +114,7 @@ def build_cmap(
 
 
 def plot_metric(
-    layers: list[tuple[DataGrid, tuple[float, float, float, float]]],
+    layers: list[tuple[DataGrid, GridBounds]],
     *,
     png_path: Path,
     display_name: str,

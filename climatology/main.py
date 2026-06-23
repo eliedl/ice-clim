@@ -14,22 +14,26 @@ half-open T1 window [1990-09-01, 2020-09-01) — the 30 winter seasons 1991..202
 
 from __future__ import annotations
 
-import argparse
-import logging
 import re
 import sys
-from pathlib import Path
-
-# Allow running as a script (`python climatology/main.py ...`) by
-# putting the project root on sys.path before importing project modules.
-# Running as a module (`python -m climatology.main ...`) is also
-# supported and doesn't depend on this insertion.
-sys.path.insert(0, str(Path(__file__).parents[1]))
-
+import logging
+import argparse
 import numpy as np
+from pathlib import Path
 from dotenv import load_dotenv
 
-from climatology.utils._array_types import DataGrid
+load_dotenv(Path(__file__).parents[1] / ".env")
+sys.path.insert(0, str(Path(__file__).parents[1]))
+
+from climatology.processing.regions import REGION_SLUGS, resolve_region
+from climatology.processing.sources import CHART_TABLES, LAND_MASK_PATH
+from climatology.processing.rasterize import (
+    GRID_CRS,
+    build_clip_mask,
+    build_grid,
+    build_land_mask,
+    fetch_domain_wkt,
+)
 from climatology.processing.metrics import (
     BreakupDateMetric,
     FirstOccurrenceDateMetric,
@@ -39,22 +43,16 @@ from climatology.processing.metrics import (
     SeasonDurationMetric,
     StormExposureDurationMetric,
 )
+
 from climatology.services.db import load_polygons
 from climatology.services.plot import plot_metric
-from climatology.processing.rasterize import (
-    GRID_CRS,
-    build_clip_mask,
-    build_grid,
-    build_land_mask,
-    fetch_domain_wkt,
-)
-from climatology.processing.regions import REGION_SLUGS, resolve_region
-from climatology.processing.sources import CHART_TABLES, LAND_MASK_PATH
 from climatology.services.temporal import (
     SEASON_ORIGIN,
     assert_hd_aligned,
     climatology_date_window,
 )
+
+from climatology.utils._array_types import DataGrid, GridBounds
 from climatology.utils.export import (
     archive_product,
     log_distribution,
@@ -62,8 +60,6 @@ from climatology.utils.export import (
     output_png,
     write_geotiff,
 )
-
-load_dotenv(Path(__file__).parents[1] / ".env")
 
 logging.basicConfig(
     level=logging.INFO,
@@ -125,7 +121,7 @@ def run(metric_slug: str, region: str, source_slug: str, period: tuple[int, int]
             sys.exit(f"ERROR: {e}")
 
     multi = len(spec.tiers) > 1
-    layers: list[tuple[DataGrid, tuple[float, float, float, float]]] = []
+    layers: list[tuple[DataGrid, GridBounds]] = []
     for tier in spec.tiers:
         transform, h, w, bounds = build_grid(tier.bounds_geom, tier.res_m)
         log.info("Tier '%s': %d × %d cells (%d total) @ %g m",
