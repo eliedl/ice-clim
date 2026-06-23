@@ -35,11 +35,7 @@ from climatology.processing.rasterize import (
     fetch_domain_wkt,
 )
 from climatology.processing.metrics import (
-    BreakupDateMetric,
-    FirstOccurrenceDateMetric,
-    FreezeUpDateMetric,
-    LastOccurrenceDateMetric,
-    Metric,
+    METRICS,
     SeasonDurationMetric,
     StormExposureDurationMetric,
 )
@@ -69,14 +65,29 @@ logging.basicConfig(
 log = logging.getLogger(__name__)
 
 
-METRICS: dict[str, Metric] = {
-    FreezeUpDateMetric.slug:        FreezeUpDateMetric(),
-    BreakupDateMetric.slug:         BreakupDateMetric(),
-    FirstOccurrenceDateMetric.slug: FirstOccurrenceDateMetric(),
-    LastOccurrenceDateMetric.slug:  LastOccurrenceDateMetric(),
-    SeasonDurationMetric.slug:      SeasonDurationMetric(),
-    StormExposureDurationMetric.slug: StormExposureDurationMetric(),
-}
+def _tier_label(tier, *, multi: bool) -> str:
+    """Product-file label for one tier: ``"35m"`` legacy, ``"fine_100m"`` nested."""
+    res_tag = f"{int(round(tier.res_m))}m"
+    return f"{tier.name}_{res_tag}" if multi else res_tag
+
+
+def _composite_label(spec, *, multi: bool) -> str:
+    """Product-file label for the composite map: ``"adaptive"`` or a res tag."""
+    return "adaptive" if multi else f"{int(round(spec.tiers[0].res_m))}m"
+
+
+def _res_label(spec) -> str:
+    """Human-readable resolution note for the map footer (one entry per tier)."""
+    return " / ".join(f"{int(round(t.res_m))} m" for t in spec.tiers)
+
+
+def _geotiff_tags(manifest: dict, metric) -> dict:
+    """GeoTIFF metadata tags from a run manifest, plus date-metric decoding keys."""
+    tags = {**manifest, "display_label": metric.display_label}
+    if metric.slug.endswith("_date"):
+        tags["value_encoding"] = "day_of_season"
+        tags["season_origin"] = SEASON_ORIGIN.isoformat()
+    return tags
 
 
 def run(metric_slug: str, region: str, source_slug: str, period: tuple[int, int],
@@ -139,8 +150,7 @@ def run(metric_slug: str, region: str, source_slug: str, period: tuple[int, int]
                  f"{int((~np.isnan(values)).sum()):,}", f"{h * w:,}")
         log_distribution(values)
 
-        res_tag = f"{int(round(tier.res_m))}m"
-        tier_label = f"{tier.name}_{res_tag}" if multi else res_tag
+        tier_label = _tier_label(tier, multi=multi)
         tier_png = output_png(region, metric.slug, period_slug=period_slug,
                               source_slug=source.slug, label=tier_label)
         manifest = {
@@ -154,17 +164,14 @@ def run(metric_slug: str, region: str, source_slug: str, period: tuple[int, int]
         if geotiff:
             tier_tif = output_geotiff(region, metric.slug, period_slug=period_slug,
                                       source_slug=source.slug, label=tier_label)
-            tags = {**manifest, "display_label": metric.display_label}
-            if metric.slug.endswith("_date"):
-                tags["value_encoding"] = "day_of_season"
-                tags["season_origin"] = SEASON_ORIGIN.isoformat()
             write_geotiff(values, transform, crs=spec.grid_crs, path=tier_tif,
-                          band_description=metric.display_label, tags=tags)
+                          band_description=metric.display_label,
+                          tags=_geotiff_tags(manifest, metric))
         layers.append((values, bounds))
 
     # Composite PNG: coarse first, fine last (fine wins where it has data).
-    res_label = " / ".join(f"{int(round(t.res_m))} m" for t in spec.tiers)
-    png_label = "adaptive" if multi else f"{int(round(spec.tiers[0].res_m))}m"
+    res_label = _res_label(spec)
+    png_label = _composite_label(spec, multi=multi)
     composite_png = output_png(region, metric.slug, period_slug=period_slug,
                                source_slug=source.slug, label=png_label)
     plot_metric(layers, png_path=composite_png, display_name=spec.display,

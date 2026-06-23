@@ -421,3 +421,15 @@ class StormExposureDurationMetric(Metric):
 
     def format_ticks(self, tick_values):
         return [f"{int(round(d))}" for d in tick_values]
+
+
+# Slug -> singleton registry of every concrete metric; the entrypoint and CLI
+# resolve a metric slug through this.
+METRICS: dict[str, Metric] = {
+    FreezeUpDateMetric.slug:          FreezeUpDateMetric(),
+    BreakupDateMetric.slug:           BreakupDateMetric(),
+    FirstOccurrenceDateMetric.slug:   FirstOccurrenceDateMetric(),
+    LastOccurrenceDateMetric.slug:    LastOccurrenceDateMetric(),
+    SeasonDurationMetric.slug:        SeasonDurationMetric(),
+    StormExposureDurationMetric.slug: StormExposureDurationMetric(),
+}
