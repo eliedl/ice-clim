@@ -18,10 +18,10 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).parents[2]))
 
 import numpy as np
-from rasterio.transform import from_bounds
 from shapely.geometry import box
 
-from climatology.processing.rasterize import build_clip_mask, build_grid
+from climatology.processing.rasterize import build_grid
+from climatology.processing.regions import Tier
 
 
 def test_build_grid_cell_count_math():
@@ -40,16 +40,18 @@ def test_build_grid_cell_count_math():
     assert (w25, h25) == (40, 20), f"expected 40x20 at 25 m, got {w25}x{h25}"
 
 
-def test_build_clip_mask_none_is_all_true():
-    transform = from_bounds(0, 0, 4, 4, 4, 4)
-    mask = build_clip_mask(None, transform, 4, 4)
+def test_tier_clip_mask_none_is_all_true():
+    """``clip_geom=None`` (legacy square) -> all cells in-domain."""
+    tier = Tier("t", 1.0, box(0, 0, 4, 4), None)
+    mask = tier.clip_mask
     assert mask.shape == (4, 4) and mask.all(), "None clip -> all in-domain"
 
 
-def test_build_clip_mask_polygon():
+def test_tier_clip_mask_polygon():
     """Cells whose centre falls in clip_geom are True (rasterize semantics)."""
-    transform = from_bounds(0, 0, 4, 4, 4, 4)   # 1 m cells, centres at .5,1.5,..
-    mask = build_clip_mask(box(0, 0, 2, 4), transform, 4, 4)
+    # 4×4 grid at 1 m resolution; cell centres at 0.5, 1.5, 2.5, 3.5.
+    tier = Tier("t", 1.0, box(0, 0, 4, 4), box(0, 0, 2, 4))
+    mask = tier.clip_mask
     assert mask[:, :2].all(), "left two columns (x<2) must be in-domain"
     assert not mask[:, 2:].any(), "right two columns (x>2) must be out"
 

@@ -129,8 +129,7 @@ def build_clip_mask(clip_geom, transform, height: int, width: int) -> BoolGrid:
     return burn_mask([clip_geom], transform, height, width)
 
 
-def build_land_mask(mask_path: Path, transform, height: int, width: int,
-                    grid_crs: int) -> BoolGrid:
+def build_land_mask(mask_path: Path, transform, height: int, width: int) -> BoolGrid:
     """Binary land mask within the grid; True where land covers the cell.
 
     ``mask_path`` is the shared computation land mask (``sources.LAND_MASK_PATH``,
@@ -147,7 +146,7 @@ def build_land_mask(mask_path: Path, transform, height: int, width: int,
     (fully-pelagic region).
     """
 
-    land_gdf = gpd.read_file(mask_path).to_crs(epsg=grid_crs)
+    land_gdf = gpd.read_file(mask_path).to_crs(epsg=GRID_CRS)
     mask = burn_mask(land_gdf.geometry.tolist(), transform, height, width)
     log.info("Land mask: %s / %s cells (%.1f%%)",
              f"{int(mask.sum()):,}", f"{height * width:,}",

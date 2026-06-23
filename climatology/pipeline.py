@@ -22,8 +22,6 @@ import pandas as pd
 from climatology.processing.metrics import METRICS, Metric
 from climatology.processing.rasterize import (
     GRID_CRS,
-    build_clip_mask,
-    build_land_mask,
     fetch_domain_wkt,
 )
 from climatology.processing.regions import RegionSpec, Tier, resolve_region
@@ -203,15 +201,11 @@ def _compute_tier(fetch: FetchResult, tier: Tier, ctx: RunContext) -> TierProduc
     log.info("Tier '%s': %d × %d cells (%d total) @ %g m",
              tier.name, grid.width, grid.height, grid.width * grid.height, tier.res_m)
 
-    land_mask = build_land_mask(LAND_MASK_PATH, grid.transform, grid.height, grid.width,
-                                ctx.spec.grid_crs)
-    clip_mask = build_clip_mask(tier.clip_geom, grid.transform, grid.height, grid.width)
-
     values = ctx.metric.compute_climatology(
         fetch.df, transform=grid.transform, height=grid.height, width=grid.width,
-        land_mask=land_mask,
+        land_mask=tier.land_mask,
     )
-    values[~clip_mask] = np.nan
+    values[~tier.clip_mask] = np.nan
     log.info("  Tier '%s' cells with data: %s / %s", tier.name,
              f"{int((~np.isnan(values)).sum()):,}", f"{grid.height * grid.width:,}")
     log_distribution(values)

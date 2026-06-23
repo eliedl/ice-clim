@@ -30,11 +30,14 @@ from functools import cached_property
 from pathlib import Path
 
 import geopandas as gpd
+import numpy as np
 from shapely import make_valid
 from shapely.geometry import shape
 from shapely.geometry.base import BaseGeometry
 
-from climatology.processing.rasterize import GRID_CRS, GRID_RES, Grid, build_grid
+from climatology.processing.rasterize import (
+    GRID_CRS, GRID_RES, Grid, build_clip_mask, build_grid, build_land_mask,
+)
 from climatology.processing.sources import LAND_MASK_PATH
 
 BBOX_ROOT = Path("/home/eliedl/data/masks/climatology_bbox")
@@ -100,6 +103,22 @@ class Tier:
         shared by compute and emit; no I/O.
         """
         return build_grid(self.bounds_geom, self.res_m)
+
+    @cached_property
+    def land_mask(self) -> np.ndarray:
+        """CIS landmask rasterized onto this tier's grid (True = land)."""
+        return build_land_mask(LAND_MASK_PATH, self.grid.transform,
+                               self.grid.height, self.grid.width)
+
+    @cached_property
+    def clip_mask(self) -> np.ndarray:
+        """In-domain mask for this tier (True = analysable cell).
+
+        All-True for legacy square tiers (``clip_geom`` is None); polygon-clipped
+        for adaptive tiers so corner cells outside the region are excluded.
+        """
+        return build_clip_mask(self.clip_geom, self.grid.transform,
+                               self.grid.height, self.grid.width)
 
 
 @dataclass(frozen=True)
