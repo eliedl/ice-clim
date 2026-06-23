@@ -1,4 +1,4 @@
-"""Shared array shape/dtype aliases for the climatology pipeline (doc-only).
+"""Shared type aliases for the climatology pipeline (array shapes are doc-only).
 
 The dtype (``Float`` / ``Bool``) is real; the dimension strings
 (``"H W"``, ...) are documentation. They are **not** runtime-enforced — that

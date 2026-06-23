@@ -21,7 +21,7 @@ import numpy as np
 from rasterio.features import rasterize as rio_rasterize
 from rasterio.transform import from_bounds
 
-from climatology.utils._array_types import BoolGrid, DataGrid
+from climatology.utils._types import BoolGrid, DataGrid
 
 log = logging.getLogger(__name__)
 

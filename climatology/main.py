@@ -1,8 +1,7 @@
-"""Region-scale climatology — entrypoint.
+"""Region-scale climatology — CLI entrypoint.
 
-Selects a metric, a region, a chart source, and a climatology period;
-runs the generic pipeline, writes a PNG (and, with ``--geotiff``, one
-float32 GeoTIFF per tier).
+Parses arguments and delegates to ``pipeline.run``; all orchestration lives in
+``climatology/pipeline.py``.
 
 Usage:
     python climatology/main.py <metric-slug> <region-slug> [--source sgrda|sgrdr] [--period YYYY-YYYY] [--geotiff]
@@ -14,171 +13,27 @@ half-open T1 window [1990-09-01, 2020-09-01) — the 30 winter seasons 1991..202
 
 from __future__ import annotations
 
+import argparse
+import logging
 import re
 import sys
-import logging
-import argparse
-import numpy as np
 from pathlib import Path
+
 from dotenv import load_dotenv
 
 load_dotenv(Path(__file__).parents[1] / ".env")
 sys.path.insert(0, str(Path(__file__).parents[1]))
 
-from climatology.processing.regions import REGION_SLUGS, resolve_region
-from climatology.processing.sources import CHART_TABLES, LAND_MASK_PATH
-from climatology.processing.rasterize import (
-    GRID_CRS,
-    build_clip_mask,
-    build_grid,
-    build_land_mask,
-    fetch_domain_wkt,
-)
-from climatology.processing.metrics import (
-    METRICS,
-    SeasonDurationMetric,
-    StormExposureDurationMetric,
-)
-
-from climatology.services.db import load_polygons
-from climatology.services.plot import plot_metric
-from climatology.services.temporal import (
-    SEASON_ORIGIN,
-    assert_hd_aligned,
-    climatology_date_window,
-)
-
-from climatology.utils._array_types import DataGrid, GridBounds
-from climatology.utils.export import (
-    archive_product,
-    log_distribution,
-    output_geotiff,
-    output_png,
-    write_geotiff,
-)
+from climatology.pipeline import run
+from climatology.processing.metrics import METRICS
+from climatology.processing.regions import REGION_SLUGS
+from climatology.processing.sources import CHART_TABLES
 
 logging.basicConfig(
     level=logging.INFO,
     format="%(asctime)s %(levelname)s %(message)s",
     datefmt="%H:%M:%S",
 )
-log = logging.getLogger(__name__)
-
-
-def _tier_label(tier, *, multi: bool) -> str:
-    """Product-file label for one tier: ``"35m"`` legacy, ``"fine_100m"`` nested."""
-    res_tag = f"{int(round(tier.res_m))}m"
-    return f"{tier.name}_{res_tag}" if multi else res_tag
-
-
-def _composite_label(spec, *, multi: bool) -> str:
-    """Product-file label for the composite map: ``"adaptive"`` or a res tag."""
-    return "adaptive" if multi else f"{int(round(spec.tiers[0].res_m))}m"
-
-
-def _res_label(spec) -> str:
-    """Human-readable resolution note for the map footer (one entry per tier)."""
-    return " / ".join(f"{int(round(t.res_m))} m" for t in spec.tiers)
-
-
-def _geotiff_tags(manifest: dict, metric) -> dict:
-    """GeoTIFF metadata tags from a run manifest, plus date-metric decoding keys."""
-    tags = {**manifest, "display_label": metric.display_label}
-    if metric.slug.endswith("_date"):
-        tags["value_encoding"] = "day_of_season"
-        tags["season_origin"] = SEASON_ORIGIN.isoformat()
-    return tags
-
-
-def run(metric_slug: str, region: str, source_slug: str, period: tuple[int, int],
-        *, geotiff: bool = False) -> None:
-    metric = METRICS[metric_slug]
-    source = CHART_TABLES[source_slug]
-    period_slug = f"{period[0]}-{period[1]}"
-    clim_start, clim_end = climatology_date_window(period)
-
-    if metric_slug == SeasonDurationMetric.slug:
-        metric.display_label = f"Median ice presence ({source.obs_unit}, CT >= 4/10)"
-    elif metric_slug == StormExposureDurationMetric.slug:
-        metric.display_label = f"Storm exposure duration ({source.obs_unit}, CT <= 3/10)"
-
-    spec = resolve_region(region)
-    log.info("Region: %s (slug=%s) | Metric: %s | Source: %s | Winters: %s | CRS: EPSG:%d | %d tier(s)",
-             spec.display, region, metric.slug, source.slug, period_slug,
-             spec.grid_crs, len(spec.tiers))
-
-    # Fetch DB rows once over tiers[0]'s analysis-domain polygon — the whole
-    # region for adaptive (tiers[0] is the coarse whole-region tier, which
-    # contains every finer tier since refinement = region ∩ buffer ⊆ region),
-    # the bbox for legacy. Fetching the region footprint rather than its bbox
-    # skips chart polygons that only touch clipped corners (DEC-039). Coarsest
-    # res sets the densify/buffer scale; the same df rasterizes onto every tier.
-    t0 = spec.tiers[0]
-    fetch_geom = t0.clip_geom if t0.clip_geom is not None else t0.bounds_geom
-    fetch_res = max(t.res_m for t in spec.tiers)
-    bbox_wkt = fetch_domain_wkt(fetch_geom, res_m=fetch_res)
-    sql = metric.sql(table=source.table, grid_crs=GRID_CRS, bbox_wkt=bbox_wkt,
-                     climatology_start_date=clim_start, climatology_end_date=clim_end)
-    df = load_polygons(sql)
-    log.info("Fetched %s rows.", f"{len(df):,}")
-    if df.empty:
-        log.error("No rows returned — check metric SQL, region bounds, climatology window.")
-        return
-
-    if source.cadence == "hd_weekly":
-        try:
-            assert_hd_aligned(df, source_slug=source.slug)
-        except ValueError as e:
-            sys.exit(f"ERROR: {e}")
-
-    multi = len(spec.tiers) > 1
-    layers: list[tuple[DataGrid, GridBounds]] = []
-    for tier in spec.tiers:
-        transform, h, w, bounds = build_grid(tier.bounds_geom, tier.res_m)
-        log.info("Tier '%s': %d × %d cells (%d total) @ %g m",
-                 tier.name, w, h, w * h, tier.res_m)
-
-        land_mask = build_land_mask(LAND_MASK_PATH, transform, h, w, spec.grid_crs)
-        clip_mask = build_clip_mask(tier.clip_geom, transform, h, w)
-
-        values = metric.compute_climatology(
-            df, transform=transform, height=h, width=w,
-            land_mask=land_mask,
-        )
-        values[~clip_mask] = np.nan
-        log.info("  Tier '%s' cells with data: %s / %s", tier.name,
-                 f"{int((~np.isnan(values)).sum()):,}", f"{h * w:,}")
-        log_distribution(values)
-
-        tier_label = _tier_label(tier, multi=multi)
-        tier_png = output_png(region, metric.slug, period_slug=period_slug,
-                              source_slug=source.slug, label=tier_label)
-        manifest = {
-            "metric": metric.slug, "region": region, "source": source.slug,
-            "period": period_slug, "climatology_start": clim_start, "climatology_end": clim_end,
-            "tier": tier.name, "grid_res_m": tier.res_m, "grid_crs": spec.grid_crs,
-            "bounds": [float(b) for b in bounds], "grid_shape": [h, w],
-            "land_mask": str(LAND_MASK_PATH), "n_rows": len(df),
-        }
-        archive_product(values, tier_png, manifest=manifest)
-        if geotiff:
-            tier_tif = output_geotiff(region, metric.slug, period_slug=period_slug,
-                                      source_slug=source.slug, label=tier_label)
-            write_geotiff(values, transform, crs=spec.grid_crs, path=tier_tif,
-                          band_description=metric.display_label,
-                          tags=_geotiff_tags(manifest, metric))
-        layers.append((values, bounds))
-
-    # Composite PNG: coarse first, fine last (fine wins where it has data).
-    res_label = _res_label(spec)
-    png_label = _composite_label(spec, multi=multi)
-    composite_png = output_png(region, metric.slug, period_slug=period_slug,
-                               source_slug=source.slug, label=png_label)
-    plot_metric(layers, png_path=composite_png, display_name=spec.display,
-                period_label=f"{period[0]}–{period[1]}",
-                source_label=source.display_label,
-                grid_crs=spec.grid_crs, res_label=res_label,
-                display_label=metric.display_label, format_ticks=metric.format_ticks)
 
 
 def _parse_period(s: str) -> tuple[int, int]:
@@ -207,4 +62,7 @@ def _parse_args() -> argparse.Namespace:
 
 if __name__ == "__main__":
     args = _parse_args()
-    run(args.metric, args.region, args.source, args.period, geotiff=args.geotiff)
+    try:
+        run(args.metric, args.region, args.source, args.period, geotiff=args.geotiff)
+    except ValueError as e:
+        sys.exit(f"ERROR: {e}")
