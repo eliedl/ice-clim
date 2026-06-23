@@ -1,8 +1,8 @@
 """Region-scale climatology orchestration.
 
 ``run`` is the imperative shell: resolve config -> fetch rows -> validate ->
-compute one product per tier -> emit (archive + GeoTIFF) -> render the composite
-map. Each stage is a named helper at a single level of abstraction; the per-tier
+compute one product per tier -> export (per-tier archives + GeoTIFFs, composite map). 
+Each stage is a named helper at a single level of abstraction; the per-tier
 compute (``_compute_tier``) performs no *output* I/O and returns a ``TierProduct``
 value object, so it is isolatable from the archival/plotting side effects in
 ``_emit_tier`` / ``_render_composite``.
@@ -18,13 +18,11 @@ from dataclasses import dataclass
 
 import numpy as np
 import pandas as pd
-from affine import Affine
 
 from climatology.processing.metrics import METRICS, Metric
 from climatology.processing.rasterize import (
     GRID_CRS,
     build_clip_mask,
-    build_grid,
     build_land_mask,
     fetch_domain_wkt,
 )
@@ -37,7 +35,7 @@ from climatology.services.temporal import (
     assert_hd_aligned,
     climatology_date_window,
 )
-from climatology.utils._types import DataGrid, GridBounds
+from climatology.utils._types import DataGrid
 from climatology.utils.export import (
     archive_product,
     log_distribution,
@@ -85,18 +83,35 @@ class RunContext:
 
 
 @dataclass(frozen=True)
-class TierProduct:
-    """One tier's computed result — composed of (not derived from) its ``Tier``.
+class FetchResult:
+    """The chart-polygon rows fetched once for a run (the fetch-stage output).
 
-    Carries everything ``_emit_tier`` / ``_render_composite`` need; no output
-    side effect has happened yet.
+    Wraps the DataFrame so downstream stages take a named value object;
+    ``n_rows`` is fetch provenance (recorded in each tier's manifest).
+    """
+
+    df: pd.DataFrame
+
+    @property
+    def n_rows(self) -> int:
+        return len(self.df)
+
+    @property
+    def is_empty(self) -> bool:
+        return self.df.empty
+
+
+@dataclass(frozen=True)
+class TierProduct:
+    """One tier's computed result: the metric output raster + the tier it's for.
+
+    Just the output of ``metric.compute_climatology``; grid geometry is a
+    projection of ``tier`` (``Tier.grid``) and the run manifest is assembled at
+    emit time.
     """
 
     tier: Tier
     values: DataGrid
-    bounds: GridBounds
-    transform: Affine
-    manifest: dict
 
 
 # --- product naming + metadata helpers -------------------------------------
@@ -126,16 +141,17 @@ def _geotiff_tags(manifest: dict, ctx: RunContext) -> dict:
     return tags
 
 
-def _build_manifest(ctx: RunContext, tier: Tier, bounds: GridBounds,
-                    h: int, w: int, *, n_rows: int) -> dict:
+def _build_manifest(ctx: RunContext, tier: Tier, *, n_rows: int) -> dict:
     """Self-describing run manifest persisted alongside each tier product."""
     clim_start, clim_end = ctx.clim_window
+    grid = tier.grid
     return {
         "metric": ctx.metric.slug, "region": ctx.region, "source": ctx.source.slug,
         "period": ctx.period_slug, "climatology_start": clim_start,
         "climatology_end": clim_end, "tier": tier.name, "grid_res_m": tier.res_m,
-        "grid_crs": ctx.spec.grid_crs, "bounds": [float(b) for b in bounds],
-        "grid_shape": [h, w], "land_mask": str(LAND_MASK_PATH), "n_rows": n_rows,
+        "grid_crs": ctx.spec.grid_crs, "bounds": [float(b) for b in grid.bounds],
+        "grid_shape": [grid.height, grid.width], "land_mask": str(LAND_MASK_PATH),
+        "n_rows": n_rows,
     }
 
 
@@ -152,7 +168,7 @@ def _resolve(metric_slug: str, region: str, source_slug: str,
     return ctx
 
 
-def _fetch(ctx: RunContext) -> pd.DataFrame:
+def _fetch(ctx: RunContext) -> FetchResult:
     """Pull chart polygons once over the region footprint (covers every tier)."""
     # Fetch over tiers[0]'s analysis-domain polygon — the whole region for
     # adaptive (tiers[0] is the coarse whole-region tier, which contains every
@@ -167,52 +183,70 @@ def _fetch(ctx: RunContext) -> pd.DataFrame:
     clim_start, clim_end = ctx.clim_window
     sql = ctx.metric.sql(table=ctx.source.table, grid_crs=GRID_CRS, bbox_wkt=bbox_wkt,
                          climatology_start_date=clim_start, climatology_end_date=clim_end)
-    df = load_polygons(sql)
-    log.info("Fetched %s rows.", f"{len(df):,}")
-    return df
+    fetch = FetchResult(load_polygons(sql))
+    log.info("Fetched %s rows.", f"{fetch.n_rows:,}")
+    if fetch.is_empty:
+        raise ValueError("No rows returned — check metric SQL, region bounds, "
+                         "climatology time window.")
+    return fetch
 
 
-def _validate(df: pd.DataFrame, ctx: RunContext) -> None:
+def _validate(fetch: FetchResult, ctx: RunContext) -> None:
     """HD-cadence guard for weekly sources (raises ``ValueError`` on misalignment)."""
     if ctx.source.cadence == "hd_weekly":
-        assert_hd_aligned(df, source_slug=ctx.source.slug)
+        assert_hd_aligned(fetch.df, source_slug=ctx.source.slug)
 
 
-def _compute_tier(df: pd.DataFrame, tier: Tier, ctx: RunContext) -> TierProduct:
+def _compute_tier(fetch: FetchResult, tier: Tier, ctx: RunContext) -> TierProduct:
     """Compute one tier's result raster — no output I/O; returns a value object."""
-    transform, h, w, bounds = build_grid(tier.bounds_geom, tier.res_m)
+    grid = tier.grid
     log.info("Tier '%s': %d × %d cells (%d total) @ %g m",
-             tier.name, w, h, w * h, tier.res_m)
+             tier.name, grid.width, grid.height, grid.width * grid.height, tier.res_m)
 
-    land_mask = build_land_mask(LAND_MASK_PATH, transform, h, w, ctx.spec.grid_crs)
-    clip_mask = build_clip_mask(tier.clip_geom, transform, h, w)
+    land_mask = build_land_mask(LAND_MASK_PATH, grid.transform, grid.height, grid.width,
+                                ctx.spec.grid_crs)
+    clip_mask = build_clip_mask(tier.clip_geom, grid.transform, grid.height, grid.width)
 
     values = ctx.metric.compute_climatology(
-        df, transform=transform, height=h, width=w, land_mask=land_mask,
+        fetch.df, transform=grid.transform, height=grid.height, width=grid.width,
+        land_mask=land_mask,
     )
     values[~clip_mask] = np.nan
     log.info("  Tier '%s' cells with data: %s / %s", tier.name,
-             f"{int((~np.isnan(values)).sum()):,}", f"{h * w:,}")
+             f"{int((~np.isnan(values)).sum()):,}", f"{grid.height * grid.width:,}")
     log_distribution(values)
 
-    manifest = _build_manifest(ctx, tier, bounds, h, w, n_rows=len(df))
-    return TierProduct(tier=tier, values=values, bounds=bounds,
-                       transform=transform, manifest=manifest)
+    return TierProduct(tier=tier, values=values)
 
 
-def _emit_tier(product: TierProduct, ctx: RunContext, *, geotiff: bool) -> None:
+def _compute_tiers(fetch: FetchResult, ctx: RunContext) -> list[TierProduct]:
+    """Compute one product per region tier (the pure compute pass)."""
+    return [_compute_tier(fetch, tier, ctx) for tier in ctx.spec.tiers]
+
+
+def _emit_tier(product: TierProduct, ctx: RunContext, fetch: FetchResult,
+               *, geotiff: bool) -> None:
     """Persist one tier product: archive raster (+ GeoTIFF when requested)."""
+    tier = product.tier
     multi = len(ctx.spec.tiers) > 1
-    label = _tier_label(product.tier, multi=multi)
+    label = _tier_label(tier, multi=multi)
+    manifest = _build_manifest(ctx, tier, n_rows=fetch.n_rows)
     tier_png = output_png(ctx.region, ctx.metric.slug, period_slug=ctx.period_slug,
                           source_slug=ctx.source.slug, label=label)
-    archive_product(product.values, tier_png, manifest=product.manifest)
+    archive_product(product.values, tier_png, manifest=manifest)
     if geotiff:
         tier_tif = output_geotiff(ctx.region, ctx.metric.slug, period_slug=ctx.period_slug,
                                   source_slug=ctx.source.slug, label=label)
-        write_geotiff(product.values, product.transform, crs=ctx.spec.grid_crs,
+        write_geotiff(product.values, tier.grid.transform, crs=ctx.spec.grid_crs,
                       path=tier_tif, band_description=ctx.display_label,
-                      tags=_geotiff_tags(product.manifest, ctx))
+                      tags=_geotiff_tags(manifest, ctx))
+
+
+def _emit_tiers(products: list[TierProduct], ctx: RunContext, fetch: FetchResult,
+                *, geotiff: bool) -> None:
+    """Persist every tier product (archive + GeoTIFF)."""
+    for product in products:
+        _emit_tier(product, ctx, fetch, geotiff=geotiff)
 
 
 def _render_composite(products: list[TierProduct], ctx: RunContext) -> None:
@@ -221,7 +255,7 @@ def _render_composite(products: list[TierProduct], ctx: RunContext) -> None:
     composite_png = output_png(ctx.region, ctx.metric.slug, period_slug=ctx.period_slug,
                                source_slug=ctx.source.slug,
                                label=_composite_label(ctx.spec, multi=multi))
-    layers = [(p.values, p.bounds) for p in products]
+    layers = [(p.values, p.tier.grid.bounds) for p in products]
     plot_metric(layers, png_path=composite_png, display_name=ctx.spec.display,
                 period_label=f"{ctx.period[0]}–{ctx.period[1]}",
                 source_label=ctx.source.display_label,
@@ -230,17 +264,19 @@ def _render_composite(products: list[TierProduct], ctx: RunContext) -> None:
                 format_ticks=ctx.metric.format_ticks)
 
 
+def _export(products: list[TierProduct], ctx: RunContext, fetch: FetchResult,
+            *, geotiff: bool) -> None:
+    """Write all products: per-tier archives (+ GeoTIFFs) and the composite map."""
+    _emit_tiers(products, ctx, fetch, geotiff=geotiff)
+    _render_composite(products, ctx)
+
+
 def run(metric_slug: str, region: str, source_slug: str, period: tuple[int, int],
         *, geotiff: bool = False) -> None:
     """Produce the climatology for one (metric, region, source, period)."""
     context = _resolve(metric_slug, region, source_slug, period)
-    df = _fetch(context)
-    if df.empty:
-        log.error("No rows returned — check metric SQL, region bounds, climatology time window.")
-        return
-    _validate(df, context)
+    fetch = _fetch(context)
+    _validate(fetch, context)
 
-    products = [_compute_tier(df, tier, context) for tier in context.spec.tiers]
-    for product in products:
-        _emit_tier(product, context, geotiff=geotiff)
-    _render_composite(products, context)
+    products = _compute_tiers(fetch, context)
+    _export(products, context, fetch, geotiff=geotiff)

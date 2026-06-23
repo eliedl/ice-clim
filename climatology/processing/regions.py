@@ -26,6 +26,7 @@ unchanged — the tiers differ only in cell size.
 from __future__ import annotations
 
 from dataclasses import dataclass
+from functools import cached_property
 from pathlib import Path
 
 import geopandas as gpd
@@ -33,7 +34,7 @@ from shapely import make_valid
 from shapely.geometry import shape
 from shapely.geometry.base import BaseGeometry
 
-from climatology.processing.rasterize import GRID_CRS, GRID_RES
+from climatology.processing.rasterize import GRID_CRS, GRID_RES, Grid, build_grid
 from climatology.processing.sources import LAND_MASK_PATH
 
 BBOX_ROOT = Path("/home/eliedl/data/masks/climatology_bbox")
@@ -90,6 +91,15 @@ class Tier:
     res_m: float
     bounds_geom: BaseGeometry
     clip_geom: BaseGeometry | None
+
+    @cached_property
+    def grid(self) -> Grid:
+        """Raster geometry (transform, height, width, bounds) for this tier.
+
+        A pure projection of ``bounds_geom`` at ``res_m`` — computed once and
+        shared by compute and emit; no I/O.
+        """
+        return build_grid(self.bounds_geom, self.res_m)
 
 
 @dataclass(frozen=True)

@@ -15,13 +15,15 @@ from __future__ import annotations
 
 import logging
 from pathlib import Path
+from typing import NamedTuple
 
 import geopandas as gpd
 import numpy as np
+from affine import Affine
 from rasterio.features import rasterize as rio_rasterize
 from rasterio.transform import from_bounds
 
-from climatology.utils._types import BoolGrid, DataGrid
+from climatology.utils._types import BoolGrid, DataGrid, GridBounds
 
 log = logging.getLogger(__name__)
 
@@ -29,6 +31,16 @@ log = logging.getLogger(__name__)
 # plotted in it (DEC-040; was 26919 UTM-19N).
 GRID_CRS = 32198  # NAD83 / Québec Lambert
 GRID_RES = 35     # default grid resolution (m); legacy single-tier regions
+
+
+class Grid(NamedTuple):
+    """Raster geometry for a tier — the four outputs of ``build_grid``, which
+    are computed together and travel together (see ``regions.Tier.grid``)."""
+
+    transform: Affine
+    height: int
+    width: int
+    bounds: GridBounds
 
 
 def burn_mask(geoms, transform, height: int, width: int) -> BoolGrid:
@@ -60,19 +72,19 @@ def burn_values(geom_value_pairs, transform, height: int, width: int) -> DataGri
                          transform=transform, fill=np.nan, dtype=np.float32)
 
 
-def build_grid(bounds_geom, res_m: float):
-    """Return (transform, height, width, (xmin, ymin, xmax, ymax)).
+def build_grid(bounds_geom, res_m: float) -> Grid:
+    """Return the raster ``Grid`` for ``bounds_geom`` at resolution ``res_m``.
 
     ``bounds_geom`` is a shapely geometry already expressed in the target grid
-    CRS; its bounding box defines the raster envelope at resolution ``res_m``.
-    Resolution and CRS are caller-supplied (per-tier, per-region) rather than
-    module constants — see regions.Tier / RegionSpec.
+    CRS; its bounding box defines the raster envelope. Resolution and CRS are
+    caller-supplied (per-tier, per-region) rather than module constants — see
+    regions.Tier / RegionSpec.
     """
     xmin, ymin, xmax, ymax = bounds_geom.bounds
     width  = int(np.ceil((xmax - xmin) / res_m))
     height = int(np.ceil((ymax - ymin) / res_m))
     transform = from_bounds(xmin, ymin, xmax, ymax, width, height)
-    return transform, height, width, (xmin, ymin, xmax, ymax)
+    return Grid(transform, height, width, (xmin, ymin, xmax, ymax))
 
 
 def fetch_domain_wkt(geom, *, res_m: float) -> str:
