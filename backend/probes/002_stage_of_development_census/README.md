@@ -31,7 +31,7 @@ Four sub-analyses, each with a discrete deliverable for the clim-003 volume metr
 Stage codes in the SGRDA archive are **2-character SIGRID-3 v3.1 codes**, not the single-digit WMO codes referenced in `docs/WMO_REVIEW.md`. Observed values across `CN, SA, SB, SC, CD`:
 
 - Valid (mapped to thickness via SIGRID-3 v3.1 ranges): `{81, 84, 85, 86, 87, 91, 93}`
-- Observed but with no SIGRID-3 thickness (pending CIS reply): `{95, 96, 97, 98, 99}`
+- Observed but with no SIGRID-3 v3.1 thickness range: `{95, 96, 97, 98, 99}` — **resolved/closed (DEC-043)**: stages 95/96/97 → 1.600 m (same family as code 93, Brad Drummond/CIS pers. comm. 2026-06-25); stages 98/99 → None by methodological choice (ice of land origin excluded from volume climatology).
 - Invalid / encoding errors (18 rows total): `{7C, 9C, 5-, 6-, 10, 50}`
 
 Conversion table in [`STAGE_OF_DEVELOPMENT_THICKNESS`](../../../climatology/services/units_conversion_maps.py); midpoint convention (DFO standard). Internal unit is metres.
@@ -93,8 +93,8 @@ This finding also re-contextualises probe 001's SD residual analysis: the residu
 
 1. **Option A is essential**, not an edge-case patch. Without it, the no-thickness share calculation operates on ~20% of the archive (the multi-stage subset) and misses the bulk single-stage encoding.
 2. **`STAGE_OF_DEVELOPMENT_THICKNESS` is data-driven**: codes not observed (e.g. `82`, `83`, `88`, `89`, `90`, `92`, `94`) are deliberately omitted; any future occurrence will surface as a `KeyError`.
-3. **Volume work for clim-003 is unblocked**. The skip-no-thickness-stages convention loses < 0.5% of total concentration per year. CIS thickness values for 95–98 would tighten the estimate but aren't a hard prerequisite.
-4. **Email to CIS client service drafted** by user for authoritative 95/96/97/98 thickness values.
+3. **Volume work for clim-003 is unblocked**. The skip-no-thickness-stages convention loses < 0.5% of total concentration per year; with stages 95/96/97 now resolved to 1.600 m (DEC-043), the no-volume share drops further (only 98/99 contribute zero volume).
+4. **RESOLVED (2026-06-25, DEC-043)**: Brad Drummond (CIS) confirmed stages 95/96/97 → 1.600 m (same family as code 93) and trace concentration → 0.04. Stages 98 (Glacier) and 99 (Undetermined) remain None by methodological choice — ice of land origin excluded from volume climatology.
 
 ### Rerun history
 

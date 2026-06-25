@@ -70,10 +70,9 @@ are **misnamed**:
 A SIGRID-3 ice description has **five thickness bands SO·SA·SB·SC·SD**. Three carry
 explicit partial concentrations (CA→SA, CB→SB, CC→SC); the other two are **derived, not
 stored**:
-  - **SO** concentration: trace, defined by CIS as <1/10. Placeholder 0.05 (fraction) for
-    arithmetic [a more authoritative value is a clim-001 CIS-outreach item].
+  - **SO** concentration: trace, defined by CIS as <1/10. **0.04** (Brad Drummond/CIS, pers. comm. 2026-06-25, DEC-043).
   - **SD** concentration: piecewise (probe 001 / DEC-029) — residual `r = CT−(CA+CB+CC)`:
-    `r > 0` → r; `−0.03 ≤ r ≤ 0` → 0.05 trace; `r < −0.03` → log+skip. Lives in the volume
+    `r > 0` → r; `−0.03 ≤ r ≤ 0` → 0.04 trace (DEC-043); `r < −0.03` → log+skip. Lives in the volume
     `reduce_season`, not the parser.
 
 Encoding/conversion (SIGRID-3 codes → fraction / thickness in m) lives in
@@ -88,8 +87,7 @@ Settled facts (full rationale + provenance in DECISIONS.md):
   - Freeze-up/break-up: native-daily median-then-threshold, CT≥4/10, WMO 80% mask (DEC-025/027)
   - Archive version selection c>b>a, suffix-fallback (DEC-030)
   - GSL = highest-quality, most homogeneous CIS region; climatology period 2011–2020
-  - Open: grid cell size (DEC-013, awaiting Angela Cheng/CIS); thickness for stages 95–98
-    (old/2nd-year/multi-year/glacier) UNRESOLVED — CIS outreach pending
+  - Open: grid cell size (DEC-013, awaiting Angela Cheng/CIS); stages 95–97 thickness resolved to 1.600 m, stages 98/99 excluded by methodology (DEC-043)
 
 ## Decision making (project specifics — behavior is in ~/CLAUDE.md)
   - Log lives in `docs/DECISIONS.md`. Two orthogonal provenance pipelines terminate there:

@@ -22,8 +22,8 @@ CONCENTRATION_FRACTION: dict[str, float] = {
     "98": 0.00,   # ice-free — SGRDR encoding, exclusively on POLY_TYPE='W'
                   # polygons (3 327/3 736 W rows, 1968–2020; never on ice
                   # polygons; absent from SGRDA). User-confirmed 2026-06-10.
-    "01": 0.05,   # bergy water / <1/10 — per "Open water/bergy water < 1 tenth"
-    "02": 0.05,   # bergy water variant — [NEEDS CIS VALIDATION via clim-001]
+    "01": 0.04,   # bergy water / <1/10 — per "Open water/bergy water < 1 tenth"; confirmed 0.04 (DEC-043)
+    "02": 0.04,   # bergy water variant — trace value 0.04 confirmed (DEC-043)
     "10": 0.10,
     "20": 0.20,
     "30": 0.30,
@@ -84,11 +84,12 @@ def parse_concentration(code: str | None) -> float | None:
 # - Range codes use the midpoint of the SIGRID-3 v3.1 thickness range.
 # - Code 93 ("Thick First Year Ice, >=120 cm") uses 160 cm (midpoint of 120-200,
 #   bounded by First Year Ice's broad 30-200 cm upper limit).
-# - Codes 95-99 are stages observed in the data for which the SIGRID-3 v3.1
-#   spec does not provide a thickness range. Set to None pending CIS reply
-#   (planned clim-001 outreach follow-up). The volume formula must skip
-#   polygons attributed to these stages or apply a separately-validated
-#   convention.
+# - Codes 95-97 (Old/Second Year/Multi-Year Ice): confirmed same thickness
+#   family as code 93 (Thick FYI) → 1.600 m (Brad Drummond/CIS, pers.
+#   comm. 2026-06-25, DEC-043).
+# - Codes 98 (Glacier Ice) and 99 (Undetermined): None — excluded by
+#   methodology; ice of land origin and undetermined stages are not included
+#   in volume climatology (DEC-043).
 STAGE_OF_DEVELOPMENT_THICKNESS: dict[str, float | None] = {
     # Stages with defined thickness ranges
     "81": 0.050,   # New Ice                       (<10 cm)
@@ -98,10 +99,11 @@ STAGE_OF_DEVELOPMENT_THICKNESS: dict[str, float | None] = {
     "87": 0.500,   # Thin First Year Ice           (30-70 cm)
     "91": 0.950,   # Medium First Year Ice         (70-120 cm)
     "93": 1.600,   # Thick First Year Ice          (>=120 cm; midpoint 120-200)
-    # Observed but no SIGRID-3 v3.1 thickness — pending CIS validation
-    "95": None,    # Old Ice
-    "96": None,    # Second Year Ice
-    "97": None,    # Multi-Year Ice
+    "95": 1.600,   # Old Ice          — same family as code 93 (DEC-043)
+    "96": 1.600,   # Second Year Ice  — same family as code 93 (DEC-043)
+    "97": 1.600,   # Multi-Year Ice   — same family as code 93 (DEC-043)
+    # Methodological exclusion: ice of land origin and undetermined stages
+    # are not included in volume climatology (DEC-043).
     "98": None,    # Glacier Ice
     "99": None,    # Undetermined / Unknown
 }
@@ -120,9 +122,10 @@ def parse_stage_thickness(code: str | None) -> float | None:
     -------
     float (metres) for known stages with a defined thickness range.
     None for: missing/dummy values (``-9``, ``9-``, empty, ``None``),
-    encoding errors in :data:`INVALID_STAGE_CODES`, and observed-but-
-    undefined-thickness stages (`95` Old Ice, `96` Second Year, `97`
-    Multi-Year, `98` Glacier Ice, `99` Undetermined).
+    encoding errors in :data:`INVALID_STAGE_CODES`, and stages excluded
+    by methodology (`98` Glacier Ice, `99` Undetermined — ice of land
+    origin and undetermined stages not included in volume climatology,
+    DEC-043).
 
     Raises
     ------

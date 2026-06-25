@@ -83,7 +83,7 @@ This log records all scientific decisions, assumptions, and edge-case choices id
   2. **1.00** — treat "9+" as compact, per the SGRDA partial-sum evidence (probe 001).
   3. **9.5** — midpoint of the (9, 10] interval (original training-knowledge tentative).
 - **Choice made**: Option 1 (0.97), applied to code `91` only; compact `92` remains 1.00.
-- **Rationale**: CIS Archive No.1 explicitly defines the "9+" encoding as 9.7/10, distinct from compact 10/10. This documented definition is treated as authoritative over the indirect probe-001 partial-sum inference (the partials summing to 1.0 reflects the encoded compact remainder, not a contradiction of the "9+ < 10/10" semantics). The change touches only code `91`; `92` (genuine full coverage) is unchanged. Setting `91`=0.97 re-introduces ~20 613 small negative SD residuals (−0.03) in multi-stage rows where partials sum to 1.0; these are absorbed as the CIS 0.05 trace by the ε=0.03 floor in the volume metric (**DEC-029**), preserving probe 001's separation of benign "9+" rounding from the genuine −0.6/−0.7 encoding errors.
+- **Rationale**: CIS Archive No.1 explicitly defines the "9+" encoding as 9.7/10, distinct from compact 10/10. This documented definition is treated as authoritative over the indirect probe-001 partial-sum inference (the partials summing to 1.0 reflects the encoded compact remainder, not a contradiction of the "9+ < 10/10" semantics). The change touches only code `91`; `92` (genuine full coverage) is unchanged. Setting `91`=0.97 re-introduces ~20 613 small negative SD residuals (−0.03) in multi-stage rows where partials sum to 1.0; these are absorbed as the CIS 0.04 trace by the ε=0.03 floor in the volume metric (**DEC-029**), preserving probe 001's separation of benign "9+" rounding from the genuine −0.6/−0.7 encoding errors.
 - **Validation status**: APPROVED (2026-06-09) — user-confirmed; supersedes the prior probe-001-based 1.00 mapping. Promoted from ESCALATIONS_2026-06-02 item 1.
 - **Implementation refs**: climatology/services/units_conversion_maps.py — `CONCENTRATION_FRACTION["91"] = 0.97` (changed 2026-06-09 from 1.00); probe 001. **Re-run required** for volume and mean-concentration metrics; freeze-up/break-up date metrics are unaffected (both 0.97 and 1.00 clear the 4/10 threshold).
 - **Literature cross-ref**: LITERATURE.md T3 (cross-era homogeneity & data quality); READING_LOG e060 ('9+' encoded as 9.7/10 in the Digital Archive); [CIS Archive No.1 2006].
@@ -167,21 +167,21 @@ This log records all scientific decisions, assumptions, and edge-case choices id
     - *Single-stage* (`CT+SA`, 76.3% of rows): the lone stage carries the total — `conc(SA) = parse(CT)`, so `vol = area × parse(CT) × thk(SA)`.
     - *Multi-stage* (`CT+CA+CB+CC+SA/SB/SC`): `Σ_i parse(C_i) × thk(S_i)` over the named partials i ∈ {A,B,C}.
   - **Trace contributions:**
-    - `CN` set → SO trace, `conc = 0.05` (both regimes).
+    - `CN` set → SO trace, `conc = 0.04` (both regimes, DEC-043).
     - `CD` set → SD concentration via the piecewise residual rule (probe 001), `residual = CT − (CA+CB+CC)`:
       - `residual > 0` → `conc = residual`
-      - `−0.03 ≤ residual ≤ 0` → `conc = 0.05` (CIS trace) — **benign band**: the "9+" rounding artifact (CT=`91`=0.97 alongside partials summing to 1.0 yields exactly −0.03) and exact-zero exhaustion are both treated as the CIS trace.
+      - `−0.03 ≤ residual ≤ 0` → `conc = 0.04` (CIS trace, DEC-043) — **benign band**: the "9+" rounding artifact (CT=`91`=0.97 alongside partials summing to 1.0 yields exactly −0.03) and exact-zero exhaustion are both treated as the CIS trace.
       - `residual < −0.03` → **log + skip** (genuine encoding error; only −0.6 ×2 and −0.7 ×1 observed — probe 001 output `2026-05-27_131500.txt`).
-      - Single-stage `CD` → `0.05` trace.
-  - **No-thickness stages** (`95`–`99` = `None` in `STAGE_OF_DEVELOPMENT_THICKNESS`, set `NO_THICKNESS_STAGE_CODES`) → skip (no volume), consistent with DEC-026.
+      - Single-stage `CD` → `0.04` trace (DEC-043).
+  - **No-thickness stages** (`98`–`99` = `None` in `STAGE_OF_DEVELOPMENT_THICKNESS`, set `NO_THICKNESS_STAGE_CODES`; stages `95`–`97` resolved to 1.600 m — DEC-043) → skip 98/99 (no volume), consistent with DEC-026.
 - **Options considered** (the one live fork — negative-residual handling):
-  1. **Symmetric trace band** — `−0.03 ≤ residual ≤ 0 → 0.05 trace`, `residual < −0.03 → log+skip`.
+  1. **Symmetric trace band** — `−0.03 ≤ residual ≤ 0 → 0.04 trace`, `residual < −0.03 → log+skip`.
   2. **Skip all negatives** — `residual == 0 → trace`, any `residual < 0 → log+skip`.
 - **Choice made**: Regime-aware attribution as specified, with the **symmetric trace band (ε = 0.03)**.
 - **Rationale**: ε = 0.03 cleanly separates the "9+" rounding artifact (exactly −0.03, ~20 613 rows) from the only deeper negatives in the archive (−0.6, −0.7; 3 rows, genuine encoding errors). Option 2 would log+skip the ~20 613 benign rows and discard real coverage. Keeping concentration/thickness parsing in the shared maps keeps the volume metric and the date metrics on one source of truth.
 - **Validation status**: APPROVED (2026-06-09) — user-confirmed; **implementation pending** (`reduce_season` not yet written).
-- **Implementation refs**: backend/probes/001_sd_residual, 002_stage_of_development_census, 004_column_configuration_census (+ output files); climatology/services/units_conversion_maps.py; volume `reduce_season` — to be implemented.
-- **Literature cross-ref**: data/probe-chain decision; depends on DEC-004, DEC-005, DEC-009, DEC-015, DEC-026. LITERATURE.md T3 (conversion sub-cluster) provides the literature backing for the encoding/thickness assumptions.
+- **Implementation refs**: backend/probes/001_sd_residual, 002_stage_of_development_census, 004_column_configuration_census (+ output files); climatology/services/units_conversion_maps.py; volume `reduce_season` — to be implemented. Trace value and no-thickness-stage set updated by DEC-043.
+- **Literature cross-ref**: data/probe-chain decision; depends on DEC-004, DEC-005, DEC-009, DEC-015, DEC-026, **DEC-043** (trace value and stage 95–97 thickness). LITERATURE.md T3 (conversion sub-cluster) provides the literature backing for the encoding/thickness assumptions.
 
 ---
 
@@ -384,6 +384,18 @@ This log records all scientific decisions, assumptions, and edge-case choices id
 - **Validation status**: **APPROVED (2026-06-17)** — user-directed; reversible software component, plan reviewed and confirmed before implementation.
 - **Implementation refs**: `climatology/processing/pipeline.py` — `write_geotiff(values, transform, *, crs, path, metric, manifest)`, `output_geotiff` / `_output_path` (extension-generic path helper); `climatology/processing/main.py` — `--geotiff` flag, `run(..., geotiff=…)`, guarded per-tier write reusing the `archive_product` manifest. Relates to DEC-040 (32198 native CRS — the enabler), DEC-036 (adaptive tiers → one file per tier; raster-vs-vector trade-off), and the `archive_product` raster cache (probe 010).
 - **Literature cross-ref**: DEFLATE = LZ77 + Huffman (RFC 1951); GeoTIFF floating-point predictor (GDAL `PREDICTOR=3`).
+
+## DEC-043 — Stage 95–97 Thickness Assignment and Trace Concentration Value
+
+- **Context**: Two open items from probe 002 (stage census), both referenced in DEC-029 and tracked under clim-001 CIS outreach: (1) no SIGRID-3 v3.1 thickness range for codes 95 (Old Ice), 96 (Second Year Ice), 97 (Multi-Year Ice); (2) the SO/SD/CD trace concentration placeholder of 0.05. Stage 98 (Glacier Ice) and 99 (Undetermined) are addressed as a separate methodological question — see choice (3) below.
+- **Confirmation source**: Brad Drummond (CIS), personal communication 2026-06-25.
+- **Decisions**:
+  1. **Stages 95–97 thickness**: codes 95 (Old Ice), 96 (Second Year Ice), and 97 (Multi-Year Ice) belong to the same thickness family as code 93 (Thick First Year Ice, ≥120 cm) → assigned **1.600 m** (same midpoint as 93; supersedes the prior `None` placeholder).
+  2. **Trace concentration**: the canonical CIS value is **0.04** (not the 0.05 placeholder). Applies uniformly to: concentration codes `01` and `02` in `CONCENTRATION_FRACTION`; the SO trace (`CN` set) and the ε=0.03 benign-band floor in the SD residual rule; and the single-stage `CD` trace — all three attribution rules in DEC-029.
+  3. **Stages 98 (Glacier Ice) and 99 (Undetermined)**: remain `None` — this is a **methodological boundary**, not a data gap awaiting CIS validation. Ice of land origin (glacier ice, icebergs) and undetermined ice are excluded from the volume climatology. `NO_THICKNESS_STAGE_CODES` is updated to `{"98", "99"}`.
+- **Validation status**: APPROVED (2026-06-25) — personal communication from Brad Drummond (CIS).
+- **Implementation refs**: `climatology/services/units_conversion_maps.py` — `CONCENTRATION_FRACTION["01"/"02"] = 0.04`; `STAGE_OF_DEVELOPMENT_THICKNESS["95"/"96"/"97"] = 1.600`; `NO_THICKNESS_STAGE_CODES = {"98", "99"}`. DEC-029 trace attribution rules updated throughout (0.05 → 0.04). Probe 002 `backend/probes/002_stage_of_development_census/` for frequency/share context.
+- **Literature cross-ref**: Personal communication Brad Drummond (CIS) 2026-06-25; SIGRID-3 v3.1 Table A-1 (stage code definitions). Relates to DEC-029 (volume attribution), DEC-026 (orphan_ct handling).
 
 ---
 
