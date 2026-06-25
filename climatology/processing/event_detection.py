@@ -23,9 +23,9 @@ from typing import TYPE_CHECKING, Literal
 import numpy as np
 import pandas as pd
 
-from climatology.utils._types import BoolCube, BoolGrid, DataCube, DataGrid
+from climatology.utils._types import BoolGrid, DataCube, DataGrid
 from climatology.processing.rasterize import Grid, burn_values
-from climatology.services.temporal import winter_season
+from climatology.services.temporal import day_of_season, winter_season
 from climatology.services.units_conversion_maps import CONCENTRATION_FRACTION
 from climatology.utils.arithmetics import _nanmedian_high
 
@@ -37,12 +37,8 @@ if TYPE_CHECKING:
 
 
 def _prepare_ct_rows(df: pd.DataFrame) -> pd.DataFrame:
-    """Attach the ``month_day`` / ``season`` / ``ct`` columns the cube needs.
-
-    ``ct`` is the CT code mapped through CONCENTRATION_FRACTION (single source
-    of truth); unmapped codes become NaN and are dropped, so they do not
-    contribute to any season's median (should not happen — the table was
-    derived from probe 003). Returns a fresh frame; the input is not mutated.
+    """
+    Attach the ``month_day`` / ``season`` / ``ct`` columns the cube needs.
     """
     df = df.copy()
     df["obs_date_dt"] = pd.to_datetime(df["obs_date"])
@@ -56,8 +52,7 @@ def _burn_day_stack(day_df: pd.DataFrame, *, grid: Grid) -> DataCube:
     """Per-(season, day) burn primitive: a ``(n_seasons, H, W)`` value stack.
 
     Rasterizes each season's (geom, CT) polygons for a single calendar day onto
-    ``grid`` (its transform/height/width travel together — see ``rasterize.Grid``
-    / ``regions.Tier.grid``) and stacks them along a new season axis. Seasons are
+    ``grid``  and stacks them along a new season axis. Seasons are
     ``sorted`` so the axis order is deterministic; the burn fill is NaN (uncovered
     cells), which the upper-middle median then ignores per season. This is the
     shared leaf the streaming median (``_stream_median_ct_slices``) and — later —
@@ -125,36 +120,44 @@ def build_median_ct_cube(df: pd.DataFrame, *, admissible_days: list[str],
     return np.stack(list(slices), axis=0)
 
 
-def extract_event_date(
-    boolean_cube: BoolCube,
+def stream_event_date(
+    df: pd.DataFrame,
     *,
-    day_ordinals: list[int],
+    admissible_days: list[str],
+    tier: "Tier",
+    threshold: float,
     mode: Literal["first_above", "last_above"],
 ) -> DataGrid:
-    """For each (H, W) cell, return the day ordinal of the relevant event.
+    """Per-cell day-of-season where the median CT crosses ``threshold``.
 
-    boolean_cube : (n_dates, H, W), typically (median_ct_cube >= threshold).
-    day_ordinals : per-date ordinals corresponding to the date axis of the cube
-                   (use ``day_of_season`` to derive from "MM-DD" strings).
+    The streaming counterpart of the count metrics' ``build_median_ct_cube``:
+    folds each day's median slice (``_stream_median_ct_slices``) into a running
+    (H, W) accumulator, so the (n_days, H, W) cube is never materialized — the
+    date metrics hold ~3 (H, W) arrays, not the whole cube (the DEC-036 §291
+    streaming optimization for the single-date metrics). Result is bit-for-bit
+    the former ``extract_event_date(cube >= threshold)``: slices arrive in
+    ``admissible_days`` order, ``day_of_season(md)`` is the date axis value, and
+    ``NaN >= threshold`` is False so land / no-data cells are never dated.
+
     mode :
-        'first_above' -> day ordinal of first True per cell (NaN if never).
-                         Used for freeze-up (first day median >= threshold).
-        'last_above'  -> day ordinal of last  True per cell (NaN if never).
-                         Used for breakup (last day median >= threshold).
-                         Naturally NaN for cells whose median never crosses,
-                         no precondition mask needed.
+        'first_above' -> day ordinal of the first slice >= threshold per cell
+                         (freeze-up / first occurrence); NaN if never crossed.
+        'last_above'  -> day ordinal of the last  slice >= threshold per cell
+                         (break-up / last occurrence); NaN if never crossed.
     """
-    n_dates, H, W = boolean_cube.shape
-    result = np.full((H, W), np.nan, dtype=np.float32)
-    if mode == "first_above":
-        already_found = np.zeros((H, W), dtype=bool)
-        for i in range(n_dates):
-            condition = boolean_cube[i] & ~already_found
-            result[condition] = day_ordinals[i]
-            already_found |= condition
-    elif mode == "last_above":
-        for i in range(n_dates):
-            result[boolean_cube[i]] = day_ordinals[i]
-    else:
+    if mode not in ("first_above", "last_above"):
         raise ValueError(f"unknown mode: {mode!r} (expected 'first_above' or 'last_above')")
+    grid = tier.grid
+    result = np.full((grid.height, grid.width), np.nan, dtype=np.float32)
+    already_found = np.zeros((grid.height, grid.width), dtype=bool)
+    slices = _stream_median_ct_slices(df, admissible_days=admissible_days, tier=tier)
+    for md, median_slice in zip(admissible_days, slices):
+        above = median_slice >= threshold
+        ordinal = day_of_season(md)
+        if mode == "first_above":
+            newly = above & ~already_found
+            result[newly] = ordinal
+            already_found |= newly
+        else:  # last_above
+            result[above] = ordinal
     return result

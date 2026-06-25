@@ -22,10 +22,13 @@ import pandas as pd
 from shapely.geometry import box
 
 from climatology.processing.metrics import (
+    BreakupDateMetric,
+    FreezeUpDateMetric,
     SeasonDurationMetric,
     StormExposureDurationMetric,
 )
 from climatology.processing.regions import Tier
+from climatology.services.temporal import day_of_season
 
 
 def _synthetic_tier(land_mask):
@@ -104,6 +107,30 @@ def test_storm_exposure_land_mask_nan():
     assert np.all(np.isnan(out[0, :])), "land row must be NaN"
     assert np.all(out[1:, :2] == 0) and np.all(out[1:, 2:] == 1), \
         "water cells must be unaffected by the mask"
+
+
+def test_freeze_up_first_above():
+    """Freeze-up = first admissible HD where median CT >= 4/10 (first_above).
+
+    Left half is compact ice on both HDs -> freezes on the first admissible HD
+    (01-01). Right half is open water on the first HD and unobserved on the
+    second -> never crosses 4/10, so it stays NaN (the streaming accumulator
+    leaves never-crossing cells unset)."""
+    df = _duration_fixture()
+    out = FreezeUpDateMetric().compute_climatology(df, _synthetic_tier(land_mask=None))
+    assert np.all(out[:, :2] == day_of_season("01-01")), "ice freezes on the first HD"
+    assert np.all(np.isnan(out[:, 2:])), "never-crossing water stays NaN"
+
+
+def test_breakup_last_above():
+    """Break-up = last admissible HD where median CT >= 4/10 (last_above).
+
+    Mirror of freeze-up: compact-ice left half is still >= 4/10 on the last
+    admissible HD (01-08); never-crossing water stays NaN."""
+    df = _duration_fixture()
+    out = BreakupDateMetric().compute_climatology(df, _synthetic_tier(land_mask=None))
+    assert np.all(out[:, :2] == day_of_season("01-08")), "ice still present on the last HD"
+    assert np.all(np.isnan(out[:, 2:])), "never-crossing water stays NaN"
 
 
 if __name__ == "__main__":

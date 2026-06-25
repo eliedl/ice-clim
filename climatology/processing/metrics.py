@@ -128,21 +128,11 @@ class FreezeUpDateMetric(Metric):
         )
 
     def _compute(self, df, tier):
-        from climatology.processing.event_detection import (
-            build_median_ct_cube,
-            extract_event_date,
-        )
-        from climatology.services.temporal import (
-            admissible_days_of_season,
-            day_of_season,
-        )
+        from climatology.processing.event_detection import stream_event_date
+        from climatology.services.temporal import admissible_days_of_season
         days = admissible_days_of_season(df)
-        cube = build_median_ct_cube(df, admissible_days=days, tier=tier)
-        bool_cube = cube >= self.ct_threshold
-        day_ordinals = [day_of_season(d) for d in days]
-        return extract_event_date(
-            bool_cube, day_ordinals=day_ordinals, mode="first_above",
-        )
+        return stream_event_date(df, admissible_days=days, tier=tier,
+                                 threshold=self.ct_threshold, mode="first_above")
 
     def format_ticks(self, tick_values):
         return [
@@ -196,21 +186,11 @@ class BreakupDateMetric(Metric):
         )
 
     def _compute(self, df, tier):
-        from climatology.processing.event_detection import (
-            build_median_ct_cube,
-            extract_event_date,
-        )
-        from climatology.services.temporal import (
-            admissible_days_of_season,
-            day_of_season,
-        )
+        from climatology.processing.event_detection import stream_event_date
+        from climatology.services.temporal import admissible_days_of_season
         days = admissible_days_of_season(df)
-        cube = build_median_ct_cube(df, admissible_days=days, tier=tier)
-        bool_cube = cube >= self.ct_threshold
-        day_ordinals = [day_of_season(d) for d in days]
-        return extract_event_date(
-            bool_cube, day_ordinals=day_ordinals, mode="last_above",
-        )
+        return stream_event_date(df, admissible_days=days, tier=tier,
+                                 threshold=self.ct_threshold, mode="last_above")
 
     def format_ticks(self, tick_values):
         return [
@@ -240,21 +220,11 @@ class FirstOccurrenceDateMetric(Metric):
         )
 
     def _compute(self, df, tier):
-        from climatology.processing.event_detection import (
-            build_median_ct_cube,
-            extract_event_date,
-        )
-        from climatology.services.temporal import (
-            admissible_days_of_season,
-            day_of_season,
-        )
+        from climatology.processing.event_detection import stream_event_date
+        from climatology.services.temporal import admissible_days_of_season
         days = admissible_days_of_season(df)
-        cube = build_median_ct_cube(df, admissible_days=days, tier=tier)
-        bool_cube = cube >= self.ct_threshold
-        day_ordinals = [day_of_season(d) for d in days]
-        return extract_event_date(
-            bool_cube, day_ordinals=day_ordinals, mode="first_above",
-        )
+        return stream_event_date(df, admissible_days=days, tier=tier,
+                                 threshold=self.ct_threshold, mode="first_above")
 
     def format_ticks(self, tick_values):
         return [
@@ -284,21 +254,11 @@ class LastOccurrenceDateMetric(Metric):
         )
 
     def _compute(self, df, tier):
-        from climatology.processing.event_detection import (
-            build_median_ct_cube,
-            extract_event_date,
-        )
-        from climatology.services.temporal import (
-            admissible_days_of_season,
-            day_of_season,
-        )
+        from climatology.processing.event_detection import stream_event_date
+        from climatology.services.temporal import admissible_days_of_season
         days = admissible_days_of_season(df)
-        cube = build_median_ct_cube(df, admissible_days=days, tier=tier)
-        bool_cube = cube >= self.ct_threshold
-        day_ordinals = [day_of_season(d) for d in days]
-        return extract_event_date(
-            bool_cube, day_ordinals=day_ordinals, mode="last_above",
-        )
+        return stream_event_date(df, admissible_days=days, tier=tier,
+                                 threshold=self.ct_threshold, mode="last_above")
 
     def format_ticks(self, tick_values):
         return [
