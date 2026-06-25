@@ -113,8 +113,7 @@ class Tier:
     @cached_property
     def land_mask(self) -> np.ndarray:
         """CIS landmask rasterized onto this tier's grid (True = land)."""
-        return build_land_mask(LAND_MASK_PATH, self.grid.transform,
-                               self.grid.height, self.grid.width)
+        return build_land_mask(LAND_MASK_PATH, self.grid)
 
     @cached_property
     def clip_mask(self) -> np.ndarray:
@@ -123,8 +122,7 @@ class Tier:
         All-True for legacy square tiers (``clip_geom`` is None); polygon-clipped
         for adaptive tiers so corner cells outside the region are excluded.
         """
-        return build_clip_mask(self.clip_geom, self.grid.transform,
-                               self.grid.height, self.grid.width)
+        return build_clip_mask(self.clip_geom, self.grid)
 
 
 @dataclass(frozen=True)
@@ -235,18 +233,56 @@ def _legacy_bbox_spec(slug: str) -> RegionSpec:
     )
 
 
-_ADAPTIVE: dict[str, "callable[[], RegionSpec]"] = {
+# WW3 product grid — the regular 1 km EPSG:32198 frame a colleague provided as
+# the target for the raw daily netCDF product. gulf_32198.geojson is the exact
+# GeoTransform footprint, so build_grid reproduces the grid cell-for-cell
+# (1176 x 785 @ 1000 m; verified backend/probes/016).
+WW3_BBOX_PATH = BBOX_ROOT / "WW3" / "gulf_32198.geojson"
+WW3_RES = 1000.0
+WW3_GRID_SHAPE = (785, 1176)   # (height, width); guards alignment with the WW3 grid
+
+
+def _ww3_spec() -> RegionSpec:
+    """Single-tier 1 km WW3 product grid (EPSG:32198), read like a legacy region.
+
+    One ``full`` tier over ``gulf_32198.geojson`` at WW3_RES, no clip — the whole
+    frame is the analysis domain. The built grid is asserted to be WW3_GRID_SHAPE
+    so any drift in the source polygon fails loudly: the product cells must
+    coincide with the WW3 grid.
+    """
+    if not WW3_BBOX_PATH.exists():
+        raise FileNotFoundError(f"WW3 grid envelope not found: {WW3_BBOX_PATH}")
+    bbox = gpd.read_file(WW3_BBOX_PATH).to_crs(epsg=GRID_CRS).union_all()
+    spec = RegionSpec(
+        slug="WW3",
+        display="Gulf of St. Lawrence (WW3 1 km)",
+        grid_crs=GRID_CRS,
+        tiers=[Tier("full", WW3_RES, bbox, None)],
+    )
+    g = spec.tiers[0].grid
+    if (g.height, g.width) != WW3_GRID_SHAPE:
+        raise ValueError(
+            f"WW3 grid {(g.height, g.width)} != expected {WW3_GRID_SHAPE} "
+            f"(source {WW3_BBOX_PATH} drifted)"
+        )
+    return spec
+
+
+# Regions resolved by a dedicated spec builder (adaptive MRC grids + the WW3
+# product grid), vs the generic legacy single-tier bbox path.
+_SPEC_BUILDERS: dict[str, "callable[[], RegionSpec]"] = {
     "minganie": _minganie_spec,
     "manicouagan": _manicouagan_spec,
     "sept-rivieres": _sept_rivieres_spec,
+    "WW3": _ww3_spec,
 }
 
-# Regions selectable on the CLI: legacy squares + adaptive regions.
-REGION_SLUGS = sorted(set(REGION_DISPLAY) | set(_ADAPTIVE))
+# Regions selectable on the CLI: legacy squares + the dedicated-builder regions.
+REGION_SLUGS = sorted(set(REGION_DISPLAY) | set(_SPEC_BUILDERS))
 
 
 def resolve_region(slug: str) -> RegionSpec:
-    """Return the ``RegionSpec`` for a region slug (adaptive or legacy square)."""
-    if slug in _ADAPTIVE:
-        return _ADAPTIVE[slug]()
+    """Return the ``RegionSpec`` for a region slug (dedicated builder or legacy)."""
+    if slug in _SPEC_BUILDERS:
+        return _SPEC_BUILDERS[slug]()
     return _legacy_bbox_spec(slug)

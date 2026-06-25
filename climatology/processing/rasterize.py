@@ -43,7 +43,7 @@ class Grid(NamedTuple):
     bounds: GridBounds
 
 
-def burn_mask(geoms, transform, height: int, width: int) -> BoolGrid:
+def burn_mask(geoms, grid: Grid) -> BoolGrid:
     """Rasterize shapely geometries to a binary coverage mask (True = covered).
 
     Sibling of ``burn_values``: same rasterize call, but ``fill=0`` (not NaN)
@@ -51,13 +51,13 @@ def burn_mask(geoms, transform, height: int, width: int) -> BoolGrid:
     here so callers never handle the intermediate dtype.
     """
     if len(geoms) == 0:
-        return np.zeros((height, width), dtype=bool)
+        return np.zeros((grid.height, grid.width), dtype=bool)
     shapes = [(g.__geo_interface__, 1) for g in geoms]
-    return rio_rasterize(shapes, out_shape=(height, width),
-                         transform=transform, fill=0, dtype=np.uint8).astype(bool)
+    return rio_rasterize(shapes, out_shape=(grid.height, grid.width),
+                         transform=grid.transform, fill=0, dtype=np.uint8).astype(bool)
 
 
-def burn_values(geom_value_pairs, transform, height: int, width: int) -> DataGrid:
+def burn_values(geom_value_pairs, grid: Grid) -> DataGrid:
     """Rasterize (geom, value) pairs to a float32 array; NaN where no polygon covers.
 
     Sibling of ``burn_mask`` for metrics that need a value-keyed field (e.g. CT
@@ -66,10 +66,10 @@ def burn_values(geom_value_pairs, transform, height: int, width: int) -> DataGri
     extracting event dates (DEC-027).
     """
     if not geom_value_pairs:
-        return np.full((height, width), np.nan, dtype=np.float32)
+        return np.full((grid.height, grid.width), np.nan, dtype=np.float32)
     shapes = [(g.__geo_interface__, float(v)) for g, v in geom_value_pairs]
-    return rio_rasterize(shapes, out_shape=(height, width),
-                         transform=transform, fill=np.nan, dtype=np.float32)
+    return rio_rasterize(shapes, out_shape=(grid.height, grid.width),
+                         transform=grid.transform, fill=np.nan, dtype=np.float32)
 
 
 def build_grid(bounds_geom, res_m: float) -> Grid:
@@ -116,7 +116,7 @@ def fetch_domain_wkt(geom, *, res_m: float) -> str:
             .union_all().wkt)
 
 
-def build_clip_mask(clip_geom, transform, height: int, width: int) -> BoolGrid:
+def build_clip_mask(clip_geom, grid: Grid) -> BoolGrid:
     """Binary in-region mask; True where ``clip_geom`` covers the cell centre.
 
     Used to NaN cells outside an adaptive region's defining polygon (the grid
@@ -125,11 +125,11 @@ def build_clip_mask(clip_geom, transform, height: int, width: int) -> BoolGrid:
     envelope is the analysis domain).
     """
     if clip_geom is None:
-        return np.ones((height, width), dtype=bool)
-    return burn_mask([clip_geom], transform, height, width)
+        return np.ones((grid.height, grid.width), dtype=bool)
+    return burn_mask([clip_geom], grid)
 
 
-def build_land_mask(mask_path: Path, transform, height: int, width: int) -> BoolGrid:
+def build_land_mask(mask_path: Path, grid: Grid) -> BoolGrid:
     """Binary land mask within the grid; True where land covers the cell.
 
     ``mask_path`` is the shared computation land mask (``sources.LAND_MASK_PATH``,
@@ -147,8 +147,8 @@ def build_land_mask(mask_path: Path, transform, height: int, width: int) -> Bool
     """
 
     land_gdf = gpd.read_file(mask_path).to_crs(epsg=GRID_CRS)
-    mask = burn_mask(land_gdf.geometry.tolist(), transform, height, width)
+    mask = burn_mask(land_gdf.geometry.tolist(), grid)
+    cells = grid.height * grid.width
     log.info("Land mask: %s / %s cells (%.1f%%)",
-             f"{int(mask.sum()):,}", f"{height * width:,}",
-             100.0 * mask.sum() / (height * width))
+             f"{int(mask.sum()):,}", f"{cells:,}", 100.0 * mask.sum() / cells)
     return mask

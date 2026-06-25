@@ -64,7 +64,7 @@ def _burn_day_stack(day_df: pd.DataFrame, *, grid: Grid) -> DataCube:
         burn_values(
             list(zip(day_df.loc[day_df["season"] == s, "geometry"],
                      day_df.loc[day_df["season"] == s, "ct"])),
-            grid.transform, grid.height, grid.width,
+            grid,
         )
         for s in seasons
     ], axis=0)
