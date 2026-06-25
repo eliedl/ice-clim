@@ -19,13 +19,28 @@ sys.path.insert(0, str(Path(__file__).parents[2]))
 
 import numpy as np
 import pandas as pd
-from rasterio.transform import from_bounds
 from shapely.geometry import box
 
 from climatology.processing.metrics import (
     SeasonDurationMetric,
     StormExposureDurationMetric,
 )
+from climatology.processing.regions import Tier
+
+
+def _synthetic_tier(land_mask):
+    """A single 4x4 tier over [0,4]² (res 1) with an injected land mask.
+
+    The grid is ``build_grid(box(0,0,4,4), 1.0)`` -> ``from_bounds(0,0,4,4,4,4)``,
+    so the fixture's left/right boxes burn onto cols {0,1} / {2,3}. Bypasses
+    ``Tier.land_mask``'s on-disk CIS-landmask read by pre-seeding the
+    cached_property (``object.__setattr__`` — ``Tier`` is frozen). ``land_mask``
+    is None (no mask: median over every cell) or a synthetic (4, 4) bool array.
+    ``clip_geom=None`` -> the clip mask is all-True (whole grid in-domain).
+    """
+    tier = Tier(name="test", res_m=1.0, bounds_geom=box(0, 0, 4, 4), clip_geom=None)
+    object.__setattr__(tier, "land_mask", land_mask)
+    return tier
 
 
 def _duration_fixture():
@@ -35,7 +50,6 @@ def _duration_fixture():
     Right half: water (CT='00') on the first HD, unobserved on the second.
     With 2 winters the WMO 80% rule admits both HDs (min_seasons = 2).
     """
-    transform = from_bounds(0, 0, 4, 4, 4, 4)
     left, right = box(0, 0, 2, 4), box(2, 0, 4, 4)
     rows = []
     for yr in (2001, 2002):
@@ -44,30 +58,24 @@ def _duration_fixture():
             rows.append({"obs_date": d, "ct_code": "92", "geometry": left})
             if d.endswith("01-01"):
                 rows.append({"obs_date": d, "ct_code": "00", "geometry": right})
-    return pd.DataFrame(rows), transform
+    return pd.DataFrame(rows)
 
 
 def test_season_duration_median_then_threshold():
     """Duration = count of admissible HDs with median CT >= 4/10 (DEC-027
     addendum 2026-06-11); observed ice-free water -> 0, not NaN."""
-    df, transform = _duration_fixture()
-    out = SeasonDurationMetric().compute_climatology(
-        df, transform=transform, height=4, width=4,
-        land_mask=None,
-    )
+    df = _duration_fixture()
+    out = SeasonDurationMetric().compute_climatology(df, _synthetic_tier(land_mask=None))
     assert np.all(out[:, :2] == 2), "ice on both HDs must count 2"
     assert np.all(out[:, 2:] == 0), "observed ice-free water must count 0"
 
 
 def test_season_duration_land_mask_nan():
     """Land cells are NaN, and the mask does not alter water-cell counts."""
-    df, transform = _duration_fixture()
+    df = _duration_fixture()
     land = np.zeros((4, 4), dtype=bool)
     land[0, :] = True
-    out = SeasonDurationMetric().compute_climatology(
-        df, transform=transform, height=4, width=4,
-        land_mask=land,
-    )
+    out = SeasonDurationMetric().compute_climatology(df, _synthetic_tier(land_mask=land))
     assert np.all(np.isnan(out[0, :])), "land row must be NaN"
     assert np.all(out[1:, :2] == 2) and np.all(out[1:, 2:] == 0), \
         "water cells must be unaffected by the mask"
@@ -81,24 +89,18 @@ def test_storm_exposure_inverse_threshold():
     unobserved (NaN, not counted) on the second -> exposed 1 step.
     Demonstrates the inverse-threshold semantics vs season duration, that
     open water counts as exposed, and that unobserved steps are not."""
-    df, transform = _duration_fixture()
-    out = StormExposureDurationMetric().compute_climatology(
-        df, transform=transform, height=4, width=4,
-        land_mask=None,
-    )
+    df = _duration_fixture()
+    out = StormExposureDurationMetric().compute_climatology(df, _synthetic_tier(land_mask=None))
     assert np.all(out[:, :2] == 0), "compact ice must never count as exposed"
     assert np.all(out[:, 2:] == 1), "observed open water counts; unobserved step does not"
 
 
 def test_storm_exposure_land_mask_nan():
     """Land cells are NaN; the mask does not alter water-cell exposure counts."""
-    df, transform = _duration_fixture()
+    df = _duration_fixture()
     land = np.zeros((4, 4), dtype=bool)
     land[0, :] = True
-    out = StormExposureDurationMetric().compute_climatology(
-        df, transform=transform, height=4, width=4,
-        land_mask=land,
-    )
+    out = StormExposureDurationMetric().compute_climatology(df, _synthetic_tier(land_mask=land))
     assert np.all(np.isnan(out[0, :])), "land row must be NaN"
     assert np.all(out[1:, :2] == 0) and np.all(out[1:, 2:] == 1), \
         "water cells must be unaffected by the mask"

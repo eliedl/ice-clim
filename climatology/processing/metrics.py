@@ -23,7 +23,7 @@ from climatology.processing.regions import Tier
 from climatology.processing.sources import ChartTable
 
 log = logging.getLogger(__name__)
-from climatology.utils._types import BoolGrid, DataGrid
+from climatology.utils._types import DataGrid
 from climatology.services.db import all_ct_sql
 from climatology.services.temporal import SEASON_ORIGIN
 from climatology.services.units_conversion_maps import CONCENTRATION_FRACTION
@@ -50,35 +50,26 @@ class Metric(ABC):
     def compute_climatology(self, df: pd.DataFrame, tier: Tier) -> DataGrid:
         """End-to-end climatology computation: rows -> (H, W) result raster.
 
-        Extracts grid geometry and masks from ``tier``, delegates the
-        metric-specific computation to ``_compute``, then applies the clip mask
-        so cells outside the analysis polygon are NaN'd once, here, regardless
-        of metric.
+        Delegates the metric-specific computation to ``_compute`` (which reads
+        the grid and land mask straight off the ``tier``), then applies the clip
+        mask so cells outside the analysis polygon are NaN'd once, here,
+        regardless of metric.
         """
-        grid = tier.grid
-        values = self._compute(df, transform=grid.transform, height=grid.height,
-                               width=grid.width, land_mask=tier.land_mask)
+        values = self._compute(df, tier)
         values[~tier.clip_mask] = np.nan
+        grid = tier.grid
         log.info("  Tier '%s' cells with data: %s / %s", tier.name,
                  f"{int((~np.isnan(values)).sum()):,}", f"{grid.height * grid.width:,}")
         return values
 
     @abstractmethod
-    def _compute(
-        self,
-        df: pd.DataFrame,
-        *,
-        transform,
-        height: int,
-        width: int,
-        land_mask: BoolGrid | None = None,
-    ) -> DataGrid:
+    def _compute(self, df: pd.DataFrame, tier: Tier) -> DataGrid:
         """Metric-specific computation: rows -> (H, W) result raster.
 
         All current metrics use the CIS-aligned median-then-threshold
         methodology (DEC-027/DEC-035): median CT across seasons per
-        calendar-day (``build_median_ct_cube``), then apply the metric's
-        event/count logic.
+        calendar-day (``build_median_ct_cube``, which takes the ``tier`` for its
+        grid + land mask), then apply the metric's event/count logic.
         """
 
     @abstractmethod
@@ -136,7 +127,7 @@ class FreezeUpDateMetric(Metric):
             climatology_end_date=climatology_end_date,
         )
 
-    def _compute(self, df, *, transform, height, width, land_mask=None):
+    def _compute(self, df, tier):
         from climatology.processing.event_detection import (
             build_median_ct_cube,
             extract_event_date,
@@ -146,11 +137,7 @@ class FreezeUpDateMetric(Metric):
             day_of_season,
         )
         days = admissible_days_of_season(df)
-        cube = build_median_ct_cube(
-            df, admissible_days=days,
-            transform=transform, height=height, width=width,
-            land_mask=land_mask,
-        )
+        cube = build_median_ct_cube(df, admissible_days=days, tier=tier)
         bool_cube = cube >= self.ct_threshold
         day_ordinals = [day_of_season(d) for d in days]
         return extract_event_date(
@@ -208,7 +195,7 @@ class BreakupDateMetric(Metric):
             climatology_end_date=climatology_end_date,
         )
 
-    def _compute(self, df, *, transform, height, width, land_mask=None):
+    def _compute(self, df, tier):
         from climatology.processing.event_detection import (
             build_median_ct_cube,
             extract_event_date,
@@ -218,11 +205,7 @@ class BreakupDateMetric(Metric):
             day_of_season,
         )
         days = admissible_days_of_season(df)
-        cube = build_median_ct_cube(
-            df, admissible_days=days,
-            transform=transform, height=height, width=width,
-            land_mask=land_mask,
-        )
+        cube = build_median_ct_cube(df, admissible_days=days, tier=tier)
         bool_cube = cube >= self.ct_threshold
         day_ordinals = [day_of_season(d) for d in days]
         return extract_event_date(
@@ -256,7 +239,7 @@ class FirstOccurrenceDateMetric(Metric):
             climatology_end_date=climatology_end_date,
         )
 
-    def _compute(self, df, *, transform, height, width, land_mask=None):
+    def _compute(self, df, tier):
         from climatology.processing.event_detection import (
             build_median_ct_cube,
             extract_event_date,
@@ -266,11 +249,7 @@ class FirstOccurrenceDateMetric(Metric):
             day_of_season,
         )
         days = admissible_days_of_season(df)
-        cube = build_median_ct_cube(
-            df, admissible_days=days,
-            transform=transform, height=height, width=width,
-            land_mask=land_mask,
-        )
+        cube = build_median_ct_cube(df, admissible_days=days, tier=tier)
         bool_cube = cube >= self.ct_threshold
         day_ordinals = [day_of_season(d) for d in days]
         return extract_event_date(
@@ -304,7 +283,7 @@ class LastOccurrenceDateMetric(Metric):
             climatology_end_date=climatology_end_date,
         )
 
-    def _compute(self, df, *, transform, height, width, land_mask=None):
+    def _compute(self, df, tier):
         from climatology.processing.event_detection import (
             build_median_ct_cube,
             extract_event_date,
@@ -314,11 +293,7 @@ class LastOccurrenceDateMetric(Metric):
             day_of_season,
         )
         days = admissible_days_of_season(df)
-        cube = build_median_ct_cube(
-            df, admissible_days=days,
-            transform=transform, height=height, width=width,
-            land_mask=land_mask,
-        )
+        cube = build_median_ct_cube(df, admissible_days=days, tier=tier)
         bool_cube = cube >= self.ct_threshold
         day_ordinals = [day_of_season(d) for d in days]
         return extract_event_date(
@@ -370,15 +345,11 @@ class SeasonDurationMetric(Metric):
             climatology_end_date=climatology_end_date,
         )
 
-    def _compute(self, df, *, transform, height, width, land_mask=None):
+    def _compute(self, df, tier):
         from climatology.processing.event_detection import build_median_ct_cube
         from climatology.services.temporal import admissible_days_of_season
         days = admissible_days_of_season(df)
-        cube = build_median_ct_cube(
-            df, admissible_days=days,
-            transform=transform, height=height, width=width,
-            land_mask=land_mask,
-        )
+        cube = build_median_ct_cube(df, admissible_days=days, tier=tier)
         duration = np.sum(cube >= self.ct_threshold, axis=0).astype(np.float32)
         never_observed = np.all(np.isnan(cube), axis=0)
         duration[never_observed] = np.nan
@@ -435,15 +406,11 @@ class StormExposureDurationMetric(Metric):
             climatology_end_date=climatology_end_date,
         )
 
-    def _compute(self, df, *, transform, height, width, land_mask=None):
+    def _compute(self, df, tier):
         from climatology.processing.event_detection import build_median_ct_cube
         from climatology.services.temporal import admissible_days_of_season
         days = admissible_days_of_season(df)
-        cube = build_median_ct_cube(
-            df, admissible_days=days,
-            transform=transform, height=height, width=width,
-            land_mask=land_mask,
-        )
+        cube = build_median_ct_cube(df, admissible_days=days, tier=tier)
         # NaN cells (no data that day) compare False against the threshold and
         # are not counted; perennially ice-covered cells -> 0; open water -> full.
         exposure = np.sum(cube <= self.exposure_threshold, axis=0).astype(np.float32)
