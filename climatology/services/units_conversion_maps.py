@@ -1,29 +1,21 @@
-"""SIGRID-3 unit conversion maps for CIS sea-ice data.
-
-Encoding tables and parsers that convert categorical SIGRID-3 codes to
-numeric values. The internal representation across the project is
-**fraction** (range [0, 1]) for concentrations; display layers handle
-percentage formatting where appropriate.
-
-Source: SIGRID-3 v3.1 documentation (2010) and the 2004 CIS convention.
-Tables are intentionally restricted to codes actually observed in the
-local SGRDA archive (backend/probes/003_concentration_census). Spec
-codes never seen in the data are omitted so that any future encounter
-surfaces as a loud KeyError rather than being silently mapped.
+"""
+SIGRID-3 unit conversion maps for CIS sea-ice data.
 """
 
 from __future__ import annotations
 
-# Concentration code -> fraction in [0, 1].
-# Includes only codes observed in probe 003 (SGRDA) and in sgrdr (CT census,
-# 2026-06-10, during clim-008).
+import logging
+from dataclasses import dataclass
+
+log = logging.getLogger(__name__)
+
+
+# Codes observed in probe 003
 CONCENTRATION_FRACTION: dict[str, float] = {
-    "00": 0.00,   # ice-free (2004 convention; 2010 code "55" not observed)
-    "98": 0.00,   # ice-free — SGRDR encoding, exclusively on POLY_TYPE='W'
-                  # polygons (3 327/3 736 W rows, 1968–2020; never on ice
-                  # polygons; absent from SGRDA). User-confirmed 2026-06-10.
-    "01": 0.04,   # bergy water / <1/10 — per "Open water/bergy water < 1 tenth"; confirmed 0.04 (DEC-043)
-    "02": 0.04,   # bergy water variant — trace value 0.04 confirmed (DEC-043)
+    "00": 0.00,   
+    "98": 0.00,            
+    "01": 0.04,   
+    "02": 0.04,   
     "10": 0.10,
     "20": 0.20,
     "30": 0.30,
@@ -148,3 +140,127 @@ def parse_stage_thickness(code: str | None) -> float | None:
 NO_THICKNESS_STAGE_CODES: frozenset[str] = frozenset(
     code for code, t in STAGE_OF_DEVELOPMENT_THICKNESS.items() if t is None
 )
+
+
+# --- Per-polygon volume attribution (DEC-029) ------------------------------
+# Regime-aware decomposition of one polygon's SIGRID-3 codes into per-slot
+# concentration x thickness — the single source of truth shared by the raw
+# netCDF product (disaggregated bands) and the future volume metric (the
+# concentration-weighted thickness sum). Probe 004 enumerated the column
+# signatures; DEC-029/043 fixed the attribution rules.
+
+TRACE_CONCENTRATION: float = 0.04        # SO/SD trace concentration (DEC-043)
+RESIDUAL_TRACE_EPSILON: float = 0.03     # SD residual benign-band half-width (DEC-029)
+
+# Ice-description slots of a SIGRID-3 egg: O (SO trace), A/B/C (named partials),
+# D (SD remaining class). CN is the SO stage code and CD the SD stage code — both
+# are stage-of-development codes, not concentrations (the CN/CD naming quirk;
+# see CLAUDE.md), so they map through STAGE_OF_DEVELOPMENT_THICKNESS.
+SLOTS: tuple[str, ...] = ("O", "A", "B", "C", "D")
+
+
+def _present(code: str | None) -> bool:
+    """True if a SIGRID-3 code carries information (not None/empty/missing)."""
+    return code is not None and code != "" and code not in MISSING_CODES
+
+
+@dataclass(frozen=True)
+class PolygonAttribution:
+    """Per-slot concentration + thickness for one polygon (DEC-029).
+
+    ``ct`` is the total concentration (fraction). ``conc[slot]`` is the fraction
+    attributed to each ice-description slot O/A/B/C/D and ``thk[slot]`` its
+    midpoint thickness in metres (None where the stage has no defined thickness
+    — e.g. 98/99 — or no stage code is present for the slot).
+    ``volume_per_area`` is the concentration-weighted thickness sum (metres of
+    ice-equivalent); multiply by a cell's ground area for ice volume.
+    """
+
+    ct: float
+    conc: dict[str, float]
+    thk: dict[str, float | None]
+
+    @property
+    def volume_per_area(self) -> float:
+        return sum(self.conc[s] * self.thk[s]
+                   for s in SLOTS if self.thk[s] is not None)
+
+
+def _sd_concentration(*, ct: float, ca: float | None, cb: float | None,
+                      cc: float | None, single_stage: bool) -> float:
+    """SD (slot D) concentration via the DEC-029 piecewise residual rule.
+
+    Single-stage -> trace. Multi-stage -> residual ``r = CT - (CA+CB+CC)``:
+    ``r > 0`` -> ``r``; ``-eps <= r <= 0`` -> trace (benign band — the '9+'
+    rounding artifact at exactly -0.03 and exact-zero exhaustion); ``r < -eps``
+    -> 0 with a logged warning (genuine encoding error; only -0.6/-0.7 observed
+    in probe 001).
+    """
+    if single_stage:
+        return TRACE_CONCENTRATION
+    r = ct - ((ca or 0.0) + (cb or 0.0) + (cc or 0.0))
+    if r > 0.0:
+        return r
+    # Benign band -RES <= r <= 0, with float slack: the '9+' artifact (CT 0.97
+    # vs partials summing to 1.0) is r = -0.03 in intent but -0.030000000000003
+    # in float, so a bare ``>= -RES`` would wrongly trip the error branch on the
+    # ~20 613 benign probe-001 rows. Only genuine errors (-0.6/-0.7) fall below.
+    if r >= -RESIDUAL_TRACE_EPSILON - 1e-9:
+        return TRACE_CONCENTRATION
+    log.warning("SD residual %.3f < -%.2f; CD concentration set to 0 "
+                "(genuine encoding error, DEC-029)", r, RESIDUAL_TRACE_EPSILON)
+    return 0.0
+
+
+def attribute_polygon(*, ct: str | None = None, ca: str | None = None,
+                      cb: str | None = None, cc: str | None = None,
+                      cn: str | None = None, sa: str | None = None,
+                      sb: str | None = None, sc: str | None = None,
+                      cd: str | None = None) -> PolygonAttribution:
+    """Regime-aware per-slot attribution of one polygon's raw SIGRID-3 codes.
+
+    Concentrations parse through CONCENTRATION_FRACTION, thicknesses through
+    STAGE_OF_DEVELOPMENT_THICKNESS. Regime split (DEC-029, probe 004): the
+    **single-stage** regime (SA present, CA absent) attributes the whole CT to
+    slot A; **multi-stage** uses the named partials CA/CB/CC. CN carries the SO
+    trace; CD the SD residual concentration. Missing partials contribute 0; a
+    polygon with CT but no stage codes (``orphan_ct``, DEC-026) yields ``ct``
+    populated with every slot 0 — i.e. 0 volume, counted only in the total.
+    Non-canonical blind spots (empty/other/stage_only, probe 004) need no branch
+    here: they fall out as 0-volume; counting them is a caller/probe concern.
+    """
+    ct_f = parse_concentration(ct) or 0.0
+    ca_f = parse_concentration(ca)
+    cb_f = parse_concentration(cb)
+    cc_f = parse_concentration(cc)
+
+    conc: dict[str, float] = {s: 0.0 for s in SLOTS}
+    thk: dict[str, float | None] = {s: None for s in SLOTS}
+
+    single_stage = _present(sa) and not _present(ca)
+
+    # Slot O — SO trace (CN is the SO stage code).
+    if _present(cn):
+        conc["O"] = TRACE_CONCENTRATION
+        thk["O"] = parse_stage_thickness(cn)
+
+    # Slot A — single-stage attributes CT here; multi-stage uses the CA partial.
+    if _present(sa):
+        thk["A"] = parse_stage_thickness(sa)
+    conc["A"] = ct_f if single_stage else (ca_f or 0.0)
+
+    # Slots B, C — named partials (concentration independent of stage presence).
+    if _present(sb):
+        thk["B"] = parse_stage_thickness(sb)
+    conc["B"] = cb_f or 0.0
+    if _present(sc):
+        thk["C"] = parse_stage_thickness(sc)
+    conc["C"] = cc_f or 0.0
+
+    # Slot D — SD remaining class (CD is the SD stage code).
+    if _present(cd):
+        thk["D"] = parse_stage_thickness(cd)
+        conc["D"] = _sd_concentration(ct=ct_f, ca=ca_f, cb=cb_f, cc=cc_f,
+                                      single_stage=single_stage)
+
+    return PolygonAttribution(ct=ct_f, conc=conc, thk=thk)
