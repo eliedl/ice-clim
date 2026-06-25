@@ -1,10 +1,11 @@
 """Database access for the climatology stack.
 
-Env-driven engine construction, the shared row-fetch SQL builder, and the
+Env-driven engine construction, the row-fetch SQL builders, and the
 row-fetch-and-parse (``load_polygons``). The metric strategies import
-``all_ct_sql`` from here to assemble a complete statement; ``load_polygons`` is
-a metric-agnostic executor — it runs the SQL it is given and parses the
-geometry, knowing nothing of metrics, tables, or date windows.
+``all_ct_sql`` (CT only) and the raw netCDF product imports ``raw_fields_sql``
+(the nine volume-attribution fields) to assemble a complete statement;
+``load_polygons`` is a fetch-agnostic executor — it runs the SQL it is given and
+parses the geometry, knowing nothing of metrics, tables, or date windows.
 """
 from __future__ import annotations
 
@@ -29,32 +30,13 @@ def get_engine():
 
 def all_ct_sql(*, table: str, grid_crs: int, bbox_wkt: str,
                climatology_start_date: str, climatology_end_date: str) -> str:
-    """Complete DML: all ice and water SIGRID3 polygons inside ``bbox_wkt`` over
-    the climatology window — ready to execute as-is.
+    """Complete SQL for the raw CT code of every ice/water polygon in ``bbox_wkt``.
 
-    No CT pre-filter — the median-then-threshold methodology needs every
-    observed CT value (including 0 from water polygons) to compute an
-    unbiased median across seasons. CT is returned as the raw SIGRID3 code;
-    parsing to a fraction happens in Python via CONCENTRATION_FRACTION
-    (single source of truth at services/units_conversion_maps.py).
-
-    Geometries are transposed to ``grid_crs`` (the caller's analysis CRS) and
-    filtered to ``bbox_wkt`` (a 4326 WKT polygon from ``fetch_domain_wkt``). The
-    climatology window is a **half-open ``T1`` date range**
-    [climatology_start_date, climatology_end_date): the caller
-    (``services.temporal.climatology_date_window``) maps a winter-year period to
-    its Sep-1 bounds. Season *identity* is a Python concern
-    (``services.temporal.winter_season``), so the SQL stays a plain date-range
-    fetch with no fall/winter anchoring logic in DML.
-
-    All inputs are machine-generated and trusted (no user input), so they are
-    interpolated directly into a complete statement rather than bound — keeping
-    ``load_polygons`` a pure SQL executor.
-
-    POLY_TYPE filter:
-      - 'I' (ice)   -> CT > 0
-      - 'W' (water) -> CT = 0  (must contribute to the median, else upward bias)
-      - 'N' (no data), 'L' (land), NULL -> excluded
+    Yields ``geom_wkt`` (geometry transformed to ``grid_crs``), ``obs_date``
+    (the ``T1`` date) and ``ct_code``, for ``POLY_TYPE IN ('I','W')`` (water kept
+    as CT=0) over the half-open ``T1`` window ``[start, end)``. Inputs are
+    trusted (machine-generated) and interpolated directly, not bound, so
+    ``load_polygons`` stays a pure executor.
     """
     return f"""
         SELECT
@@ -70,14 +52,38 @@ def all_ct_sql(*, table: str, grid_crs: int, bbox_wkt: str,
     """
 
 
-def load_polygons(sql: str) -> pd.DataFrame:
-    """Execute a complete SQL statement and attach shapely geometries.
+def raw_fields_sql(*, table: str, grid_crs: int, bbox_wkt: str,
+                   climatology_start_date: str, climatology_end_date: str) -> str:
+    """Complete SQL for the raw volume-attribution codes of every ice/water polygon.
 
-    Metric-agnostic executor: the SQL (built by ``Metric.sql`` from
-    ``all_ct_sql`` + ``fetch_domain_wkt``) must yield a ``geom_wkt`` column in
-    the analysis CRS; this opens a connection, runs it, and parses ``geom_wkt`` into
-    a shapely ``geometry`` column so the rows rasterize onto every tier's
-    transform.
+    Sibling of ``all_ct_sql`` returning the nine SIGRID3 code columns the
+    attribution needs instead of CT alone — ``ct_code, ca_code, cb_code,
+    cc_code, cn_code, sa_code, sb_code, sc_code, cd_code`` — plus ``geom_wkt``
+    and ``obs_date``. Same CRS transform, ``bbox_wkt`` filter, ``POLY_TYPE`` rule
+    and window as ``all_ct_sql``. ``attribute_polygon`` parses one row (strip the
+    ``_code`` suffix for its kwargs) into per-slot concentration/thickness.
+    """
+    return f"""
+        SELECT
+            ST_AsText(ST_Transform(geometry, {grid_crs})) AS geom_wkt,
+            "T1"::date AS obs_date,
+            "CT" AS ct_code, "CA" AS ca_code, "CB" AS cb_code, "CC" AS cc_code,
+            "CN" AS cn_code, "SA" AS sa_code, "SB" AS sb_code, "SC" AS sc_code,
+            "CD" AS cd_code
+        FROM {table}
+        WHERE "POLY_TYPE" IN ('I', 'W')
+          AND ST_Intersects(geometry, ST_GeomFromText('{bbox_wkt}', 4326))
+          AND "T1" >= '{climatology_start_date}'
+          AND "T1" <  '{climatology_end_date}'
+        ORDER BY obs_date;
+    """
+
+
+def load_polygons(sql: str) -> pd.DataFrame:
+    """Execute a complete SQL statement, parsing ``geom_wkt`` into a ``geometry`` column.
+
+    Fetch-agnostic: any SQL yielding a ``geom_wkt`` column (in the analysis CRS)
+    works; the parsed shapely geometries are what downstream rasterization needs.
     """
     engine = get_engine()
     with engine.connect() as conn:

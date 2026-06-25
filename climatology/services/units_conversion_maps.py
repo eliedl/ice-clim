@@ -11,6 +11,7 @@ log = logging.getLogger(__name__)
 
 
 # Codes observed in probe 003
+# See /docs/normative/SIGRID and CIS for more details
 CONCENTRATION_FRACTION: dict[str, float] = {
     "00": 0.00,   
     "98": 0.00,            
@@ -25,23 +26,13 @@ CONCENTRATION_FRACTION: dict[str, float] = {
     "70": 0.70,
     "80": 0.80,
     "90": 0.90,
-    "91": 0.97,   # "9+/10" — DEC-015: adopt the CIS-documented value 9.7/10 (0.97) for the
-                  # "9+" code (CIS Archive No.1; reading-log e060), which the doc states differs
-                  # from the 10/10 implied by summing partials. Changed 2026-06-09 from 1.00.
-                  # (Probe 001 found CT='91' partials sum to 1.0 across 20 613 SGRDA rows, which
-                  # had motivated the prior 1.00; the CIS documentation is now treated as
-                  # authoritative over that indirect inference.)
-    "92": 1.00,   # compact (10/10) — genuine full coverage, distinct from "9+"; unchanged.
+    "91": 0.97,  
+    "92": 1.00, 
 }
 
-# Codes treated as missing data (SIGRID-3 dummy variable convention).
-# '9-' is treated as a typo of '-9' (12 occurrences in CB/CC per probe 003).
+# Codes treated as missing data (see probe 003).
 MISSING_CODES: frozenset[str] = frozenset({"-9", "9-"})
 
-# Documented data-entry typos with silent substitution.
-# Probe 003: 4 rows of "8" and 2 rows of "9" in CA. Assumed to be typos
-# of "80" and "90" respectively, consistent with the 2-digit SIGRID-3
-# encoding and the surrounding-row context.
 _TYPO_SUBSTITUTIONS: dict[str, str] = {
     "8": "80",
     "9": "90",
