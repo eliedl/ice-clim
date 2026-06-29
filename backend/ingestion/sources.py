@@ -26,7 +26,7 @@ SGRDA_KEEP = frozenset({
     "POLY_TYPE",
     "CT", "CA", "CB", "CC", "CN",
     "SA", "SB", "SC", "CD",
-    "FA", "FB", "FC", "CF",
+    "FA", "FB", "FC",
     "geometry",
 })
 
