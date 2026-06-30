@@ -1,288 +1,123 @@
-"""Region definitions for region-scale climatologies.
-
-A region resolves to a ``RegionSpec``: a target grid CRS plus an ordered list
-of ``Tier``s (coarse -> fine). Each tier carries its own resolution, the
-geometry whose bounding box defines the raster envelope, and an optional clip
-polygon (cells outside it are NaN'd after compute).
-
-Both region kinds derive their grid from a source polygon (one code path
-downstream):
-  - **Legacy bbox regions** (gaspe, sept-iles, ...): one tier built from the
-    pre-computed ``<slug>_32198_bbox.geojson`` (square_bbox.py) — the
-    axis-aligned bbox of the region polygon in the grid CRS, uniform GRID_RES,
-    **no polygon clip**, so polygon == bbox == grid (DEC-040).
-  - **Adaptive nested regions** (minganie, manicouagan, sept-rivieres): two tiers — a coarse 1 km raster
-    over the whole region polygon and a fine 100 m raster over the 10 km
-    coastline buffer intersected with the region (DEC-036; 25 m is infeasible
-    as a single raster per probe 011). Each tier **clips** to its defining
-    polygon, so the grid bbox differs from the analysis domain. The CIS landmask
-    still does the land masking at each tier (sources.LAND_MASK_PATH, DEC-034).
-
-Centroid point-sampling (the rasterio default) is the per-cell aggregation at
-every resolution, so DEC-035's "median is a representable CT code" holds
-unchanged — the tiers differ only in cell size.
-"""
+"""Region definitions: each slug resolves to a ``RegionSpec`` of ``Tier``s, each deriving a wet analysis domain (``domain − landmask``) for its fetch and mask; the grid spans the wet domain (adaptive tiers) or the full bbox (full tier, for grid comparability)."""
 
 from __future__ import annotations
 
 import logging
 from dataclasses import dataclass
 from functools import cached_property
-from pathlib import Path
 
 import geopandas as gpd
 import numpy as np
-from shapely import make_valid
-from shapely.geometry import shape
 from shapely.geometry.base import BaseGeometry
 
-from climatology.processing.rasterize import (
-    GRID_CRS, GRID_RES, Grid, build_clip_mask, build_grid, build_land_mask,
+from climatology.processing.polygons import (
+    _bbox_envelope, _coastline_buffer, _landmask, _mrc_polygon,
 )
-from climatology.processing.sources import LAND_MASK_PATH
+from climatology.processing.rasterize import GRID_CRS, GRID_RES, Grid, build_grid, burn_mask
 
 log = logging.getLogger(__name__)
 
-BBOX_ROOT = Path("/home/eliedl/data/masks/climatology_bbox")
-
+# slug -> display label (adaptive + legacy + full-gulf).
 REGION_DISPLAY = {
     "gaspe":                 "Gaspé",
     "iles-de-la-madeleine":  "Îles-de-la-Madeleine",
     "mingan":                "Mingan",
     "rimouski":              "Rimouski",
     "sept-iles":             "Sept-Îles",
+    "minganie":              "Minganie",
+    "manicouagan":           "Manicouagan",
+    "sept-rivieres":         "Sept-Rivières",
+    "golfe":                 "Golfe du Saint-Laurent",
 }
 
-# Adaptive-region source layers (EPSG:32198, NAD83 / Québec Lambert).
-MRC_GPKG = Path(
-    "/home/eliedl/data/masks/MRC_municipalites_bbox/"
-    "DonneesOuvertesQc_MRC_2025_32198_p.gpkg"
-)
-COASTLINE_BUFFER = Path(
-    "/home/eliedl/data/masks/coastline_buffer_ldgizc/Buffer10km.shp"
-)
+# Adaptive regions -> MRC feature fid (the stable key; MRC names duplicate).
+ADAPTIVE_MRC_FID = {
+    "minganie":      71,
+    "manicouagan":   32,
+    "sept-rivieres": 70,
+}
 
-# Adaptive MRC regions (Côte-Nord) grid in Québec Lambert: it is the native CRS
-# of both source layers and gives one seamless province-wide frame. Minganie
-# (~63–64°W) is UTM-20N territory, so a UTM grid there (26920) would differ from
-# the zone-19 western regions -> multi-zone seams. NOTE: this is a homogeneity
-# argument, not a distortion one — both CRSs are conformal and 26919's point
-# scale at Minganie is actually smaller than 32198's (probe 013; DEC-036/DEC-040).
-#
-# Tiers: 1 km coarse over the whole region; 100 m fine over the coastline
-# buffer. The requested 25 m fine tier is infeasible as a single raster — its
-# (n_dates, H, W) median cube is 43.6 GB over the refinement bounding box (probe
-# 011). 100 m (2.7 GB cube) ships the hybrid grid now; restoring 25 m is a
-# streaming-cube optimization deferred in DEC-036.
-ADAPTIVE_GRID_CRS = 32198
 ADAPTIVE_COARSE_RES = 1000.0
 ADAPTIVE_FINE_RES = 100.0
-
-# Backward-compat aliases (probe 011 imports MINGANIE_GRID_CRS).
-MINGANIE_GRID_CRS = ADAPTIVE_GRID_CRS
-MINGANIE_COARSE_RES = ADAPTIVE_COARSE_RES
-MINGANIE_FINE_RES = ADAPTIVE_FINE_RES
+GOLFE_RES = 1000.0   # full-gulf product grid (1 km)
 
 
 @dataclass(frozen=True)
 class Tier:
-    """One resolution level of a region grid.
+    """One resolution level of a region grid, derived from a region polygon."""
 
-    ``bounds_geom`` and ``clip_geom`` are expressed in the region's grid CRS.
-    ``clip_geom=None`` means no polygon clip (legacy square: the whole envelope
-    is the analysis domain).
-    """
-
-    name: str
+    level: str            # "full" | "coarse" | "fine"
     res_m: float
-    bounds_geom: BaseGeometry
-    clip_geom: BaseGeometry | None
+    region_polygon: BaseGeometry
+
+    @cached_property
+    def _domain(self) -> BaseGeometry:
+        """The pre-land polygon: region ∩ buffer for the fine tier, else the region."""
+        if self.level == "fine":
+            return self.region_polygon.intersection(_coastline_buffer())
+        return self.region_polygon
+
+    @cached_property
+    def wet(self) -> BaseGeometry:
+        """Wet analysis domain (``domain − landmask``): grid envelope, fetch, and mask."""
+        return self._domain.difference(_landmask())
 
     @cached_property
     def grid(self) -> Grid:
-        """Raster geometry (transform, height, width, bounds) for this tier.
-
-        A pure projection of ``bounds_geom`` at ``res_m`` — computed once and
-        shared by compute and emit; no I/O.
-        """
-        g = build_grid(self.bounds_geom, self.res_m)
+        """Raster geometry at ``res_m``: the full bbox for a 'full' tier (grid comparability), else the wet domain."""
+        envelope = self.region_polygon if self.level == "full" else self.wet
+        g = build_grid(envelope, self.res_m)
         log.info("Tier '%s': %d × %d cells (%d total) @ %g m",
-                 self.name, g.width, g.height, g.width * g.height, self.res_m)
+                 self.level, g.width, g.height, g.width * g.height, self.res_m)
         return g
 
     @cached_property
-    def land_mask(self) -> np.ndarray:
-        """CIS landmask rasterized onto this tier's grid (True = land)."""
-        return build_land_mask(LAND_MASK_PATH, self.grid)
+    def wet_mask(self) -> np.ndarray:
+        """BoolGrid, True on wet cells (excludes land + seaward rectangle fill)."""
+        m = burn_mask([self.wet], self.grid)
+        cells = self.grid.height * self.grid.width
+        log.info("Tier '%s' wet cells: %s / %s (%.1f%%)", self.level,
+                 f"{int(m.sum()):,}", f"{cells:,}", 100.0 * m.sum() / cells)
+        return m
 
     @cached_property
-    def clip_mask(self) -> np.ndarray:
-        """In-domain mask for this tier (True = analysable cell).
-
-        All-True for legacy square tiers (``clip_geom`` is None); polygon-clipped
-        for adaptive tiers so corner cells outside the region are excluded.
-        """
-        return build_clip_mask(self.clip_geom, self.grid)
+    def fetch_wkt(self) -> str:
+        """4326 WKT of the wet domain (densified + one-cell buffer) for the DB fetch (DEC-039)."""
+        # crs=GRID_CRS only labels the CRS-naive shapely geom so to_crs can reproject.
+        return (gpd.GeoSeries([self.wet], crs=GRID_CRS)
+                .segmentize(10 * self.res_m)
+                .buffer(self.res_m)
+                .to_crs(epsg=4326)
+                .iloc[0].wkt)
 
 
 @dataclass(frozen=True)
 class RegionSpec:
+    """A resolved region: identity (slug/display) + ordered tiers (coarse -> fine)."""
+
     slug: str
     display: str
-    grid_crs: int
     tiers: list[Tier]
 
-
-def _mrc_polygon(mrc_name: str, grid_crs: int) -> BaseGeometry:
-    """MRC polygon for ``MRS_NM_MRC = mrc_name`` in ``grid_crs``."""
-    gdf = gpd.read_file(MRC_GPKG, layer="mrc", where=f"MRS_NM_MRC = '{mrc_name}'")
-    if gdf.empty:
-        raise ValueError(f"No MRC feature with MRS_NM_MRC='{mrc_name}' in {MRC_GPKG}")
-    return gdf.to_crs(epsg=grid_crs).union_all()
-
-
-def _coastline_buffer(grid_crs: int) -> BaseGeometry:
-    """10 km coastline buffer (LDGIZC) in ``grid_crs``."""
-    return gpd.read_file(COASTLINE_BUFFER).to_crs(epsg=grid_crs).union_all()
-
-
-def _landmask(grid_crs: int) -> BaseGeometry:
-    """CIS climate-normals landmask (DEC-034) in ``grid_crs``.
-
-    The source multipolygon is invalid (self-intersections); validate per feature
-    before the union or ``union_all`` raises a GEOS TopologyException.
-    """
-    g = gpd.read_file(LAND_MASK_PATH).to_crs(epsg=grid_crs)
-    return g.geometry.make_valid().union_all()
+    @classmethod
+    def build(cls, slug: str) -> "RegionSpec":
+        """Assemble a region from its slug: display lookup + tier configuration."""
+        display = REGION_DISPLAY.get(slug, slug.replace("-", " ").title())
+        if slug in ADAPTIVE_MRC_FID:
+            region = _mrc_polygon(ADAPTIVE_MRC_FID[slug])
+            tiers = [Tier("coarse", ADAPTIVE_COARSE_RES, region),
+                     Tier("fine", ADAPTIVE_FINE_RES, region)]
+        elif slug == "golfe":
+            tiers = [Tier("full", GOLFE_RES, _bbox_envelope(slug))]
+        else:
+            tiers = [Tier("full", float(GRID_RES), _bbox_envelope(slug))]
+        return cls(slug, display, tiers)
 
 
-def _adaptive_mrc_spec(slug: str, display: str, mrc_name: str) -> RegionSpec:
-    """Two-tier adaptive spec for a coastal MRC region (DEC-036).
-
-    Coarse 1 km tier; fine 100 m tier over the 10 km coastline buffer ∩ region.
-
-    The coarse **grid envelope** is trimmed to the coastal/water zone for cleaner
-    framing: ``bounds_geom = region − (landmask − buffer)`` = the region minus the
-    inland land beyond the buffer = ``(region − landmask) ∪ (landmask ∩ buffer ∩
-    region)`` (region water + coastal-land band). The ``clip_geom`` is left as the
-    whole ``region`` — its effective wet footprint after the land mask is
-    ``region − landmask`` ⊆ ``bounds_geom`` (DEC-034 land mask still NaNs land).
-    The fine tier is unchanged: ``refinement = region ∩ buffer`` is already inside
-    the buffer, so trimming inland land is a no-op there.
-    """
-    region = make_valid(_mrc_polygon(mrc_name, ADAPTIVE_GRID_CRS))
-    buffer = make_valid(_coastline_buffer(ADAPTIVE_GRID_CRS))
-    land = make_valid(_landmask(ADAPTIVE_GRID_CRS))
-    refinement = region.intersection(buffer)
-    coarse_bounds = region.difference(land.difference(buffer))
-    return RegionSpec(
-        slug=slug,
-        display=display,
-        grid_crs=ADAPTIVE_GRID_CRS,
-        tiers=[
-            Tier("coarse", ADAPTIVE_COARSE_RES, coarse_bounds, region),
-            Tier("fine", ADAPTIVE_FINE_RES, refinement, refinement),
-        ],
-    )
-
-
-def _minganie_polygon(grid_crs: int) -> BaseGeometry:
-    """Minganie MRC polygon (fid 71) in ``grid_crs``."""
-    return _mrc_polygon("Minganie", grid_crs)
-
-
-def _minganie_spec() -> RegionSpec:
-    return _adaptive_mrc_spec("minganie", "Minganie", "Minganie")
-
-
-def _manicouagan_polygon(grid_crs: int) -> BaseGeometry:
-    """Manicouagan MRC polygon (fid 32) in ``grid_crs``."""
-    return _mrc_polygon("Manicouagan", grid_crs)
-
-
-def _manicouagan_spec() -> RegionSpec:
-    return _adaptive_mrc_spec("manicouagan", "Manicouagan", "Manicouagan")
-
-
-def _sept_rivieres_polygon(grid_crs: int) -> BaseGeometry:
-    """Sept-Rivières MRC polygon (fid 70) in ``grid_crs``."""
-    return _mrc_polygon("Sept-Rivières", grid_crs)
-
-
-def _sept_rivieres_spec() -> RegionSpec:
-    return _adaptive_mrc_spec("sept-rivieres", "Sept-Rivières", "Sept-Rivières")
-
-
-def _legacy_bbox_spec(slug: str) -> RegionSpec:
-    """Single-tier legacy region from the pre-computed axis-aligned bbox.
-
-    The ``<slug>_32198_bbox.geojson`` envelope (square_bbox.py) is axis-aligned
-    in GRID_CRS, so ``build_grid``'s bounds coincide with the polygon: polygon
-    == bbox == grid, uniform GRID_RES, no clip (DEC-040).
-    """
-    bbox_path = BBOX_ROOT / slug / f"{slug}_{GRID_CRS}_bbox.geojson"
-    if not bbox_path.exists():
-        raise FileNotFoundError(f"bbox envelope not found for region '{slug}': {bbox_path}")
-    bbox = gpd.read_file(bbox_path).to_crs(epsg=GRID_CRS).union_all()
-    display = REGION_DISPLAY.get(slug, slug.replace("-", " ").title())
-    return RegionSpec(
-        slug=slug,
-        display=display,
-        grid_crs=GRID_CRS,
-        tiers=[Tier("full", float(GRID_RES), bbox, None)],
-    )
-
-
-# WW3 product grid — the regular 1 km EPSG:32198 frame a colleague provided as
-# the target for the raw daily netCDF product. gulf_32198.geojson is the exact
-# GeoTransform footprint, so build_grid reproduces the grid cell-for-cell
-# (1176 x 785 @ 1000 m; verified backend/probes/016).
-WW3_BBOX_PATH = BBOX_ROOT / "WW3" / "gulf_32198.geojson"
-WW3_RES = 1000.0
-WW3_GRID_SHAPE = (785, 1176)   # (height, width); guards alignment with the WW3 grid
-
-
-def _ww3_spec() -> RegionSpec:
-    """Single-tier 1 km WW3 product grid (EPSG:32198), read like a legacy region.
-
-    One ``full`` tier over ``gulf_32198.geojson`` at WW3_RES, no clip — the whole
-    frame is the analysis domain. The built grid is asserted to be WW3_GRID_SHAPE
-    so any drift in the source polygon fails loudly: the product cells must
-    coincide with the WW3 grid.
-    """
-    if not WW3_BBOX_PATH.exists():
-        raise FileNotFoundError(f"WW3 grid envelope not found: {WW3_BBOX_PATH}")
-    bbox = gpd.read_file(WW3_BBOX_PATH).to_crs(epsg=GRID_CRS).union_all()
-    spec = RegionSpec(
-        slug="WW3",
-        display="Gulf of St. Lawrence (WW3 1 km)",
-        grid_crs=GRID_CRS,
-        tiers=[Tier("full", WW3_RES, bbox, None)],
-    )
-    g = spec.tiers[0].grid
-    if (g.height, g.width) != WW3_GRID_SHAPE:
-        raise ValueError(
-            f"WW3 grid {(g.height, g.width)} != expected {WW3_GRID_SHAPE} "
-            f"(source {WW3_BBOX_PATH} drifted)"
-        )
-    return spec
-
-
-# Regions resolved by a dedicated spec builder (adaptive MRC grids + the WW3
-# product grid), vs the generic legacy single-tier bbox path.
-_SPEC_BUILDERS: dict[str, "callable[[], RegionSpec]"] = {
-    "minganie": _minganie_spec,
-    "manicouagan": _manicouagan_spec,
-    "sept-rivieres": _sept_rivieres_spec,
-    "WW3": _ww3_spec,
-}
-
-# Regions selectable on the CLI: legacy squares + the dedicated-builder regions.
-REGION_SLUGS = sorted(set(REGION_DISPLAY) | set(_SPEC_BUILDERS))
+# Regions selectable on the CLI.
+REGION_SLUGS = sorted(REGION_DISPLAY)
 
 
 def resolve_region(slug: str) -> RegionSpec:
-    """Return the ``RegionSpec`` for a region slug (dedicated builder or legacy)."""
-    if slug in _SPEC_BUILDERS:
-        return _SPEC_BUILDERS[slug]()
-    return _legacy_bbox_spec(slug)
+    """Return the ``RegionSpec`` for a region slug."""
+    return RegionSpec.build(slug)

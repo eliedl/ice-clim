@@ -1,14 +1,4 @@
-"""Synthetic-grid unit tests for metric semantics (no DB, no archive).
-
-Pins the behavior of the median-then-threshold metrics on hand-built
-polygon rows where the expected raster is known by construction. Probes
-(backend/probes/) validate domain assumptions against the real archive;
-these tests validate code semantics — keep that line.
-
-Run:
-    .venv/bin/python -m climatology.tests.test_metrics
-(or via pytest, once installed)
-"""
+"""Synthetic-grid unit tests for metric semantics (no DB, no archive)."""
 
 from __future__ import annotations
 
@@ -27,32 +17,22 @@ from climatology.processing.metrics import (
     SeasonDurationMetric,
     StormExposureDurationMetric,
 )
+from climatology.processing.rasterize import build_grid
 from climatology.processing.regions import Tier
 from climatology.services.temporal import day_of_season
 
 
 def _synthetic_tier(land_mask):
-    """A single 4x4 tier over [0,4]² (res 1) with an injected land mask.
-
-    The grid is ``build_grid(box(0,0,4,4), 1.0)`` -> ``from_bounds(0,0,4,4,4,4)``,
-    so the fixture's left/right boxes burn onto cols {0,1} / {2,3}. Bypasses
-    ``Tier.land_mask``'s on-disk CIS-landmask read by pre-seeding the
-    cached_property (``object.__setattr__`` — ``Tier`` is frozen). ``land_mask``
-    is None (no mask: median over every cell) or a synthetic (4, 4) bool array.
-    ``clip_geom=None`` -> the clip mask is all-True (whole grid in-domain).
-    """
-    tier = Tier(name="test", res_m=1.0, bounds_geom=box(0, 0, 4, 4), clip_geom=None)
-    object.__setattr__(tier, "land_mask", land_mask)
+    """A 4x4 test tier over [0,4]² (res 1) with grid + wet mask injected (no IO)."""
+    tier = Tier(level="test", res_m=1.0, region_polygon=box(0, 0, 4, 4))
+    object.__setattr__(tier, "grid", build_grid(box(0, 0, 4, 4), 1.0))
+    wet = np.ones((4, 4), dtype=bool) if land_mask is None else ~land_mask
+    object.__setattr__(tier, "wet_mask", wet)
     return tier
 
 
 def _duration_fixture():
-    """4x4 grid, two winters x two HDs.
-
-    Left half: compact ice (CT='92') on both HDs of both winters.
-    Right half: water (CT='00') on the first HD, unobserved on the second.
-    With 2 winters the WMO 80% rule admits both HDs (min_seasons = 2).
-    """
+    """4x4 grid, two winters x two HDs."""
     left, right = box(0, 0, 2, 4), box(2, 0, 4, 4)
     rows = []
     for yr in (2001, 2002):
@@ -65,8 +45,7 @@ def _duration_fixture():
 
 
 def test_season_duration_median_then_threshold():
-    """Duration = count of admissible HDs with median CT >= 4/10 (DEC-027
-    addendum 2026-06-11); observed ice-free water -> 0, not NaN."""
+    """Duration = count of admissible HDs with median CT >= 4/10; ice-free water -> 0, not NaN."""
     df = _duration_fixture()
     out = SeasonDurationMetric().compute_climatology(df, _synthetic_tier(land_mask=None))
     assert np.all(out[:, :2] == 2), "ice on both HDs must count 2"
@@ -85,13 +64,7 @@ def test_season_duration_land_mask_nan():
 
 
 def test_storm_exposure_inverse_threshold():
-    """Exposure = count of admissible HDs with median CT <= 3/10 (DEC-037).
-
-    Left half is compact ice (CT='92'=1.00) on both HDs -> never exposed (0).
-    Right half is water (CT='00'=0.0) observed only on the first HD and
-    unobserved (NaN, not counted) on the second -> exposed 1 step.
-    Demonstrates the inverse-threshold semantics vs season duration, that
-    open water counts as exposed, and that unobserved steps are not."""
+    """Exposure = count of admissible HDs with median CT <= 3/10 (DEC-037)."""
     df = _duration_fixture()
     out = StormExposureDurationMetric().compute_climatology(df, _synthetic_tier(land_mask=None))
     assert np.all(out[:, :2] == 0), "compact ice must never count as exposed"
@@ -110,12 +83,7 @@ def test_storm_exposure_land_mask_nan():
 
 
 def test_freeze_up_first_above():
-    """Freeze-up = first admissible HD where median CT >= 4/10 (first_above).
-
-    Left half is compact ice on both HDs -> freezes on the first admissible HD
-    (01-01). Right half is open water on the first HD and unobserved on the
-    second -> never crosses 4/10, so it stays NaN (the streaming accumulator
-    leaves never-crossing cells unset)."""
+    """Freeze-up = first admissible HD where median CT >= 4/10 (first_above)."""
     df = _duration_fixture()
     out = FreezeUpDateMetric().compute_climatology(df, _synthetic_tier(land_mask=None))
     assert np.all(out[:, :2] == day_of_season("01-01")), "ice freezes on the first HD"
@@ -123,10 +91,7 @@ def test_freeze_up_first_above():
 
 
 def test_breakup_last_above():
-    """Break-up = last admissible HD where median CT >= 4/10 (last_above).
-
-    Mirror of freeze-up: compact-ice left half is still >= 4/10 on the last
-    admissible HD (01-08); never-crossing water stays NaN."""
+    """Break-up = last admissible HD where median CT >= 4/10 (last_above)."""
     df = _duration_fixture()
     out = BreakupDateMetric().compute_climatology(df, _synthetic_tier(land_mask=None))
     assert np.all(out[:, :2] == day_of_season("01-08")), "ice still present on the last HD"
