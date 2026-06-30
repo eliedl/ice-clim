@@ -5,13 +5,14 @@ from __future__ import annotations
 import logging
 from dataclasses import dataclass
 
+import numpy as np
 import pandas as pd
 
-from climatology.processing.metrics import METRICS, Metric
+from climatology.processing.metrics import METRICS, MetricSpec
 from climatology.processing.regions import RegionSpec, Tier, resolve_region
 from climatology.processing.sources import CHART_TABLES, LAND_MASK_PATH, ChartTable
 from climatology.services.db import load_polygons
-from climatology.services.plot import plot_metric
+from climatology.services.plot import metric_label, plot_metric
 from climatology.services.temporal import (
     SEASON_ORIGIN,
     assert_hd_aligned,
@@ -32,7 +33,7 @@ log = logging.getLogger(__name__)
 class RunContext:
     """Resolved, immutable identity of one climatology run."""
 
-    metric: Metric
+    metric: MetricSpec
     source: ChartTable
     spec: RegionSpec
     period: tuple[int, int]
@@ -55,7 +56,7 @@ class RunContext:
     @property
     def display_label(self) -> str:
         """Metric display label resolved for this source's observation unit."""
-        return self.metric.display_label_for(self.source)
+        return metric_label(self.metric.slug, self.source)
 
 
 @dataclass(frozen=True)
@@ -92,11 +93,6 @@ def _tier_label(tier: Tier, *, multi: bool) -> str:
 def _composite_label(spec: RegionSpec, *, multi: bool) -> str:
     """Product-file label for the composite map: ``"adaptive"`` or a res tag."""
     return "adaptive" if multi else f"{int(round(spec.tiers[0].res_m))}m"
-
-
-def _res_label(spec: RegionSpec) -> str:
-    """Human-readable resolution note for the map footer (one entry per tier)."""
-    return " / ".join(f"{int(round(t.res_m))} m" for t in spec.tiers)
 
 
 def _geotiff_tags(manifest: dict, ctx: RunContext) -> dict:
@@ -137,8 +133,6 @@ def _resolve(metric_slug: str, region: str, source_slug: str,
 
 def _fetch(ctx: RunContext) -> FetchResult:
     """Pull chart polygons once over tiers[0]'s wet domain (covers every tier)."""
-    # tiers[0] is the coarse whole-region tier; every finer tier ⊆ it, so one
-    # fetch over its wet domain covers all (DEC-039).
     bbox_wkt = ctx.spec.tiers[0].fetch_wkt
     clim_start, clim_end = ctx.clim_window
     sql = ctx.metric.sql(table=ctx.source.table, bbox_wkt=bbox_wkt,
@@ -157,9 +151,19 @@ def _validate(fetch: FetchResult, ctx: RunContext) -> None:
         assert_hd_aligned(fetch.df, source_slug=ctx.source.slug)
 
 
+def _compute_raster(spec: MetricSpec, df: pd.DataFrame, tier: Tier) -> DataGrid:
+    """Run a metric's kernel and mask it to the tier's wet domain."""
+    values = spec.compute(df, tier)
+    values[~tier.wet_mask] = np.nan
+    grid = tier.grid
+    log.info("  Tier '%s' cells with data: %s / %s", tier.level,
+             f"{int((~np.isnan(values)).sum()):,}", f"{grid.height * grid.width:,}")
+    return values
+
+
 def _compute_tiers(fetch: FetchResult, ctx: RunContext) -> list[TierProduct]:
     """Compute one product per region tier."""
-    return [TierProduct(tier=tier, values=ctx.metric.compute_climatology(fetch.df, tier))
+    return [TierProduct(tier=tier, values=_compute_raster(ctx.metric, fetch.df, tier))
             for tier in ctx.spec.tiers]
 
 
@@ -195,12 +199,7 @@ def _render_composite(products: list[TierProduct], ctx: RunContext) -> None:
                                source_slug=ctx.source.slug,
                                label=_composite_label(ctx.spec, multi=multi))
     layers = [(p.values, p.tier.grid.bounds) for p in products]
-    plot_metric(layers, png_path=composite_png, display_name=ctx.spec.display,
-                period_label=f"{ctx.period[0]}–{ctx.period[1]}",
-                source_label=ctx.source.display_label,
-                res_label=_res_label(ctx.spec),
-                display_label=ctx.display_label,
-                format_ticks=ctx.metric.format_ticks)
+    plot_metric(layers, png_path=composite_png, ctx=ctx)
 
 
 def _export(products: list[TierProduct], ctx: RunContext, fetch: FetchResult,

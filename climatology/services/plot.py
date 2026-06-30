@@ -4,7 +4,10 @@ from __future__ import annotations
 
 import logging
 from collections.abc import Callable
+from dataclasses import dataclass
+from datetime import timedelta
 from pathlib import Path
+from typing import TYPE_CHECKING
 
 import geopandas as gpd
 import matplotlib.colors as mcolors
@@ -14,8 +17,13 @@ from matplotlib.colors import Colormap, LinearSegmentedColormap, Normalize
 from shapely.geometry import box
 
 from climatology.processing.rasterize import GRID_CRS
+from climatology.services.temporal import SEASON_ORIGIN
 from climatology.utils._types import DataGrid, GridBounds
 from climatology.utils.arithmetics import percentile_range
+
+if TYPE_CHECKING:
+    from climatology.pipeline import RunContext
+    from climatology.processing.sources import ChartTable
 
 log = logging.getLogger(__name__)
 
@@ -87,25 +95,63 @@ def build_cmap(
     return cmap, Normalize(vmin=vmin, vmax=vmax, clip=False)
 
 
+def _date_ticks(tick_values: list[float]) -> list[str]:
+    """Colourbar labels for day-of-season metrics: ordinal -> ``"Mon DD"``."""
+    return [(SEASON_ORIGIN + timedelta(days=int(round(d)))).strftime("%b %d")
+            for d in tick_values]
+
+
+def _count_ticks(tick_values: list[float]) -> list[str]:
+    """Colourbar labels for time-step-count metrics: rounded integers."""
+    return [f"{int(round(d))}" for d in tick_values]
+
+
+@dataclass(frozen=True)
+class PlotStyle:
+    """Presentation for one metric: colourbar label and tick formatter, keyed by slug."""
+
+    label: str | Callable[[ChartTable], str]
+    format_ticks: Callable[[list[float]], list[str]]
+
+
+PLOT_STYLES: dict[str, PlotStyle] = {
+    "freeze_up_date":          PlotStyle("Freeze-up climatology", _date_ticks),
+    "breakup_date":            PlotStyle("Median date of break-up (CT >= 4/10)", _date_ticks),
+    "first_occurrence_date":   PlotStyle("Median date of first ice occurrence (CT >= 1/10)", _date_ticks),
+    "last_occurrence_date":    PlotStyle("Median date of last ice occurrence (CT >= 1/10)", _date_ticks),
+    "season_duration":         PlotStyle(lambda s: f"Median ice presence ({s.obs_unit}, CT >= 4/10)", _count_ticks),
+    "season_duration_10":      PlotStyle(lambda s: f"Median ice presence ({s.obs_unit}, CT >= 1/10)", _count_ticks),
+    "storm_exposure_duration": PlotStyle(lambda s: f"Storm exposure duration ({s.obs_unit}, CT <= 3/10)", _count_ticks),
+}
+
+
+def metric_label(slug: str, source: ChartTable) -> str:
+    """Resolve a metric's colourbar label, interpolating the source's obs unit when needed."""
+    label = PLOT_STYLES[slug].label
+    return label(source) if callable(label) else label
+
+
 def plot_metric(
     layers: list[tuple[DataGrid, GridBounds]],
     *,
     png_path: Path,
-    display_name: str,
-    period_label: str,
-    source_label: str,
-    res_label: str,
-    display_label: str,
-    format_ticks: Callable[[list[float]], list[str]],
+    ctx: RunContext,
 ) -> None:
     """Render one or more raster layers, drawn back-to-front, into one map."""
+    style = PLOT_STYLES[ctx.metric.slug]
+    display_label = metric_label(ctx.metric.slug, ctx.source)
+    display_name = ctx.spec.display
+    period_label = f"{ctx.period[0]}–{ctx.period[1]}"
+    source_label = ctx.source.display_label
+    res_label = " / ".join(f"{int(round(t.res_m))} m" for t in ctx.spec.tiers)
+
     # Shared scaling across all layers (visual removal of near-coast extremas).
     all_values = np.concatenate([v.ravel() for v, _ in layers])
     vmin, vmax = percentile_range(all_values, low=1, high=100)
     cmap, norm = build_cmap("cool_to_warm_7", vmin=vmin, vmax=vmax)
 
     tick_values = list(np.linspace(vmin, vmax, 6))
-    tick_labels = format_ticks(tick_values)
+    tick_labels = style.format_ticks(tick_values)
 
     # Union extent for axis limits + land overlay read.
     xmin = min(b[0] for _, b in layers); ymin = min(b[1] for _, b in layers)

@@ -83,7 +83,7 @@ def day_of_season(month_day: str) -> int:
 
     Day 0 = Sep 1, 101 = Dec 11, 258 = May 17. Doubles as the ice-season sort
     key ("12-11" precedes "01-01") and as the cube's day-axis value (decoded
-    back to a calendar label via SEASON_ORIGIN in metrics.format_ticks).
+    back to a calendar label via SEASON_ORIGIN in plot._date_ticks).
     """
     m, d = int(month_day[:2]), int(month_day[3:5])
     # Fall months (>= the origin's month) sit in the origin year; winter months

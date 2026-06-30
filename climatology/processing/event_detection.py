@@ -70,7 +70,7 @@ def build_median_ct_cube(df: pd.DataFrame, *, admissible_days: list[str],
     return np.stack(list(slices), axis=0)
 
 
-def stream_event_date(
+def extract_event_date(
     df: pd.DataFrame,
     *,
     admissible_days: list[str],
