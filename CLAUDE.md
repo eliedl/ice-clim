@@ -67,13 +67,18 @@ are **misnamed**:
   - `CD` is **not** a concentration — it is the stage-of-development of **any remaining
     class of ice** (SIGRID-3 v3.1), equivalent to `Sd` in ICESOD.
   Both mappings (CN=SO, CD=SD) are confirmed against SIGRID-3 v3.1 — **not** open questions.
-A SIGRID-3 ice description has **five thickness bands SO·SA·SB·SC·SD**. Three carry
-explicit partial concentrations (CA→SA, CB→SB, CC→SC); the other two are **derived, not
-stored**:
-  - **SO** concentration: trace, defined by CIS as <1/10. **0.04** (Brad Drummond/CIS, pers. comm. 2026-06-25, DEC-043).
-  - **SD** concentration: piecewise (probe 001 / DEC-029) — residual `r = CT−(CA+CB+CC)`:
-    `r > 0` → r; `−0.03 ≤ r ≤ 0` → 0.04 trace (DEC-043); `r < −0.03` → log+skip. Lives in the volume
-    `reduce_season`, not the parser.
+A SIGRID-3 ice description has **five thickness bands SO·SA·SB·SC·SD**, ordered by
+**decreasing stage of development** (SO thickest → SD thinnest): SO is "ice thicker than SA"
+at trace concentration, SD is the thinnest "remaining class". So realistic SD codes are thin
+stages (e.g. `81` New Ice), not thick FYI. Three bands carry explicit partial concentrations
+(CA→SA, CB→SB, CC→SC); the other two are **derived, not stored**:
+  - **SO** concentration: trace, defined by CIS as <1/10. **0.03** = `map('92')−map('91')`
+    (Angela Cheng/CIS, pers. comm. 2026-07-01, DEC-044; supersedes the 0.04 of DEC-043).
+  - **SD** concentration: `CT_eff`-reconciled residual (probe 001 / DEC-044) — `CT_eff = 1.0` when
+    `CT='91'` (partials max out at 1.0, not 0.97), else `parse(CT)`; `r = round(CT_eff−(CA+CB+CC), 2)`:
+    `r > 0` → r; `r == 0` → 0.03 trace; `r < 0` → log+skip. Reconciliation drops the old ε=0.03
+    benign band. `CT_eff` is local to the SD residual (slot A keeps 0.97). Lives in the attribution
+    map, not the parser; consumed by the volume metric when implemented.
 
 Encoding/conversion (SIGRID-3 codes → fraction / thickness in m) lives in
 `climatology/services/units_conversion_maps.py` — single source of truth; unobserved codes
@@ -82,8 +87,9 @@ the code).
 
 Settled facts (full rationale + provenance in DECISIONS.md):
   - '9+' = code '91' = 0.97 (CIS doc), distinct from compact '92' = 1.00 (DEC-015)
-  - Volume = area × Σ conc(stage)×thickness(stage); regime-aware attribution + ε=0.03
-    residual trace floor (DEC-029; not yet implemented)
+  - Volume = cell_area × map(CT) × Σ(map(Ci)·map(Si)) / Σ(map(Ci)) — ice-covered fraction ×
+    concentration-weighted mean thickness (ratio normalized since Σ map(Ci) can exceed map(CT));
+    regime-aware attribution + CT_eff SD residual reconciliation, 0.03 trace (DEC-029/044; not yet implemented)
   - Freeze-up/break-up: native-daily median-then-threshold, CT≥4/10, WMO 80% mask (DEC-025/027)
   - Archive version selection c>b>a, suffix-fallback (DEC-030)
   - GSL = highest-quality, most homogeneous CIS region; climatology period 2011–2020
@@ -110,7 +116,7 @@ climatology/
   services/units_conversion_maps.py           ← parse maps; single source of truth
   processing/  (metrics, event_detection, pipeline, main)  ← date metrics (DEC-027)
   utils/ (raster_to_vector, square_bbox)   viz/ (colormaps)   tests/ (test_metrics, test_grid)
-  (volume reduce_season — specified in DEC-029, not yet implemented)
+  (volume metric — attribution specified in DEC-029/044, not yet implemented)
 scripts/ (audit)   refs/ (WMO PDF)   docker-compose.yml · .env
 
 ## Session start protocol

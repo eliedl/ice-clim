@@ -55,10 +55,19 @@ def get_engine():
 
 
 RAW_SQL = """
-SELECT "CT", "CA", "CB", "CC", "CD"
+SELECT "CT", "CA", "CB", "CC", "CD", "SA"
 FROM sgrda
 WHERE "POLY_TYPE" IS NULL OR "POLY_TYPE" != 'L';
 """
+
+# --- DEC-044 candidate rule constants ------------------------------------
+# Uniform CIS trace concentration (Angela Cheng, CIS, 2026-07; supersedes the
+# 0.04 of DEC-043). Equals map('92') - map('91') = 1.00 - 0.97, the '9+'
+# encoding gap.
+TRACE = 0.03
+# '9+' semantic full-coverage total: CT='91' is stored as 0.97 but the named
+# partials reconcile against 1.0, so the SD residual is taken against CT_eff.
+CT91_EFF = 1.00
 
 
 def _parse_or_none(code):
@@ -157,6 +166,85 @@ def main():
         "of_those_CD_absent":                    int((mid_mask & ~ct91["cd_present"]).sum()),
     }
 
+    # --- DEC-044 candidate: CT_eff reconciliation + tenth bucketing ---------
+    # Applies only to CD-present rows. Single-stage (SA present, CA absent) ->
+    # trace directly (no residual). Multi-stage -> residual against CT_eff
+    # (CT='91' reconciled to 1.0), then snapped to the nearest 1/10:
+    #   d > 0  -> d          (SD picks up the bucketed remainder)
+    #   d == 0 -> trace      (named partials fill coverage; benign)
+    #   d < 0  -> log+skip   (genuine encoding error; the half-tenth bucket
+    #                         boundary replaces the DEC-029 eps=0.03 band)
+    def _present_code(code) -> bool:
+        return not (pd.isna(code) or code == "" or code in MISSING_CODES)
+
+    cd_df = df[cd].copy()
+    cd_df["single_stage"] = cd_df["SA"].apply(_present_code) & ~cd_df["CA"].apply(_present_code)
+    cd_df["ct_eff"] = cd_df["ct_frac"].where(cd_df["CT"] != "91", CT91_EFF)
+    cd_df["r_eff"] = cd_df["ct_eff"] - (cd_df["ca_frac"] + cd_df["cb_frac"] + cd_df["cc_frac"])
+    # Nearest-tenth snap of the reconciled residual.
+    cd_df["d"] = (cd_df["r_eff"] / 0.1).round() * 0.1
+    # Nearest-tenth snap of the *raw* residual (no CT_eff) — to isolate the
+    # rows whose bucket is changed purely by the '91' reconciliation.
+    cd_df["d_raw"] = (cd_df["residual"] / 0.1).round() * 0.1
+
+    def _new_conc(row) -> float:
+        if row["single_stage"]:
+            return TRACE
+        if row["d"] > 1e-9:
+            return round(row["d"], 2)
+        if abs(row["d"]) <= 1e-9:
+            return TRACE
+        return 0.0  # skip
+
+    def _old_conc(row) -> float:
+        # DEC-029 rule, with trace = 0.03 for an apples-to-apples comparison.
+        if row["single_stage"]:
+            return TRACE
+        r = row["residual"]
+        if r > 1e-9:
+            return round(r, 2)
+        if r >= -0.03 - 1e-9:
+            return TRACE
+        return 0.0  # skip
+
+    cd_df["new_conc"] = cd_df.apply(_new_conc, axis=1)
+    cd_df["old_conc"] = cd_df.apply(_old_conc, axis=1)
+
+    multi = cd_df[~cd_df["single_stage"]]
+    new_rule_summary = {
+        "cd_present_total":            int(len(cd_df)),
+        "single_stage_(->trace)":      int(cd_df["single_stage"].sum()),
+        "multi_stage":                 int(len(multi)),
+        "multi_d_gt_0_(->bucket)":     int((multi["d"] > 1e-9).sum()),
+        "multi_d_eq_0_(->trace)":      int((multi["d"].abs() <= 1e-9).sum()),
+        "multi_d_lt_0_(->skip)":       int((multi["d"] < -1e-9).sum()),
+    }
+    # Rows whose bucket is changed by the CT_eff reconciliation (the '91' fix).
+    reconciled_shift = multi[(multi["d"] - multi["d_raw"]).abs() > 1e-9]
+    reconcile_summary = {
+        "multi_bucket_changed_by_CT_eff": int(len(reconciled_shift)),
+        "all_reconciled_rows_are_CT_91":  bool((reconciled_shift["CT"] == "91").all()),
+    }
+    # Net effect vs the old DEC-029 rule on the assigned CD concentration.
+    changed = cd_df[(cd_df["new_conc"] - cd_df["old_conc"]).abs() > 1e-9]
+    change_summary = {
+        "cd_rows_assignment_changed":  int(len(changed)),
+        "old_offtenth_now_bucketed":   int(((cd_df["old_conc"] - cd_df["old_conc"].round(1)).abs() > 1e-9).sum()),
+        "present_cd_assigned_0_(skip)": int((cd_df["new_conc"] <= 1e-9).sum()),
+    }
+    # Pre-rounding r_eff distribution (2-decimal) vs the post-snap d, to expose
+    # how far the nearest-tenth snap moves each row. Off-tenth r_eff values
+    # (e.g. 0.07, -0.03) are exactly the rows the bucketing has to resolve.
+    reff_histogram = multi["r_eff"].round(2).value_counts().sort_index()
+    new_d_histogram = multi["d"].round(2).value_counts().sort_index()
+    # Rows where the snap actually moves the value off an exact tenth.
+    off_tenth = multi[(multi["r_eff"] - multi["d"]).abs() > 1e-9]
+    snap_summary = {
+        "multi_r_eff_already_on_tenth": int((multi["r_eff"] - multi["d"]).abs().le(1e-9).sum()),
+        "multi_r_eff_snapped":          int(len(off_tenth)),
+        "max_abs_snap_shift":           float((multi["r_eff"] - multi["d"]).abs().max()),
+    }
+
     OUTPUT_DIR.mkdir(exist_ok=True)
     stamp = datetime.now().strftime("%Y-%m-%d_%H%M%S")
     out = OUTPUT_DIR / f"{stamp}.txt"
@@ -186,6 +274,28 @@ def main():
         "",
         "Cross-tabulation: CT='91' partial_sum bucket x CD presence:",
         ct91_cross.to_string(),
+        "",
+        "=== DEC-044 candidate: CT_eff reconciliation + tenth bucketing ===",
+        "CD-present rows only. Multi-stage residual taken against CT_eff",
+        "(CT='91' -> 1.0), snapped to nearest 1/10. trace = 0.03.",
+        "",
+        "New-rule attribution breakdown:",
+        *[f"  {k:.<40s} {v:>10,}" for k, v in new_rule_summary.items()],
+        "",
+        "Effect of the CT_eff ('9+') reconciliation on the bucket:",
+        *[f"  {k:.<40s} {str(v):>10}" for k, v in reconcile_summary.items()],
+        "",
+        "Effect of the nearest-tenth snap (r_eff vs snapped d):",
+        *[f"  {k:.<40s} {str(v):>10}" for k, v in snap_summary.items()],
+        "",
+        "Net change vs old DEC-029 rule (trace held at 0.03 for both):",
+        *[f"  {k:.<40s} {v:>10,}" for k, v in change_summary.items()],
+        "",
+        "Distribution of r_eff (pre-snap, 2-decimal) for multi-stage CD rows:",
+        reff_histogram.to_string(),
+        "",
+        "Distribution of d (post-snap tenth) for multi-stage CD rows:",
+        new_d_histogram.to_string(),
     ]
     report = "\n".join(lines)
 

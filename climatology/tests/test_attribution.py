@@ -47,7 +47,7 @@ def test_multi_stage_uses_named_partials():
 
 
 def test_cn_sets_so_trace():
-    """CN present -> SO trace 0.04 in slot O, thickness from the CN stage code."""
+    """CN present -> SO trace in slot O, thickness from the CN stage code."""
     a = attribute_polygon(ct="80", sa="87", cn="81")            # CN=81 -> 0.05 m
     assert _approx(a.conc["O"], TRACE_CONCENTRATION) and _approx(a.thk["O"], 0.05)
     assert _approx(a.conc["A"], 0.8)                            # still single-stage
@@ -61,11 +61,10 @@ def test_sd_residual_positive():
 
 
 def test_sd_residual_9plus_artifact_is_benign(caplog_like=None):
-    """The '9+' float-boundary artifact must return trace, not log+0.
+    """The '9+' case must return trace, not log+0.
 
-    CT='91' (0.97) with partials summing to 1.0 gives r = -0.03 in intent but
-    -0.0300000000000003 in float — a bare ``>= -eps`` would wrongly zero the
-    ~20 613 benign probe-001 rows. Guards that fix (DEC-029)."""
+    CT='91' with partials summing to 1.0: CT_eff reconciles to 1.0, so
+    r = 1.0 - 1.0 = 0 exactly -> trace, no warning (DEC-044)."""
     logger = logging.getLogger(LOGGER)
     records: list[logging.LogRecord] = []
     handler = logging.Handler()
@@ -81,7 +80,7 @@ def test_sd_residual_9plus_artifact_is_benign(caplog_like=None):
 
 
 def test_sd_residual_genuine_error_logs_and_zeroes():
-    """A residual well below -eps (genuine encoding error) -> 0 + a warning."""
+    """A negative residual after reconciliation (genuine encoding error) -> 0 + a warning."""
     logger = logging.getLogger(LOGGER)
     records: list[logging.LogRecord] = []
     handler = logging.Handler()

@@ -10,13 +10,17 @@ from dataclasses import dataclass
 log = logging.getLogger(__name__)
 
 
+# Uniform CIS trace concentration (DEC-044). Equals map('92') - map('91').
+TRACE_CONCENTRATION: float = 0.03
+
+
 # Codes observed in probe 003
 # See /docs/normative/SIGRID and CIS for more details
 CONCENTRATION_FRACTION: dict[str, float] = {
-    "00": 0.00,   
-    "98": 0.00,            
-    "01": 0.04,   
-    "02": 0.04,   
+    "00": 0.00,
+    "98": 0.00,
+    "01": TRACE_CONCENTRATION,
+    "02": TRACE_CONCENTRATION,
     "10": 0.10,
     "20": 0.20,
     "30": 0.30,
@@ -133,15 +137,12 @@ NO_THICKNESS_STAGE_CODES: frozenset[str] = frozenset(
 )
 
 
-# --- Per-polygon volume attribution (DEC-029) ------------------------------
+# --- Per-polygon volume attribution (DEC-029/044) --------------------------
 # Regime-aware decomposition of one polygon's SIGRID-3 codes into per-slot
 # concentration x thickness — the single source of truth shared by the raw
 # netCDF product (disaggregated bands) and the future volume metric (the
 # concentration-weighted thickness sum). Probe 004 enumerated the column
-# signatures; DEC-029/043 fixed the attribution rules.
-
-TRACE_CONCENTRATION: float = 0.04        # SO/SD trace concentration (DEC-043)
-RESIDUAL_TRACE_EPSILON: float = 0.03     # SD residual benign-band half-width (DEC-029)
+# signatures; DEC-029/043/044 fixed the attribution rules.
 
 # Ice-description slots of a SIGRID-3 egg: O (SO trace), A/B/C (named partials),
 # D (SD remaining class). CN is the SO stage code and CD the SD stage code — both
@@ -163,8 +164,10 @@ class PolygonAttribution:
     attributed to each ice-description slot O/A/B/C/D and ``thk[slot]`` its
     midpoint thickness in metres (None where the stage has no defined thickness
     — e.g. 98/99 — or no stage code is present for the slot).
-    ``volume_per_area`` is the concentration-weighted thickness sum (metres of
-    ice-equivalent); multiply by a cell's ground area for ice volume.
+    ``volume_per_area`` is ``CT × Σ(conc·thk)/Σ(conc)`` (metres of ice-equivalent)
+    — the ice-covered fraction times the concentration-weighted mean thickness,
+    normalized by Σ conc since the partials can sum past CT (DEC-044); multiply
+    by a cell's ground area for ice volume.
     """
 
     ct: float
@@ -173,33 +176,35 @@ class PolygonAttribution:
 
     @property
     def volume_per_area(self) -> float:
-        return sum(self.conc[s] * self.thk[s]
-                   for s in SLOTS if self.thk[s] is not None)
+        slots = [s for s in SLOTS if self.thk[s] is not None]
+        denom = sum(self.conc[s] for s in slots)
+        if denom == 0.0:
+            return 0.0
+        mean_thk = sum(self.conc[s] * self.thk[s] for s in slots) / denom
+        return self.ct * mean_thk
 
 
-def _sd_concentration(*, ct: float, ca: float | None, cb: float | None,
+def _sd_concentration(*, ct_eff: float, ca: float | None, cb: float | None,
                       cc: float | None, single_stage: bool) -> float:
-    """SD (slot D) concentration via the DEC-029 piecewise residual rule.
+    """SD (slot D) concentration via the DEC-044 CT_eff-reconciled residual rule.
 
-    Single-stage -> trace. Multi-stage -> residual ``r = CT - (CA+CB+CC)``:
-    ``r > 0`` -> ``r``; ``-eps <= r <= 0`` -> trace (benign band — the '9+'
-    rounding artifact at exactly -0.03 and exact-zero exhaustion); ``r < -eps``
-    -> 0 with a logged warning (genuine encoding error; only -0.6/-0.7 observed
-    in probe 001).
+    Single-stage -> trace. Multi-stage -> residual ``r = CT_eff - (CA+CB+CC)``,
+    where ``CT_eff`` reconciles the '9+' encoding (CT='91') to full coverage 1.0
+    (probe 001: partials max out at 1.0, not 0.97). Reconciliation removes the
+    old -0.03 benign band, so ``r == 0`` -> trace (partials fill coverage) and
+    any ``r < 0`` is a genuine encoding error (log + skip; only -0.6/-0.7
+    observed in probe 001). A ``round(r, 2)`` scrubs float noise; ``r`` is
+    already an egg-code tenth.
     """
     if single_stage:
         return TRACE_CONCENTRATION
-    r = ct - ((ca or 0.0) + (cb or 0.0) + (cc or 0.0))
+    r = round(ct_eff - ((ca or 0.0) + (cb or 0.0) + (cc or 0.0)), 2)
     if r > 0.0:
         return r
-    # Benign band -RES <= r <= 0, with float slack: the '9+' artifact (CT 0.97
-    # vs partials summing to 1.0) is r = -0.03 in intent but -0.030000000000003
-    # in float, so a bare ``>= -RES`` would wrongly trip the error branch on the
-    # ~20 613 benign probe-001 rows. Only genuine errors (-0.6/-0.7) fall below.
-    if r >= -RESIDUAL_TRACE_EPSILON - 1e-9:
+    if r == 0.0:
         return TRACE_CONCENTRATION
-    log.warning("SD residual %.3f < -%.2f; CD concentration set to 0 "
-                "(genuine encoding error, DEC-029)", r, RESIDUAL_TRACE_EPSILON)
+    log.warning("SD residual %.2f < 0 after '9+' reconciliation; CD "
+                "concentration set to 0 (genuine encoding error, DEC-044)", r)
     return 0.0
 
 
@@ -224,6 +229,10 @@ def attribute_polygon(*, ct: str | None = None, ca: str | None = None,
     ca_f = parse_concentration(ca)
     cb_f = parse_concentration(cb)
     cc_f = parse_concentration(cc)
+
+    # CT_eff: '9+' (code 91) reconciles to full coverage 1.0 for the SD residual
+    # only (DEC-044); slot A keeps parse('91')=0.97 (DEC-015).
+    ct_eff = 1.0 if ct == "91" else ct_f
 
     conc: dict[str, float] = {s: 0.0 for s in SLOTS}
     thk: dict[str, float | None] = {s: None for s in SLOTS}
@@ -251,7 +260,7 @@ def attribute_polygon(*, ct: str | None = None, ca: str | None = None,
     # Slot D — SD remaining class (CD is the SD stage code).
     if _present(cd):
         thk["D"] = parse_stage_thickness(cd)
-        conc["D"] = _sd_concentration(ct=ct_f, ca=ca_f, cb=cb_f, cc=cc_f,
+        conc["D"] = _sd_concentration(ct_eff=ct_eff, ca=ca_f, cb=cb_f, cc=cc_f,
                                       single_stage=single_stage)
 
     return PolygonAttribution(ct=ct_f, conc=conc, thk=thk)
