@@ -44,28 +44,50 @@ Output drives:
 Both tables by default; `--table sgrda` (repeatable) restricts. Output is
 written to `output/YYYY-MM-DD_HHMMSS.txt` and echoed to stdout.
 
-## Outcome (2026-07-01, output/2026-07-01_114706.txt)
+## Outcome (2026-07-01, output/2026-07-01_114706.txt) — drove DEC-045
 
-Form-of-ice codes are **2-character SIGRID-3 v3.1 values**, consistent across
-both tables. The valid observed set is identical in `sgrda` and `sgrdr`:
+Form-of-ice codes are **2-character values**, consistent across both tables.
+Resolved against the **CIS-authoritative SIGRID-3 2010 rev2 Table 4.3**
+(`docs/normative/SIGRID/JCOMM_sigrid3_rev2_2010.pdf`) — **not** the 2017 v3.1
+table, which renumbers the forms (see the provenance trap below).
 
-- **Valid form codes**: `01, 02, 03, 04, 05, 06, 07, 08, 10` (floe-size /
-  fast-ice classes) + `99` (undetermined) + `-9`/`NULL` (missing sentinels).
-- **Fast ice (`08`) dominates `FA`**: `sgrda` 257 206 rows, `sgrdr` 130 082 —
-  by far the most common primary form, as expected for a Gulf/St.-Lawrence
-  archive where landfast is the defining regime. `08` is present but rare as a
-  non-primary form: `FB` (`sgrda` 1 736 / `sgrdr` 649), `FC` (`sgrda` 57 /
-  `sgrdr` 55). Because SIGRID-3 partials are ordered by decreasing
-  concentration, `FB`/`FC` `= 08` means landfast is present only as a *minority
-  partial* within the polygon, not the dominant ice type — a candidate signal
-  to characterize (or discard as noise) in probe 019.
-- **Rare valid codes**: `07` (giant floe) is near-absent (`sgrda` 6 / `sgrdr`
-  55); `06` and `10` are also sparse.
+### Observed code → form (2010 rev2)
+
+| Code | Form | Size | Notes |
+|---|---|---|---|
+| `01` | Shuga/Small Ice Cake, Brash | < 2 m | |
+| `02` | Ice Cake | < 20 m | |
+| `03` | Small Floe | 20–100 m | |
+| `04` | Medium Floe | 100–500 m | |
+| `05` | Big Floe | 500 m–2 km | |
+| `06` | Vast Floe | 2–10 km | |
+| `07` | Giant Floe | > 10 km | near-absent (sgrda 6 rows) |
+| `08` | **Fast Ice** | — | **dominant `FA`: sgrda 257 206 / sgrdr 130 082** |
+| `10` | Icebergs | — | sgrda `FA` 2 736 |
+| `99` | Undetermined | — | |
+| `-9`/`NULL` | missing sentinel | — | |
+
+### The provenance trap (why 2010 rev2, not 2017 v3.1)
+
+The 2017 v3.1 revision **renumbers** the form codes: Fast Ice moves `08`→`09`,
+and Giant Floe (≥10 km) is inserted at `08`. Had `FORM_SIZES` been built from
+v3.1, the dominant CIS form `08` would have been mis-encoded as "Giant Floe",
+silently corrupting any landfast work. The census is the tell: `08` dominant,
+`09` **entirely absent**, `07` near-absent — physically impossible if `08` were
+giant floes in the St. Lawrence, exactly right if it is **Fast Ice**.
+
+### Fast ice as a non-primary form
+
+`08` also appears rarely as a minority partial: `FB` (sgrda 1 736 / sgrdr 649),
+`FC` (sgrda 57 / sgrdr 55). Since SIGRID-3 partials are ordered by decreasing
+concentration, `FB`/`FC` `= 08` means landfast is present only as a minority
+partial within the polygon — a candidate signal to characterize (or discard as
+noise) in **probe 019**.
 
 ### Encoding errors (SGRDA only)
 
 `C`-suffixed codes analogous to probe 002's `INVALID_STAGE_CODES`, all at
-trace frequency — candidates for a `FORM_SIZES` "invalid" exclusion set:
+trace frequency → `INVALID_FORM_CODES`:
 
 | table | field | code | rows |
 |---|---|---|---|
@@ -78,13 +100,13 @@ trace frequency — candidates for a `FORM_SIZES` "invalid" exclusion set:
 Total **18 rows**. Absent from `sgrdr` (its one oddity is a stray `FC='10'`,
 a valid code).
 
-### Follow-ups
+### Deliverables (DEC-045)
 
-1. **`FORM_SIZES` map** — the observed valid set `{01..08, 10}` is the
-   data-driven domain for a new form-code → representative-size map in
-   `units_conversion_maps.py`. **The size values themselves must be read off
-   the SIGRID-3 v3.1 form-of-ice table and validated** (NEEDS REVIEW — not
-   asserted from this census); `99` → excluded (undetermined), `-9`/`NULL`
-   → missing, `{2C, 5C, 9C}` → invalid, mirroring the stage-code treatment.
-2. **Probe 019** — concentration behaviour of landfast (`08`) polygons, to
-   inform the new `metrics.py` computing kernel.
+- **`FORM_SIZES`** (form code → midpoint floe diameter, m) + **`INVALID_FORM_CODES`**
+  + **`parse_form_size()`** in
+  [units_conversion_maps.py](../../../climatology/services/units_conversion_maps.py).
+  `08`/`10`/`99` → `None` (no floe class); `07` → `10000.0` **provisional**,
+  authoritative value PENDING CIS.
+- Landfast is a **separate boolean flag** on code `08`, decoupled from
+  `FORM_SIZES` (floe-size infrastructure for the future netCDF distribution
+  product). Landfast-form concentration behaviour → **probe 019**.

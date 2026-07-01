@@ -137,6 +137,58 @@ NO_THICKNESS_STAGE_CODES: frozenset[str] = frozenset(
 )
 
 
+# Form-of-ice code -> representative floe diameter in metres (midpoint of the
+# SIGRID-3 size range). Source: SIGRID-3 2010 rev2 Table 4.3 — the
+# CIS-authoritative table; the 2017 v3.1 renumbering is deliberately NOT used
+# (it shifts Fast Ice 08->09, which would mis-encode the dominant CIS form).
+# Data-driven: only codes observed in probe 018 are encoded. None = no defined
+# floe class (fast ice is continuous; icebergs/undetermined carry no floe size).
+# DEC-045.
+FORM_SIZES: dict[str, float | None] = {
+    "01": 1.0,       # Shuga/Small Ice Cake, Brash Ice  (<2 m,  midpoint 0-2)
+    "02": 10.0,      # Ice Cake                         (<20 m, midpoint 0-20)
+    "03": 60.0,      # Small Floe                       (20-100 m)
+    "04": 300.0,     # Medium Floe                      (100-500 m)
+    "05": 1250.0,    # Big Floe                         (500 m-2 km)
+    "06": 6000.0,    # Vast Floe                        (2-10 km)
+    "07": 10000.0,   # Giant Floe (>10 km) — provisional lower bound, PENDING CIS
+    "08": None,      # Fast Ice — continuous attached ice, no floe size
+    "10": None,      # Icebergs — no floe class
+    "99": None,      # Undetermined / Unknown
+}
+
+# Form codes treated as encoding errors. Observed in 18 rows total across the
+# SGRDA archive (probe 018), all C-suffixed and outside the SIGRID-3 form set.
+# Silently mapped to None to avoid log noise on a static DB; tracked in probe
+# 018 output for future audit. Mirrors INVALID_STAGE_CODES.
+INVALID_FORM_CODES: frozenset[str] = frozenset({"2C", "5C", "9C"})
+
+
+def parse_form_size(code: str | None) -> float | None:
+    """Parse a SIGRID-3 form-of-ice code to a representative floe diameter in metres.
+
+    Returns
+    -------
+    float (metres) for known forms with a defined floe-size range.
+    None for: missing/dummy values (``-9``, ``9-``, empty, ``None``), encoding
+    errors in :data:`INVALID_FORM_CODES`, and forms with no floe class
+    (``08`` Fast Ice, ``10`` Icebergs, ``99`` Undetermined).
+
+    Raises
+    ------
+    KeyError for codes that are neither in the table nor recognised as missing
+    or invalid — novel codes surface loudly on this static archive (DEC-045).
+    """
+    if code is None or code == "" or code in MISSING_CODES:
+        return None
+    if code in INVALID_FORM_CODES:
+        return None
+    try:
+        return FORM_SIZES[code]
+    except KeyError as e:
+        raise KeyError(f"Unrecognised SIGRID-3 form-of-ice code: {code!r}") from e
+
+
 # --- Per-polygon volume attribution (DEC-029/044) --------------------------
 # Regime-aware decomposition of one polygon's SIGRID-3 codes into per-slot
 # concentration x thickness — the single source of truth shared by the raw

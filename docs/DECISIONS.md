@@ -419,4 +419,21 @@ This log records all scientific decisions, assumptions, and edge-case choices id
 
 ---
 
+## DEC-045 — Form-of-Ice Code Table (`FORM_SIZES`): 2010-rev2 Provenance and Floe-Size Midpoint Convention
+
+- **Context**: Form-of-ice (`FA`/`FB`/`FC`) was the last CIS egg-code axis without a conversion map. Probe 018 censused the observed codes across `sgrda` + `sgrdr` to seed `FORM_SIZES` — floe-size infrastructure for a future per-region floe-size / thickness-distribution netCDF product. Building it required (a) pinning *which* normative form-code table CIS uses, and (b) a size convention for the range codes.
+- **Confirmation source**: Probe 018 census + SIGRID-3 **2010 rev2** Table 4.3 (`docs/normative/SIGRID/JCOMM_sigrid3_rev2_2010.pdf`); user-confirmed 2026-07-01.
+- **Decisions**:
+  1. **Code table = SIGRID-3 2010 rev2 Table 4.3, NOT 2017 v3.1.** The 2017 revision renumbers the forms (Fast Ice `08`→`09`; Giant Floe inserted at `08`), which would mis-encode the dominant CIS form. Census evidence is decisive: `08` dominates `FA` (sgrda 257 206 / sgrdr 130 082), `09` is entirely absent, and `07` (Giant Floe >10 km) is near-absent (6 rows) — consistent only with **`08` = Fast Ice** in the St. Lawrence.
+  2. **`FORM_SIZES` = form code → representative floe diameter (m)**, the **midpoint** of the SIGRID-3 size range, mirroring `STAGE_OF_DEVELOPMENT_THICKNESS`. Data-driven: only codes observed in probe 018 are encoded; novel codes surface as `KeyError`. Values: `01`→1.0, `02`→10.0, `03`→60.0, `04`→300.0, `05`→1250.0, `06`→6000.0.
+  3. **Forms with no floe class → `None`**: `08` Fast Ice (continuous attached ice), `10` Icebergs, `99` Undetermined. `07` Giant Floe (>10 km, open-ended upper bound) → **`10000.0` provisional** (lower bound); authoritative value to be requested from CIS (clim-001-style outreach).
+  4. **Landfast is a separate boolean flag keyed on code `08`, decoupled from `FORM_SIZES`.** `FORM_SIZES` is floe-size infrastructure only; the landfast climatology kernel (probe 019 / metrics.py) tests the raw code, not the size.
+  5. **`INVALID_FORM_CODES = {2C, 5C, 9C}` → `None`** (18 rows, `sgrda` only), mirroring `INVALID_STAGE_CODES`.
+- **Options considered** (code table): (1) 2010 rev2; (2) 2017 v3.1. **Choice**: 2010 rev2 — CIS-authoritative and the only one consistent with the census.
+- **Validation status**: **APPROVED** (2026-07-01, user) for the table selection and midpoint convention. The `07` Giant-Floe value is **PENDING** authoritative CIS confirmation.
+- **Implementation refs**: `climatology/services/units_conversion_maps.py` — `FORM_SIZES`, `INVALID_FORM_CODES`, and `parse_form_size()` (KeyError on novel codes, `None` for missing/invalid/no-floe-class). Probe `backend/probes/018_form_of_ice_census/` for the observed code set and frequencies.
+- **Literature cross-ref**: SIGRID-3 2010 rev2 (JCOMM) Table 4.3. Relates to DEC-032 (SGRDREC normalization retains `FA`/`FB`/`FC`) and DEC-043/044 (sibling concentration & stage-thickness axis maps). Enables the future floe-size/thickness netCDF distribution product.
+
+---
+
 *Decisions are logged with their validation status. Approved entries are confirmed; PENDING entries await human validation.*
