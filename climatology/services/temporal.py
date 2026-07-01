@@ -30,6 +30,7 @@ See:
 from __future__ import annotations
 
 import calendar
+from dataclasses import dataclass
 from datetime import date
 
 import numpy as np
@@ -146,6 +147,24 @@ def climatology_date_window(period: tuple[int, int]) -> tuple[str, str]:
     """
     y1, y2 = period
     return f"{y1 - 1}-09-01", f"{y2}-09-01"
+
+
+@dataclass(frozen=True)
+class Period:
+    """A climatology period (winters ``y1..y2`` inclusive), identified by its ``"YYYY-YYYY"`` slug."""
+
+    slug: str
+
+    @property
+    def years(self) -> tuple[int, int]:
+        """The ``(y1, y2)`` winter bounds parsed from the slug."""
+        y1, y2 = self.slug.split("-")
+        return int(y1), int(y2)
+
+    @property
+    def window(self) -> tuple[str, str]:
+        """Half-open ``T1`` fetch window ``[start, end)`` for these winters."""
+        return climatology_date_window(self.years)
 
 
 def assert_hd_aligned(df: pd.DataFrame, *, source_slug: str) -> None:

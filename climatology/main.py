@@ -36,11 +36,10 @@ logging.basicConfig(
 )
 
 
-def _parse_period(s: str) -> tuple[int, int]:
-    m = re.fullmatch(r"(\d{4})-(\d{4})", s)
-    if not m:
+def _parse_period(s: str) -> str:
+    if not re.fullmatch(r"(\d{4})-(\d{4})", s):
         raise argparse.ArgumentTypeError(f"period must look like 1991-2020, got {s!r}")
-    return int(m.group(1)), int(m.group(2))
+    return s
 
 
 def _parse_args() -> argparse.Namespace:
@@ -51,7 +50,7 @@ def _parse_args() -> argparse.Namespace:
                    help=f"Region slug. Available: {', '.join(REGION_SLUGS)}.")
     p.add_argument("--source", choices=sorted(CHART_TABLES), default="sgrda",
                    help="Chart table (default: sgrda).")
-    p.add_argument("--period", type=_parse_period, default=(2011, 2020),
+    p.add_argument("--period", type=_parse_period, default="2011-2020",
                    metavar="YYYY-YYYY",
                    help="Climatology period in winters (default: 2011-2020).")
     p.add_argument("--geotiff", action="store_true",

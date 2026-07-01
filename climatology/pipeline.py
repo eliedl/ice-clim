@@ -15,8 +15,8 @@ from climatology.services.db import load_polygons
 from climatology.services.plot import metric_label, plot_metric
 from climatology.services.temporal import (
     SEASON_ORIGIN,
+    Period,
     assert_hd_aligned,
-    climatology_date_window,
 )
 from climatology.utils._types import DataGrid
 from climatology.utils.export import (
@@ -35,28 +35,8 @@ class RunContext:
 
     metric: MetricSpec
     source: ChartTable
-    spec: RegionSpec
-    period: tuple[int, int]
-
-    @property
-    def region(self) -> str:
-        """Region slug (the spec's own identity)."""
-        return self.spec.slug
-
-    @property
-    def period_slug(self) -> str:
-        """``"2011-2020"`` form used in product paths and the manifest."""
-        return f"{self.period[0]}-{self.period[1]}"
-
-    @property
-    def clim_window(self) -> tuple[str, str]:
-        """Half-open ``T1`` fetch window ``[start, end)`` for the winter period."""
-        return climatology_date_window(self.period)
-
-    @property
-    def display_label(self) -> str:
-        """Metric display label resolved for this source's observation unit."""
-        return metric_label(self.metric.slug, self.source)
+    region: RegionSpec
+    period: Period
 
 
 @dataclass(frozen=True)
@@ -97,7 +77,7 @@ def _composite_label(spec: RegionSpec, *, multi: bool) -> str:
 
 def _geotiff_tags(manifest: dict, ctx: RunContext) -> dict:
     """GeoTIFF metadata tags from a run manifest, plus date-metric decoding keys."""
-    tags = {**manifest, "display_label": ctx.display_label}
+    tags = {**manifest, "display_label": metric_label(ctx.metric.slug, ctx.source)}
     if ctx.metric.slug.endswith("_date"):
         tags["value_encoding"] = "day_of_season"
         tags["season_origin"] = SEASON_ORIGIN.isoformat()
@@ -106,11 +86,11 @@ def _geotiff_tags(manifest: dict, ctx: RunContext) -> dict:
 
 def _build_manifest(ctx: RunContext, tier: Tier, *, n_rows: int) -> dict:
     """Self-describing run manifest persisted alongside each tier product."""
-    clim_start, clim_end = ctx.clim_window
+    clim_start, clim_end = ctx.period.window
     grid = tier.grid
     return {
-        "metric": ctx.metric.slug, "region": ctx.region, "source": ctx.source.slug,
-        "period": ctx.period_slug, "climatology_start": clim_start,
+        "metric": ctx.metric.slug, "region": ctx.region.slug, "source": ctx.source.slug,
+        "period": ctx.period.slug, "climatology_start": clim_start,
         "climatology_end": clim_end, "tier": tier.level, "grid_res_m": tier.res_m,
         "bounds": [float(b) for b in grid.bounds],
         "grid_shape": [grid.height, grid.width], "land_mask": str(LAND_MASK_PATH),
@@ -120,21 +100,21 @@ def _build_manifest(ctx: RunContext, tier: Tier, *, n_rows: int) -> dict:
 
 # --- run stages ------------------------------------------------------------
 
-def _resolve(metric_slug: str, region: str, source_slug: str,
-             period: tuple[int, int]) -> RunContext:
-    """Resolve slugs to metric/source/region objects (the run's identity)."""
+def _resolve(metric_slug: str, region_slug: str, source_slug: str,
+             period_slug: str) -> RunContext:
+    """Resolve slugs to metric/source/region/period objects (the run's identity)."""
     ctx = RunContext(metric=METRICS[metric_slug], source=CHART_TABLES[source_slug],
-                     spec=resolve_region(region), period=period)
+                     region=resolve_region(region_slug), period=Period(period_slug))
     log.info("Region: %s (slug=%s) | Metric: %s | Source: %s | Winters: %s | %d tier(s)",
-             ctx.spec.display, ctx.region, ctx.metric.slug, ctx.source.slug,
-             ctx.period_slug, len(ctx.spec.tiers))
+             ctx.region.display, ctx.region.slug, ctx.metric.slug, ctx.source.slug,
+             ctx.period.slug, len(ctx.region.tiers))
     return ctx
 
 
 def _fetch(ctx: RunContext) -> FetchResult:
     """Pull chart polygons once over tiers[0]'s wet domain (covers every tier)."""
-    bbox_wkt = ctx.spec.tiers[0].fetch_wkt
-    clim_start, clim_end = ctx.clim_window
+    bbox_wkt = ctx.region.tiers[0].fetch_wkt
+    clim_start, clim_end = ctx.period.window
     sql = ctx.metric.sql(table=ctx.source.table, bbox_wkt=bbox_wkt,
                          climatology_start_date=clim_start, climatology_end_date=clim_end)
     fetch = FetchResult(load_polygons(sql))
@@ -164,24 +144,24 @@ def _compute_raster(spec: MetricSpec, df: pd.DataFrame, tier: Tier) -> DataGrid:
 def _compute_tiers(fetch: FetchResult, ctx: RunContext) -> list[TierProduct]:
     """Compute one product per region tier."""
     return [TierProduct(tier=tier, values=_compute_raster(ctx.metric, fetch.df, tier))
-            for tier in ctx.spec.tiers]
+            for tier in ctx.region.tiers]
 
 
 def _emit_tier(product: TierProduct, ctx: RunContext, fetch: FetchResult,
                *, geotiff: bool) -> None:
     """Persist one tier product: archive raster (+ GeoTIFF when requested)."""
     tier = product.tier
-    multi = len(ctx.spec.tiers) > 1
+    multi = len(ctx.region.tiers) > 1
     label = _tier_label(tier, multi=multi)
     manifest = _build_manifest(ctx, tier, n_rows=fetch.n_rows)
-    tier_png = output_png(ctx.region, ctx.metric.slug, period_slug=ctx.period_slug,
+    tier_png = output_png(ctx.region.slug, ctx.metric.slug, period_slug=ctx.period.slug,
                           source_slug=ctx.source.slug, label=label)
     archive_product(product.values, tier_png, manifest=manifest)
     if geotiff:
-        tier_tif = output_geotiff(ctx.region, ctx.metric.slug, period_slug=ctx.period_slug,
+        tier_tif = output_geotiff(ctx.region.slug, ctx.metric.slug, period_slug=ctx.period.slug,
                                   source_slug=ctx.source.slug, label=label)
         write_geotiff(product.values, tier.grid.transform,
-                      path=tier_tif, band_description=ctx.display_label,
+                      path=tier_tif, band_description=metric_label(ctx.metric.slug, ctx.source),
                       tags=_geotiff_tags(manifest, ctx))
 
 
@@ -194,10 +174,10 @@ def _emit_tiers(products: list[TierProduct], ctx: RunContext, fetch: FetchResult
 
 def _render_composite(products: list[TierProduct], ctx: RunContext) -> None:
     """Render the composite multi-tier map (coarse first, fine last)."""
-    multi = len(ctx.spec.tiers) > 1
-    composite_png = output_png(ctx.region, ctx.metric.slug, period_slug=ctx.period_slug,
+    multi = len(ctx.region.tiers) > 1
+    composite_png = output_png(ctx.region.slug, ctx.metric.slug, period_slug=ctx.period.slug,
                                source_slug=ctx.source.slug,
-                               label=_composite_label(ctx.spec, multi=multi))
+                               label=_composite_label(ctx.region, multi=multi))
     layers = [(p.values, p.tier.grid.bounds) for p in products]
     plot_metric(layers, png_path=composite_png, ctx=ctx)
 
@@ -209,10 +189,10 @@ def _export(products: list[TierProduct], ctx: RunContext, fetch: FetchResult,
     _render_composite(products, ctx)
 
 
-def run(metric_slug: str, region: str, source_slug: str, period: tuple[int, int],
+def run(metric_slug: str, region_slug: str, source_slug: str, period_slug: str,
         *, geotiff: bool = False) -> None:
     """Produce the climatology for one (metric, region, source, period)."""
-    context = _resolve(metric_slug, region, source_slug, period)
+    context = _resolve(metric_slug, region_slug, source_slug, period_slug)
     fetch = _fetch(context)
     _validate(fetch, context)
 

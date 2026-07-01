@@ -140,10 +140,10 @@ def plot_metric(
     """Render one or more raster layers, drawn back-to-front, into one map."""
     style = PLOT_STYLES[ctx.metric.slug]
     display_label = metric_label(ctx.metric.slug, ctx.source)
-    display_name = ctx.spec.display
-    period_label = f"{ctx.period[0]}–{ctx.period[1]}"
+    display_name = ctx.region.display
+    period_label = ctx.period.slug
     source_label = ctx.source.display_label
-    res_label = " / ".join(f"{int(round(t.res_m))} m" for t in ctx.spec.tiers)
+    res_label = " / ".join(f"{int(round(t.res_m))} m" for t in ctx.region.tiers)
 
     # Shared scaling across all layers (visual removal of near-coast extremas).
     all_values = np.concatenate([v.ravel() for v, _ in layers])
