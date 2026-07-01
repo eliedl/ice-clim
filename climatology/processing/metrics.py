@@ -82,6 +82,10 @@ _SPECS: dict[str, MetricSpec] = {
     "season_duration":         MetricSpec(ThresholdCount(0.4, operator.ge)),
     "season_duration_10":      MetricSpec(ThresholdCount(0.1, operator.ge)),
     "storm_exposure_duration": MetricSpec(ThresholdCount(0.3, operator.le)),
+    "landfast_freeze_up_date": MetricSpec(EventDate(1.0, "first_above")),
+    "landfast_breakup_date":   MetricSpec(EventDate(1.0, "last_above")),
+    "landfast_duration":       MetricSpec(ThresholdCount(1.0, operator.ge)),
+    "landfast_exposure":       MetricSpec(ThresholdCount(1.0, operator.lt)),
 }
 METRICS: dict[str, MetricSpec] = {slug: replace(spec, slug=slug)
                                   for slug, spec in _SPECS.items()}

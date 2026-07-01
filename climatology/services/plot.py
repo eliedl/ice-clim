@@ -122,6 +122,10 @@ PLOT_STYLES: dict[str, PlotStyle] = {
     "season_duration":         PlotStyle(lambda s: f"Median ice presence ({s.obs_unit}, CT >= 4/10)", _count_ticks),
     "season_duration_10":      PlotStyle(lambda s: f"Median ice presence ({s.obs_unit}, CT >= 1/10)", _count_ticks),
     "storm_exposure_duration": PlotStyle(lambda s: f"Storm exposure duration ({s.obs_unit}, CT <= 3/10)", _count_ticks),
+    "landfast_freeze_up_date": PlotStyle("Landfast freeze-up climatology (CT = 10/10)", _date_ticks),
+    "landfast_breakup_date":   PlotStyle("Median date of landfast break-up (CT = 10/10)", _date_ticks),
+    "landfast_duration":       PlotStyle(lambda s: f"Landfast ice presence ({s.obs_unit}, CT = 10/10)", _count_ticks),
+    "landfast_exposure":       PlotStyle(lambda s: f"Landfast exposure — days without fast ice ({s.obs_unit}, CT < 10/10)", _count_ticks),
 }
 
 
