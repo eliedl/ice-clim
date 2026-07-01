@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import sys
+import time
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).parents[2]))
@@ -92,6 +93,40 @@ def test_breakup_last_above():
     out = _compute_raster(METRICS["breakup_date"], df, _synthetic_tier(land_mask=None))
     assert np.all(out[:, :2] == day_of_season("01-08")), "ice still present on the last HD"
     assert np.all(np.isnan(out[:, 2:])), "never-crossing water stays NaN"
+
+
+def _large_fixture(n_seasons: int = 10, n_days: int = 15) -> pd.DataFrame:
+    """Many-row duration fixture (~2·n_seasons·n_days rows) for timing the conversion step."""
+    left, right = box(0, 0, 2, 4), box(2, 0, 4, 4)
+    rows = []
+    for yr in range(1960, 1960 + n_seasons):
+        for i in range(n_days):
+            d = f"{yr}-01-{i + 1:02d}"
+            rows.append({"obs_date": d, "ct_code": "92", "geometry": left})
+            rows.append({"obs_date": d, "ct_code": "00", "geometry": right})
+    return pd.DataFrame(rows)
+
+
+def test_conversion_overhead_is_negligible():
+    """Conversion.prepare must be a small fraction of a metric's total compute time."""
+    df = _large_fixture()
+    tier = _synthetic_tier(land_mask=None)
+    spec = METRICS["season_duration"]
+    reps = 50
+
+    t0 = time.perf_counter()
+    for _ in range(reps):
+        spec.conversion.prepare(df)
+    t_conv = (time.perf_counter() - t0) / reps
+
+    t0 = time.perf_counter()
+    for _ in range(reps):
+        _compute_raster(spec, df, tier)
+    t_full = (time.perf_counter() - t0) / reps
+
+    print(f"    [{len(df)} rows] Conversion.prepare {t_conv * 1e3:.3f} ms | "
+          f"full _compute_raster {t_full * 1e3:.3f} ms | overhead {100 * t_conv / t_full:.1f}%")
+    assert t_conv < 0.2 * t_full, "conversion step should be a small fraction of total compute"
 
 
 if __name__ == "__main__":

@@ -10,7 +10,6 @@ import pandas as pd
 from climatology.utils._types import BoolGrid, DataCube, DataGrid
 from climatology.processing.rasterize import Grid, burn_values
 from climatology.services.temporal import day_of_season, winter_season
-from climatology.services.units_conversion_maps import CONCENTRATION_FRACTION
 from climatology.utils.arithmetics import _nanmedian_high
 
 if TYPE_CHECKING:
@@ -20,12 +19,11 @@ if TYPE_CHECKING:
 
 
 def _prepare_ct_rows(df: pd.DataFrame) -> pd.DataFrame:
-    """Attach the ``month_day`` / ``season`` / ``ct`` columns the cube needs."""
+    """Attach the ``month_day`` / ``season`` columns the cube needs (``ct`` supplied by the metric's ConversionStrategy)."""
     df = df.copy()
     df["obs_date_dt"] = pd.to_datetime(df["obs_date"])
     df["month_day"] = df["obs_date_dt"].dt.strftime("%m-%d")
     df["season"] = winter_season(df["obs_date"])
-    df["ct"] = df["ct_code"].map(CONCENTRATION_FRACTION)
     return df.dropna(subset=["ct"])
 
 

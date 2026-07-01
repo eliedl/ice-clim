@@ -14,6 +14,7 @@ from climatology.processing.event_detection import build_median_ct_cube, extract
 from climatology.processing.rasterize import GRID_CRS
 from climatology.processing.regions import Tier
 from climatology.services.temporal import admissible_days_of_season
+from climatology.services.units_conversion_maps import CT_CONVERSION, ConversionStrategy
 from climatology.utils._types import BoolCube, DataCube, DataGrid
 
 
@@ -52,6 +53,7 @@ class MetricSpec:
     compute: Callable[[pd.DataFrame, Tier], DataGrid]
     fields: tuple[str, ...] = ("CT",)
     slug: str = ""
+    conversion: ConversionStrategy = CT_CONVERSION
 
     def sql(self, *, table: str, bbox_wkt: str,
             climatology_start_date: str, climatology_end_date: str) -> str:

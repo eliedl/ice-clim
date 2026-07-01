@@ -131,9 +131,9 @@ def _validate(fetch: FetchResult, ctx: RunContext) -> None:
         assert_hd_aligned(fetch.df, source_slug=ctx.source.slug)
 
 
-def _compute_raster(spec: MetricSpec, df: pd.DataFrame, tier: Tier) -> DataGrid:
-    """Run a metric's kernel and mask it to the tier's wet domain."""
-    values = spec.compute(df, tier)
+def _compute_raster(metric: MetricSpec, df: pd.DataFrame, tier: Tier) -> DataGrid:
+    """Run a metric's kernel on its conversion-prepared rows and mask it to the tier's wet domain."""
+    values = metric.compute(metric.conversion.prepare(df), tier)
     values[~tier.wet_mask] = np.nan
     grid = tier.grid
     log.info("  Tier '%s' cells with data: %s / %s", tier.level,

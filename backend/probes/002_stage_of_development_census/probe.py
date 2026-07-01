@@ -47,12 +47,17 @@ load_dotenv(PROJECT_ROOT / ".env")
 from climatology.services.units_conversion_maps import (  # noqa: E402
     INVALID_STAGE_CODES,
     MISSING_CODES,
-    NO_THICKNESS_STAGE_CODES,
+    STAGE_OF_DEVELOPMENT_THICKNESS,
     parse_concentration,
 )
 
 OUTPUT_DIR = Path(__file__).parent / "output"
 EPS = 1e-6
+
+# Stages observed with no defined thickness (this probe's only consumer).
+NO_THICKNESS_STAGE_CODES: frozenset[str] = frozenset(
+    code for code, t in STAGE_OF_DEVELOPMENT_THICKNESS.items() if t is None
+)
 
 
 def get_engine():
