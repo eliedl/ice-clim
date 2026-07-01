@@ -13,7 +13,7 @@ sgrdr currently holds ec only).
 
 from __future__ import annotations
 
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from pathlib import Path
 from typing import Literal
 
@@ -23,22 +23,24 @@ LAND_MASK_PATH = LANDMASK_DIR / "climatology_landmask_SGRDAWIS28_clip_32198.geoj
 
 @dataclass(frozen=True)
 class ChartTable:
-    slug: str
     table: str
     cadence: Literal["daily", "hd_weekly"]
     display_label: str        # plot footer source attribution
     obs_unit: str             # unit of the season-duration count
+    slug: str = ""
 
 
-CHART_TABLES: dict[str, ChartTable] = {
+_TABLES: dict[str, ChartTable] = {
     "sgrda": ChartTable(
-        slug="sgrda", table="sgrda", cadence="daily",
+        table="sgrda", cadence="daily",
         display_label="CIS SIGRID3 daily charts (SGRDA)",
         obs_unit="observation-days",
     ),
     "sgrdr": ChartTable(
-        slug="sgrdr", table="sgrdr", cadence="hd_weekly",
+        table="sgrdr", cadence="hd_weekly",
         display_label="CIS SIGRID3 weekly historical charts (SGRDR)",
         obs_unit="observation-weeks",
     ),
 }
+CHART_TABLES: dict[str, ChartTable] = {slug: replace(ct, slug=slug)
+                                       for slug, ct in _TABLES.items()}

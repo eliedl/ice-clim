@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import operator
 from collections.abc import Callable
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from typing import Literal
 
 import numpy as np
@@ -47,11 +47,11 @@ class ThresholdCount:
 
 @dataclass(frozen=True)
 class MetricSpec:
-    """A climatology metric as a declarative record: slug + compute kernel + the DB fields it consumes."""
+    """A climatology metric as a declarative record: compute kernel + the DB fields it consumes + slug (injected from the registry key)."""
 
-    slug: str
     compute: Callable[[pd.DataFrame, Tier], DataGrid]
     fields: tuple[str, ...] = ("CT",)
+    slug: str = ""
 
     def sql(self, *, table: str, bbox_wkt: str,
             climatology_start_date: str, climatology_end_date: str) -> str:
@@ -71,14 +71,15 @@ class MetricSpec:
         """
 
 
-# Slug -> metric registry; the CLI choices and pipeline resolve a slug through this.
-# A new metric is a new row, not a new class.
-METRICS: dict[str, MetricSpec] = {
-    "freeze_up_date":          MetricSpec("freeze_up_date", EventDate(0.4, "first_above")),
-    "breakup_date":            MetricSpec("breakup_date", EventDate(0.4, "last_above")),
-    "first_occurrence_date":   MetricSpec("first_occurrence_date", EventDate(0.1, "first_above")),
-    "last_occurrence_date":    MetricSpec("last_occurrence_date", EventDate(0.1, "last_above")),
-    "season_duration":         MetricSpec("season_duration", ThresholdCount(0.4, operator.ge)),
-    "season_duration_10":      MetricSpec("season_duration_10", ThresholdCount(0.1, operator.ge)),
-    "storm_exposure_duration": MetricSpec("storm_exposure_duration", ThresholdCount(0.3, operator.le)),
+# CLI metric choices
+_SPECS: dict[str, MetricSpec] = {
+    "freeze_up_date":          MetricSpec(EventDate(0.4, "first_above")),
+    "breakup_date":            MetricSpec(EventDate(0.4, "last_above")),
+    "first_occurrence_date":   MetricSpec(EventDate(0.1, "first_above")),
+    "last_occurrence_date":    MetricSpec(EventDate(0.1, "last_above")),
+    "season_duration":         MetricSpec(ThresholdCount(0.4, operator.ge)),
+    "season_duration_10":      MetricSpec(ThresholdCount(0.1, operator.ge)),
+    "storm_exposure_duration": MetricSpec(ThresholdCount(0.3, operator.le)),
 }
+METRICS: dict[str, MetricSpec] = {slug: replace(spec, slug=slug)
+                                  for slug, spec in _SPECS.items()}
