@@ -63,14 +63,17 @@ def winter_season(obs_date: pd.Series) -> pd.Series:
     return dt.dt.year + (dt.dt.month >= 9).astype(int)
 
 
-def admissible_days_of_season(df: pd.DataFrame, *, coverage: float = 0.8) -> list[str]:
-    """Calendar days passing the WMO data-availability rule over the climatology
-    period implicit in ``df``.
-    """
+def attach_season_calendar(df: pd.DataFrame) -> pd.DataFrame:
+    """Attach the obs_date_dt / month_day / season columns derived from obs_date (temporal single source, DEC-027)."""
     df = df.copy()
     df["obs_date_dt"] = pd.to_datetime(df["obs_date"])
     df["month_day"] = df["obs_date_dt"].dt.strftime("%m-%d")
     df["season"] = winter_season(df["obs_date"])
+    return df
+
+
+def admissible_days_of_season(df: pd.DataFrame, *, coverage: float = 0.8) -> list[str]:
+    """Calendar days passing the WMO data-availability rule (expects attach_season_calendar columns)."""
     df = df[df["month_day"] != "02-29"]
     n_seasons = df["season"].nunique()
     min_seasons = int(np.ceil(coverage * n_seasons))

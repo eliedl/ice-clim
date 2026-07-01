@@ -17,7 +17,9 @@ from climatology.services.temporal import (
     SEASON_ORIGIN,
     Period,
     assert_hd_aligned,
+    attach_season_calendar,
 )
+from climatology.services.units_conversion_maps import ConversionStrategy
 from climatology.utils._types import DataGrid
 from climatology.utils.export import (
     archive_product,
@@ -52,6 +54,10 @@ class FetchResult:
     @property
     def is_empty(self) -> bool:
         return self.df.empty
+
+    def prepare(self, conversion: ConversionStrategy) -> pd.DataFrame:
+        """Fetched rows with the season calendar attached and the metric's value column computed (tier-agnostic, once per run)."""
+        return conversion.prepare(attach_season_calendar(self.df))
 
 
 @dataclass(frozen=True)
@@ -132,8 +138,8 @@ def _validate(fetch: FetchResult, ctx: RunContext) -> None:
 
 
 def _compute_raster(metric: MetricSpec, df: pd.DataFrame, tier: Tier) -> DataGrid:
-    """Run a metric's kernel on its conversion-prepared rows and mask it to the tier's wet domain."""
-    values = metric.compute(metric.conversion.prepare(df), tier)
+    """Run a metric's kernel on prepared rows and mask it to the tier's wet domain."""
+    values = metric.compute(df, tier)
     values[~tier.wet_mask] = np.nan
     grid = tier.grid
     log.info("  Tier '%s' cells with data: %s / %s", tier.level,
@@ -143,7 +149,8 @@ def _compute_raster(metric: MetricSpec, df: pd.DataFrame, tier: Tier) -> DataGri
 
 def _compute_tiers(fetch: FetchResult, ctx: RunContext) -> list[TierProduct]:
     """Compute one product per region tier."""
-    return [TierProduct(tier=tier, values=_compute_raster(ctx.metric, fetch.df, tier))
+    df = fetch.prepare(ctx.metric.conversion)
+    return [TierProduct(tier=tier, values=_compute_raster(ctx.metric, df, tier))
             for tier in ctx.region.tiers]
 
 

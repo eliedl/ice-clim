@@ -9,22 +9,13 @@ import pandas as pd
 
 from climatology.utils._types import BoolGrid, DataCube, DataGrid
 from climatology.processing.rasterize import Grid, burn_values
-from climatology.services.temporal import day_of_season, winter_season
+from climatology.services.temporal import day_of_season
 from climatology.utils.arithmetics import _nanmedian_high
 
 if TYPE_CHECKING:
     # Annotation-only; event_detection depends on a Tier's grid + wet mask by
     # duck-typed attribute access, not by importing regions.
     from climatology.processing.regions import Tier
-
-
-def _prepare_ct_rows(df: pd.DataFrame) -> pd.DataFrame:
-    """Attach the ``month_day`` / ``season`` columns the cube needs (``ct`` supplied by the metric's ConversionStrategy)."""
-    df = df.copy()
-    df["obs_date_dt"] = pd.to_datetime(df["obs_date"])
-    df["month_day"] = df["obs_date_dt"].dt.strftime("%m-%d")
-    df["season"] = winter_season(df["obs_date"])
-    return df.dropna(subset=["ct"])
 
 
 def _burn_day_stack(day_df: pd.DataFrame, *, grid: Grid) -> DataCube:
@@ -53,7 +44,7 @@ def _median_compression(stack: DataCube, *, grid: Grid,
 def _stream_median_ct_slices(df: pd.DataFrame, *, admissible_days: list[str],
                              tier: "Tier"):
     """Yield the median CT slice (H, W) for each admissible day, in order."""
-    df = _prepare_ct_rows(df)
+    df = df.dropna(subset=["ct"])
     grid = tier.grid
     wet = tier.wet_mask
     for md in admissible_days:
