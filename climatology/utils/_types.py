@@ -7,8 +7,9 @@ annotations these read as self-documenting types and keep the per-signature
 shape prose out of the docstrings.
 
 Dimension vocabulary
-  H, W        grid height / width (cells)
-  n_dates     admissible chart dates of season (WMO 80% mask)
+  H, W               grid height / width (cells)
+  n_seasons          seasons stacked for a single date (axis-0 of DateDataCube)
+  n_admissible_days  admissible chart days of a season, WMO 80% mask (axis-0 of SeasonDataCube)
 
 The axis-0 reducer ``_nanmedian_high`` is deliberately annotated inline
 (``Float["n_seasons *rest"] -> Float["*rest"]``) rather than aliased here: it is used
@@ -23,8 +24,9 @@ DataGrid = Float[np.ndarray, "H W"]         # float32 result raster; NaN = nodat
 BoolGrid = Bool[np.ndarray, "H W"]          # land / clip masks (True = land / in-domain)
 
 # climatological cubes
-DataCube = Float[np.ndarray, "n_dates H W"]   # per-date median CT field
-BoolCube = Bool[np.ndarray, "n_dates H W"]    # thresholded cube
+DateDataCube   = Float[np.ndarray, "n_seasons H W"]   # per-date data cube
+SeasonDataCube = Float[np.ndarray, "n_admissible_days H W"]   # per-year data cube
+BoolCube       = Bool[np.ndarray, "n_admissible_days H W"]          # thresholded cube
 
 # spatial extent
 GridBounds = tuple[float, float, float, float]   # (xmin, ymin, xmax, ymax) in grid-CRS units

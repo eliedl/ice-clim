@@ -7,7 +7,7 @@ from typing import TYPE_CHECKING, Literal
 import numpy as np
 import pandas as pd
 
-from climatology.utils._types import BoolGrid, DataCube, DataGrid
+from climatology.utils._types import BoolGrid, DateDataCube, SeasonDataCube, DataGrid
 from climatology.processing.rasterize import Grid, burn_values
 from climatology.services.temporal import day_of_season
 from climatology.utils.arithmetics import _nanmedian_high
@@ -18,7 +18,7 @@ if TYPE_CHECKING:
     from climatology.processing.regions import Tier
 
 
-def _burn_day_stack(day_df: pd.DataFrame, *, grid: Grid) -> DataCube:
+def _burn_day_stack(day_df: pd.DataFrame, *, grid: Grid) -> DateDataCube:
     """Per-(season, day) burn primitive: a ``(n_seasons, H, W)`` value stack."""
     seasons = sorted(day_df["season"].unique())
     return np.stack([
@@ -31,7 +31,7 @@ def _burn_day_stack(day_df: pd.DataFrame, *, grid: Grid) -> DataCube:
     ], axis=0)
 
 
-def _median_compression(stack: DataCube, *, grid: Grid,
+def _median_compression(stack: DateDataCube, *, grid: Grid,
                         wet: BoolGrid | None) -> DataGrid:
     """Upper-middle nan-median of a day's ``(n_seasons, H, W)`` stack over wet cells -> (H, W)."""
     if wet is not None:
@@ -53,7 +53,7 @@ def _stream_median_ct_slices(df: pd.DataFrame, *, admissible_days: list[str],
 
 
 def build_median_ct_cube(df: pd.DataFrame, *, admissible_days: list[str],
-                         tier: "Tier") -> DataCube:
+                         tier: "Tier") -> SeasonDataCube:
     """Build the ``(n_admissible_days, H, W)`` median CT cube for a tier."""
     slices = _stream_median_ct_slices(df, admissible_days=admissible_days, tier=tier)
     return np.stack(list(slices), axis=0)

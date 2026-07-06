@@ -15,7 +15,7 @@ from climatology.processing.rasterize import GRID_CRS
 from climatology.processing.regions import Tier
 from climatology.services.temporal import admissible_days_of_season
 from climatology.services.units_conversion_maps import CT_CONVERSION, ConversionStrategy
-from climatology.utils._types import BoolCube, DataCube, DataGrid
+from climatology.utils._types import BoolCube, SeasonDataCube, DataGrid
 
 # --- Computing kernels
 @dataclass(frozen=True)
@@ -50,7 +50,7 @@ class ThresholdCount:
     """Per-cell count of admissible steps whose median CT satisfies ``op`` (ge=duration, le=exposure)."""
 
     threshold: float
-    op: Callable[[DataCube, float], BoolCube] = operator.ge
+    op: Callable[[SeasonDataCube, float], BoolCube] = operator.ge
 
     def __call__(self, df: pd.DataFrame, tier: Tier) -> DataGrid:
         days = admissible_days_of_season(df)
