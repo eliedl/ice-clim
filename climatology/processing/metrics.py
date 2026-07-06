@@ -55,7 +55,8 @@ class ThresholdCount:
     def __call__(self, df: pd.DataFrame, tier: Tier) -> DataGrid:
         days = admissible_days_of_season(df)
         cube = build_median_ct_cube(df, admissible_days=days, tier=tier)
-        out = np.sum(self.op(cube, self.threshold), axis=0).astype(np.float32)
+        # float32, not int: the never-observed mask below needs NaN
+        out = np.sum(self.op(cube, self.threshold), axis=0, dtype=np.float32)
         out[np.all(np.isnan(cube), axis=0)] = np.nan
         return out
 
