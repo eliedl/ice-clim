@@ -35,9 +35,9 @@ def _median_compression(stack: DataCube, *, grid: Grid,
                         wet: BoolGrid | None) -> DataGrid:
     """Upper-middle nan-median of a day's ``(n_seasons, H, W)`` stack over wet cells -> (H, W)."""
     if wet is not None:
-        median_slice = np.full((grid.height, grid.width), np.nan, dtype=np.float32)
-        median_slice[wet] = _nanmedian_high(stack[:, wet])
-        return median_slice
+        median = np.full((grid.height, grid.width), np.nan, dtype=np.float32)
+        median[wet] = _nanmedian_high(stack[:, wet])
+        return median
     return _nanmedian_high(stack)
 
 
