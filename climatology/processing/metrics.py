@@ -17,7 +17,7 @@ from climatology.services.temporal import admissible_days_of_season
 from climatology.services.units_conversion_maps import CT_CONVERSION, ConversionStrategy
 from climatology.utils._types import BoolCube, DataCube, DataGrid
 
-
+# --- Computing kernels
 @dataclass(frozen=True)
 class EventDate:
     """Per-cell event date (day-of-season) at a CT-threshold crossing; ``mode`` picks first/last."""
@@ -75,7 +75,7 @@ class MetricSpec:
         code_cols = ", ".join(f'"{f}" AS {f.lower()}_code' for f in self.fields)
         return f"""
             SELECT
-                ST_AsText(ST_Transform(geometry, {GRID_CRS})) AS geom_wkt,
+                ST_AsBinary(ST_Transform(geometry, {GRID_CRS})) AS geom_wkb,
                 "T1"::date AS obs_date,
                 {code_cols}
             FROM {table}

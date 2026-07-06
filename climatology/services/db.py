@@ -5,7 +5,7 @@ import os
 import sys
 
 import pandas as pd
-from shapely import wkt
+import shapely
 from sqlalchemy import create_engine, text
 
 
@@ -21,9 +21,9 @@ def get_engine():
 
 
 def load_polygons(sql: str) -> pd.DataFrame:
-    """Execute a complete SQL statement, parsing ``geom_wkt`` into a ``geometry`` column."""
+    """Execute a complete SQL statement, parsing ``geom_wkb`` (bytea) into a ``geometry`` column."""
     engine = get_engine()
     with engine.connect() as conn:
         df = pd.read_sql(text(sql), conn)
-    df["geometry"] = df["geom_wkt"].apply(wkt.loads)
-    return df.drop(columns="geom_wkt")
+    df["geometry"] = shapely.from_wkb([bytes(b) for b in df["geom_wkb"]])  # psycopg2 bytea → memoryview → bytes
+    return df.drop(columns="geom_wkb")
