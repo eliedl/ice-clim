@@ -32,6 +32,20 @@ class EventDate:
 
 
 @dataclass(frozen=True)
+class EventDateDelta:
+    """Per-cell day count between two EventDate crossings on the same rows (late minus early)."""
+
+    late: EventDate
+    early: EventDate
+
+    def __call__(self, df: pd.DataFrame, tier: Tier) -> DataGrid:
+        # Non-negative by construction: registry entries pass the temporally-later
+        # crossing as `late` (higher threshold on first_above, lower on last_above);
+        # NaN (event never reached) propagates.
+        return self.late(df, tier) - self.early(df, tier)
+
+
+@dataclass(frozen=True)
 class ThresholdCount:
     """Per-cell count of admissible steps whose median CT satisfies ``op`` (ge=duration, le=exposure)."""
 
@@ -79,6 +93,10 @@ _SPECS: dict[str, MetricSpec] = {
     "breakup_date":            MetricSpec(EventDate(0.4, "last_above")),
     "first_occurrence_date":   MetricSpec(EventDate(0.1, "first_above")),
     "last_occurrence_date":    MetricSpec(EventDate(0.1, "last_above")),
+    "formation_lag":           MetricSpec(EventDateDelta(EventDate(0.4, "first_above"),
+                                                         EventDate(0.1, "first_above"))),
+    "melt_lag":                MetricSpec(EventDateDelta(EventDate(0.1, "last_above"),
+                                                        EventDate(0.4, "last_above"))),
     "season_duration":         MetricSpec(ThresholdCount(0.4, operator.ge)),
     "season_duration_10":      MetricSpec(ThresholdCount(0.1, operator.ge)),
     "storm_exposure_duration": MetricSpec(ThresholdCount(0.3, operator.le)),

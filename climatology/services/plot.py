@@ -119,6 +119,8 @@ PLOT_STYLES: dict[str, PlotStyle] = {
     "breakup_date":            PlotStyle("Median date of break-up (CT >= 4/10)", _date_ticks),
     "first_occurrence_date":   PlotStyle("Median date of first ice occurrence (CT >= 1/10)", _date_ticks),
     "last_occurrence_date":    PlotStyle("Median date of last ice occurrence (CT >= 1/10)", _date_ticks),
+    "formation_lag":           PlotStyle("Formation lag (days from first ice CT >= 1/10 to freeze-up CT >= 4/10)", _count_ticks),
+    "melt_lag":                PlotStyle("Melt lag (days from break-up CT >= 4/10 to last ice CT >= 1/10)", _count_ticks),
     "season_duration":         PlotStyle(lambda s: f"Median ice presence ({s.obs_unit}, CT >= 4/10)", _count_ticks),
     "season_duration_10":      PlotStyle(lambda s: f"Median ice presence ({s.obs_unit}, CT >= 1/10)", _count_ticks),
     "storm_exposure_duration": PlotStyle(lambda s: f"Storm exposure duration ({s.obs_unit}, CT <= 3/10)", _count_ticks),
