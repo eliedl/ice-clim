@@ -6,14 +6,13 @@ import logging
 from dataclasses import dataclass
 from functools import cached_property
 
-import geopandas as gpd
 import numpy as np
 from shapely.geometry.base import BaseGeometry
 
 from climatology.processing.polygons import (
     _bbox_envelope, _coastline_buffer, _landmask, _mrc_polygon,
 )
-from climatology.processing.rasterize import GRID_CRS, GRID_RES, Grid, build_grid, burn_mask
+from climatology.processing.rasterize import GRID_RES, Grid, build_grid, burn_mask
 
 log = logging.getLogger(__name__)
 
@@ -82,13 +81,8 @@ class Tier:
 
     @cached_property
     def fetch_wkt(self) -> str:
-        """4326 WKT of the wet domain (densified + one-cell buffer) for the DB fetch (DEC-039)."""
-        # crs=GRID_CRS only labels the CRS-naive shapely geom so to_crs can reproject.
-        return (gpd.GeoSeries([self.wet], crs=GRID_CRS)
-                .segmentize(10 * self.res_m)
-                .buffer(self.res_m)
-                .to_crs(epsg=4326)
-                .iloc[0].wkt)
+        """WKT of the wet domain for the DB fetch."""
+        return self.wet.wkt
 
 
 @dataclass(frozen=True)

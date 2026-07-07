@@ -32,12 +32,12 @@ class ChartTable:
 
 _TABLES: dict[str, ChartTable] = {
     "sgrda": ChartTable(
-        table="sgrda", cadence="daily",
+        table="sgrda_32198", cadence="daily",
         display_label="CIS SIGRID3 daily charts (SGRDA)",
         obs_unit="observation-days",
     ),
     "sgrdr": ChartTable(
-        table="sgrdr", cadence="hd_weekly",
+        table="sgrdr_32198", cadence="hd_weekly",
         display_label="CIS SIGRID3 weekly historical charts (SGRDR)",
         obs_unit="observation-weeks",
     ),

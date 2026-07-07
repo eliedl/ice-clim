@@ -72,16 +72,15 @@ class MetricSpec:
 
     def sql(self, *, table: str, bbox_wkt: str,
             climatology_start_date: str, climatology_end_date: str) -> str:
-        """Complete SQL for this metric's fields over every ice/water polygon, aliased ``<field>_code``."""
+        """Complete SQL for this metric's fields over every ice/water polygon (pre-projected 32198 view), aliased ``<field>_code``."""
         code_cols = ", ".join(f'"{f}" AS {f.lower()}_code' for f in self.fields)
         return f"""
             SELECT
-                ST_AsBinary(ST_Transform(geometry, {GRID_CRS})) AS geom_wkb,
+                ST_AsBinary(geom) AS geom_wkb,
                 "T1"::date AS obs_date,
                 {code_cols}
             FROM {table}
-            WHERE "POLY_TYPE" IN ('I', 'W')
-              AND ST_Intersects(geometry, ST_GeomFromText('{bbox_wkt}', 4326))
+            WHERE ST_Intersects(geom, ST_GeomFromText('{bbox_wkt}', {GRID_CRS}))
               AND "T1" >= '{climatology_start_date}'
               AND "T1" <  '{climatology_end_date}'
             ORDER BY obs_date;

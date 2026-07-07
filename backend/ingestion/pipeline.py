@@ -67,6 +67,19 @@ def load(gdf: gpd.GeoDataFrame, table: str, t1: datetime, region: str, engine) -
     return len(gdf)
 
 
+# ── Refresh ───────────────────────────────────────────────────────────────────
+
+def refresh_view(table: str, engine) -> None:
+    """Refresh the pre-projected 32198 materialized view for a base table (DEC-046)."""
+    view = f"{table}_32198"
+    try:
+        with engine.begin() as conn:
+            conn.execute(text(f"REFRESH MATERIALIZED VIEW {view}"))
+        log.info("Refreshed %s.", view)
+    except Exception as e:
+        log.error("REFRESH %s failed: %s", view, e)
+
+
 # ── Orchestration ─────────────────────────────────────────────────────────────
 
 def ingest_one(archive_path: Path, t1: datetime, region: str,
@@ -106,3 +119,5 @@ def run_source(source: ChartSource, engine) -> None:
             log.error("  FAILED %s: %s", archive_path.name, e)
 
     log.info("%s done: %d rows ingested.", source.label, total)
+    if total:
+        refresh_view(source.table, engine)
