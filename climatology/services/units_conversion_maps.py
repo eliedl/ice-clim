@@ -9,6 +9,8 @@ from dataclasses import dataclass
 import numpy as np
 import pandas as pd
 
+from climatology.utils._types import ConvertedPolygons, RawPolygons
+
 log = logging.getLogger(__name__)
 
 
@@ -109,7 +111,7 @@ def parse_form_size(code: str | float | None) -> float | None:
 class ConversionStrategy:
     """Strategy: prepare a metric's raw <field>_code columns into the value column its kernel consumes."""
 
-    prepare: Callable[[pd.DataFrame], pd.DataFrame]
+    prepare: Callable[[RawPolygons], ConvertedPolygons]
 
 
 def _present_col(s: pd.Series) -> np.ndarray:
@@ -117,7 +119,7 @@ def _present_col(s: pd.Series) -> np.ndarray:
     return (s.notna() & (s != "") & ~s.isin(MISSING_CODES)).to_numpy()
 
 
-def egg_code_units(df: pd.DataFrame) -> pd.DataFrame:
+def egg_code_units(df: RawPolygons) -> ConvertedPolygons:
     """Add ``volume_per_area`` (CT × Σ(conc·thk)/Σ(conc)) by vectorized regime-aware egg-code attribution."""
     conc_of = lambda col: df[col].replace(_TYPO_SUBSTITUTIONS).map(CONCENTRATION_FRACTION).to_numpy()
     thk_of = lambda col: df[col].map(STAGE_OF_DEVELOPMENT_THICKNESS).to_numpy(dtype=float)

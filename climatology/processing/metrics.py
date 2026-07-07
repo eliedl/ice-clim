@@ -8,14 +8,13 @@ from dataclasses import dataclass, replace
 from typing import Literal
 
 import numpy as np
-import pandas as pd
 
 from climatology.processing.event_detection import build_median_ct_cube, extract_event_date
 from climatology.processing.rasterize import GRID_CRS
 from climatology.processing.regions import Tier
 from climatology.services.temporal import admissible_days_of_season
 from climatology.services.units_conversion_maps import CT_CONVERSION, ConversionStrategy
-from climatology.utils._types import BoolCube, SeasonDataCube, DataGrid
+from climatology.utils._types import BoolCube, ConvertedPolygons, DataGrid, SeasonDataCube
 
 # --- Computing kernels
 @dataclass(frozen=True)
@@ -25,7 +24,7 @@ class EventDate:
     threshold: float
     mode: Literal["first_above", "last_above"]
 
-    def __call__(self, df: pd.DataFrame, tier: Tier) -> DataGrid:
+    def __call__(self, df: ConvertedPolygons, tier: Tier) -> DataGrid:
         days = admissible_days_of_season(df)
         return extract_event_date(df, admissible_days=days, tier=tier,
                                   threshold=self.threshold, mode=self.mode)
@@ -38,7 +37,7 @@ class EventDateDelta:
     late: EventDate
     early: EventDate
 
-    def __call__(self, df: pd.DataFrame, tier: Tier) -> DataGrid:
+    def __call__(self, df: ConvertedPolygons, tier: Tier) -> DataGrid:
         # Non-negative by construction: registry entries pass the temporally-later
         # crossing as `late` (higher threshold on first_above, lower on last_above);
         # NaN (event never reached) propagates.
@@ -52,7 +51,7 @@ class ThresholdCount:
     threshold: float
     op: Callable[[SeasonDataCube, float], BoolCube] = operator.ge
 
-    def __call__(self, df: pd.DataFrame, tier: Tier) -> DataGrid:
+    def __call__(self, df: ConvertedPolygons, tier: Tier) -> DataGrid:
         days = admissible_days_of_season(df)
         cube = build_median_ct_cube(df, admissible_days=days, tier=tier)
         # float32, not int: the never-observed mask below needs NaN
@@ -65,7 +64,7 @@ class ThresholdCount:
 class MetricSpec:
     """Climatology metric"""
 
-    compute: Callable[[pd.DataFrame, Tier], DataGrid]
+    compute: Callable[[ConvertedPolygons, Tier], DataGrid]
     fields: tuple[str, ...] = ("CT",)
     slug: str = ""
     conversion: ConversionStrategy = CT_CONVERSION

@@ -8,6 +8,8 @@ import pandas as pd
 import shapely
 from sqlalchemy import create_engine, text
 
+from climatology.utils._types import RawPolygons
+
 
 def get_engine():
     host = os.getenv("POSTGRES_HOST", "localhost")
@@ -20,7 +22,7 @@ def get_engine():
     return create_engine(f"postgresql+psycopg2://{user}:{pwd}@{host}:{port}/{db}")
 
 
-def load_polygons(sql: str) -> pd.DataFrame:
+def load_polygons(sql: str) -> RawPolygons:
     """Execute a complete SQL statement, parsing ``geom_wkb`` (bytea) into a ``geometry`` column."""
     engine = get_engine()
     with engine.connect() as conn:

@@ -9,6 +9,8 @@ from datetime import date
 import numpy as np
 import pandas as pd
 
+from climatology.utils._types import ConvertedPolygons, RawPolygons
+
 SEASON_ORIGIN = date(2000, 9, 1)
 
 # Fail loudly at import if a future epoch breaks the leap-safe invariant: a leap
@@ -63,7 +65,7 @@ def winter_season(obs_date: pd.Series) -> pd.Series:
     return dt.dt.year + (dt.dt.month >= 9).astype(int)
 
 
-def attach_season_calendar(df: pd.DataFrame) -> pd.DataFrame:
+def attach_season_calendar(df: RawPolygons) -> RawPolygons:
     """Attach the obs_date_dt / month_day / season columns derived from obs_date (temporal single source, DEC-027)."""
     df = df.copy()
     df["obs_date_dt"] = pd.to_datetime(df["obs_date"])
@@ -72,7 +74,7 @@ def attach_season_calendar(df: pd.DataFrame) -> pd.DataFrame:
     return df
 
 
-def admissible_days_of_season(df: pd.DataFrame, *, coverage: float = 0.8) -> list[str]:
+def admissible_days_of_season(df: ConvertedPolygons, *, coverage: float = 0.8) -> list[str]:
     """Calendar days passing the WMO data-availability rule (expects attach_season_calendar columns)."""
     df = df[df["month_day"] != "02-29"]
     n_seasons = df["season"].nunique()
@@ -108,7 +110,7 @@ class Period:
         return climatology_date_window(self.years)
 
 
-def assert_hd_aligned(df: pd.DataFrame, *, source_slug: str) -> None:
+def assert_hd_aligned(df: RawPolygons, *, source_slug: str) -> None:
     """HD chart publication cadency validation guard for sgrdr source"""
     month_days = pd.to_datetime(df["obs_date"]).dt.strftime("%m-%d")
     off = off_hd_month_days(month_days)

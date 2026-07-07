@@ -6,7 +6,6 @@ import logging
 from dataclasses import dataclass
 
 import numpy as np
-import pandas as pd
 
 from climatology.processing.metrics import METRICS, MetricSpec
 from climatology.processing.regions import RegionSpec, Tier, resolve_region
@@ -20,7 +19,7 @@ from climatology.services.temporal import (
     attach_season_calendar,
 )
 from climatology.services.units_conversion_maps import ConversionStrategy
-from climatology.utils._types import DataGrid
+from climatology.utils._types import ConvertedPolygons, DataGrid, RawPolygons
 from climatology.utils.export import (
     archive_product,
     output_geotiff,
@@ -45,7 +44,7 @@ class RunContext:
 class FetchResult:
     """The chart-polygon rows fetched once for a run (the fetch-stage output)."""
 
-    df: pd.DataFrame
+    df: RawPolygons
 
     @property
     def n_rows(self) -> int:
@@ -55,7 +54,7 @@ class FetchResult:
     def is_empty(self) -> bool:
         return self.df.empty
 
-    def prepare(self, conversion: ConversionStrategy) -> pd.DataFrame:
+    def prepare(self, conversion: ConversionStrategy) -> ConvertedPolygons:
         """Fetched rows with the season calendar attached and the metric's value column computed (tier-agnostic, once per run)."""
         return conversion.prepare(attach_season_calendar(self.df))
 
@@ -137,7 +136,7 @@ def _validate(fetch: FetchResult, ctx: RunContext) -> None:
         assert_hd_aligned(fetch.df, source_slug=ctx.source.slug)
 
 
-def _compute_raster(metric: MetricSpec, df: pd.DataFrame, tier: Tier) -> DataGrid:
+def _compute_raster(metric: MetricSpec, df: ConvertedPolygons, tier: Tier) -> DataGrid:
     """Run a metric's kernel on prepared rows and mask it to the tier's wet domain."""
     values = metric.compute(df, tier)
     values[~tier.wet_mask] = np.nan

@@ -5,9 +5,10 @@ from __future__ import annotations
 from typing import TYPE_CHECKING, Literal
 
 import numpy as np
-import pandas as pd
 
-from climatology.utils._types import BoolGrid, DateDataCube, SeasonDataCube, DataGrid
+from climatology.utils._types import (
+    BoolGrid, ConvertedPolygons, DataGrid, DateConvertedPolygons, DateDataVector, SeasonDataCube,
+)
 from climatology.processing.rasterize import Grid, burn_values
 from climatology.services.temporal import day_of_season
 from climatology.utils.arithmetics import _nanmedian_high
@@ -18,41 +19,38 @@ if TYPE_CHECKING:
     from climatology.processing.regions import Tier
 
 
-def _burn_day_stack(day_df: pd.DataFrame, *, grid: Grid) -> DateDataCube:
-    """Per-(season, day) burn primitive: a ``(n_seasons, H, W)`` value stack."""
+def _burn_day_stack(day_df: DateConvertedPolygons, *, grid: Grid, wet: BoolGrid) -> DateDataVector:
+    """Per-(season, day) burn restricted to wet cells: an ``(n_seasons, n_wet)`` value stack."""
     seasons = sorted(day_df["season"].unique())
     return np.stack([
         burn_values(
             list(zip(day_df.loc[day_df["season"] == s, "geometry"],
                      day_df.loc[day_df["season"] == s, "ct"])),
             grid,
-        )
+        )[wet]
         for s in seasons
     ], axis=0)
 
 
-def _median_compression(stack: DateDataCube, *, grid: Grid,
-                        wet: BoolGrid | None) -> DataGrid:
-    """Upper-middle nan-median of a day's ``(n_seasons, H, W)`` stack over wet cells -> (H, W)."""
-    if wet is not None:
-        median = np.full((grid.height, grid.width), np.nan, dtype=np.float32)
-        median[wet] = _nanmedian_high(stack[:, wet])
-        return median
-    return _nanmedian_high(stack)
+def _median_compression(stack: DateDataVector, *, grid: Grid, wet: BoolGrid) -> DataGrid:
+    """Scatter the upper-middle nan-median of a day's ``(n_seasons, n_wet)`` wet stack back onto the ``(H, W)`` grid."""
+    median = np.full((grid.height, grid.width), np.nan, dtype=np.float32)
+    median[wet] = _nanmedian_high(stack)
+    return median
 
 
-def _stream_median_ct_slices(df: pd.DataFrame, *, admissible_days: list[str],
+def _stream_median_ct_slices(df: ConvertedPolygons, *, admissible_days: list[str],
                              tier: "Tier"):
     """Yield the median CT slice (H, W) for each admissible day, in order."""
     df = df.dropna(subset=["ct"])
     grid = tier.grid
     wet = tier.wet_mask
     for md in admissible_days:
-        stack = _burn_day_stack(df[df["month_day"] == md], grid=grid)
+        stack = _burn_day_stack(df[df["month_day"] == md], grid=grid, wet=wet)
         yield _median_compression(stack, grid=grid, wet=wet)
 
 
-def build_median_ct_cube(df: pd.DataFrame, *, admissible_days: list[str],
+def build_median_ct_cube(df: ConvertedPolygons, *, admissible_days: list[str],
                          tier: "Tier") -> SeasonDataCube:
     """Build the ``(n_admissible_days, H, W)`` median CT cube for a tier."""
     slices = _stream_median_ct_slices(df, admissible_days=admissible_days, tier=tier)
@@ -60,7 +58,7 @@ def build_median_ct_cube(df: pd.DataFrame, *, admissible_days: list[str],
 
 
 def extract_event_date(
-    df: pd.DataFrame,
+    df: ConvertedPolygons,
     *,
     admissible_days: list[str],
     tier: "Tier",
