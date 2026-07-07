@@ -12,7 +12,6 @@ import numpy as np
 from climatology.processing.event_detection import build_median_ct_cube, extract_event_date
 from climatology.processing.rasterize import GRID_CRS
 from climatology.processing.regions import Tier
-from climatology.services.temporal import admissible_days_of_season
 from climatology.services.units_conversion_maps import CT_CONVERSION, ConversionStrategy
 from climatology.utils._types import BoolCube, ConvertedPolygons, DataGrid, SeasonDataCube
 
@@ -25,9 +24,7 @@ class EventDate:
     mode: Literal["first_above", "last_above"]
 
     def __call__(self, df: ConvertedPolygons, tier: Tier) -> DataGrid:
-        days = admissible_days_of_season(df)
-        return extract_event_date(df, admissible_days=days, tier=tier,
-                                  threshold=self.threshold, mode=self.mode)
+        return extract_event_date(df, tier=tier, threshold=self.threshold, mode=self.mode)
 
 
 @dataclass(frozen=True)
@@ -52,8 +49,7 @@ class ThresholdCount:
     op: Callable[[SeasonDataCube, float], BoolCube] = operator.ge
 
     def __call__(self, df: ConvertedPolygons, tier: Tier) -> DataGrid:
-        days = admissible_days_of_season(df)
-        cube = build_median_ct_cube(df, admissible_days=days, tier=tier)
+        cube = build_median_ct_cube(df, tier=tier)
         # float32, not int: the never-observed mask below needs NaN
         out = np.sum(self.op(cube, self.threshold), axis=0, dtype=np.float32)
         out[np.all(np.isnan(cube), axis=0)] = np.nan

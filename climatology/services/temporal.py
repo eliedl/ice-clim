@@ -9,7 +9,7 @@ from datetime import date
 import numpy as np
 import pandas as pd
 
-from climatology.utils._types import ConvertedPolygons, RawPolygons
+from climatology.utils._types import RawPolygons
 
 SEASON_ORIGIN = date(2000, 9, 1)
 
@@ -66,16 +66,17 @@ def winter_season(obs_date: pd.Series) -> pd.Series:
 
 
 def attach_season_calendar(df: RawPolygons) -> RawPolygons:
-    """Attach the obs_date_dt / month_day / season columns derived from obs_date (temporal single source, DEC-027)."""
+    """Attach obs_date_dt / month_day / season columns, drop non-admissible month-days (WMO rule), and order rows by day_of_season (temporal single source, DEC-027)."""
     df = df.copy()
     df["obs_date_dt"] = pd.to_datetime(df["obs_date"])
     df["month_day"] = df["obs_date_dt"].dt.strftime("%m-%d")
     df["season"] = winter_season(df["obs_date"])
-    return df
+    df = df[df["month_day"].isin(admissible_days_of_season(df))]
+    return df.sort_values("month_day", key=lambda s: s.map(day_of_season))
 
 
-def admissible_days_of_season(df: ConvertedPolygons, *, coverage: float = 0.8) -> list[str]:
-    """Calendar days passing the WMO data-availability rule (expects attach_season_calendar columns)."""
+def admissible_days_of_season(df: RawPolygons, *, coverage: float = 0.8) -> list[str]:
+    """Calendar days passing the WMO data-availability rule (expects the season-calendar columns)."""
     df = df[df["month_day"] != "02-29"]
     n_seasons = df["season"].nunique()
     min_seasons = int(np.ceil(coverage * n_seasons))

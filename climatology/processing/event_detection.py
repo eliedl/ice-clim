@@ -39,28 +39,24 @@ def _median_compression(stack: DateDataVector, *, grid: Grid, wet: BoolGrid) -> 
     return median
 
 
-def _stream_median_ct_slices(df: ConvertedPolygons, *, admissible_days: list[str],
-                             tier: "Tier"):
-    """Yield the median CT slice (H, W) for each admissible day, in order."""
+def _stream_median_ct_slices(df: ConvertedPolygons, *, tier: "Tier"):
+    """Yield ``(month_day, median CT slice (H, W))`` per admissible day, in day_of_season order (set upstream by attach_season_calendar)."""
     df = df.dropna(subset=["ct"])
     grid = tier.grid
     wet = tier.wet_mask
-    for md in admissible_days:
+    for md in df["month_day"].unique():
         stack = _burn_day_stack(df[df["month_day"] == md], grid=grid, wet=wet)
-        yield _median_compression(stack, grid=grid, wet=wet)
+        yield md, _median_compression(stack, grid=grid, wet=wet)
 
 
-def build_median_ct_cube(df: ConvertedPolygons, *, admissible_days: list[str],
-                         tier: "Tier") -> SeasonDataCube:
+def build_median_ct_cube(df: ConvertedPolygons, *, tier: "Tier") -> SeasonDataCube:
     """Build the ``(n_admissible_days, H, W)`` median CT cube for a tier."""
-    slices = _stream_median_ct_slices(df, admissible_days=admissible_days, tier=tier)
-    return np.stack(list(slices), axis=0)
+    return np.stack([median for _md, median in _stream_median_ct_slices(df, tier=tier)], axis=0)
 
 
 def extract_event_date(
     df: ConvertedPolygons,
     *,
-    admissible_days: list[str],
     tier: "Tier",
     threshold: float,
     mode: Literal["first_above", "last_above"],
@@ -71,8 +67,7 @@ def extract_event_date(
     grid = tier.grid
     result = np.full((grid.height, grid.width), np.nan, dtype=np.float32)
     already_found = np.zeros((grid.height, grid.width), dtype=bool)
-    slices = _stream_median_ct_slices(df, admissible_days=admissible_days, tier=tier)
-    for md, median_slice in zip(admissible_days, slices):
+    for md, median_slice in _stream_median_ct_slices(df, tier=tier):
         above = median_slice >= threshold
         ordinal = day_of_season(md)
         if mode == "first_above":
