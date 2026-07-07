@@ -72,11 +72,13 @@ class MetricSpec:
 
     def sql(self, *, table: str, bbox_wkt: str,
             climatology_start_date: str, climatology_end_date: str) -> str:
-        """Complete SQL for this metric's fields over every ice/water polygon (pre-projected 32198 view), aliased ``<field>_code``."""
+        """Complete SQL for this metric's fields over every ice/water polygon, clipped to the fetch domain (pre-projected 32198 view), aliased ``<field>_code``."""
         code_cols = ", ".join(f'"{f}" AS {f.lower()}_code' for f in self.fields)
+        # ST_Intersects (WHERE) filters rows via the GIST index; ST_Intersection (SELECT) clips
+        # the returned geometry to the fetch domain, trimming out-of-tier vertices to cut burn cost (DEC-046).
         return f"""
             SELECT
-                ST_AsBinary(geom) AS geom_wkb,
+                ST_AsBinary(ST_Intersection(geom, ST_GeomFromText('{bbox_wkt}', {GRID_CRS}))) AS geom_wkb,
                 "T1"::date AS obs_date,
                 {code_cols}
             FROM {table}
