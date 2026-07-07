@@ -7,6 +7,7 @@ from dataclasses import dataclass
 from functools import cached_property
 
 import numpy as np
+import shapely
 from shapely.geometry.base import BaseGeometry
 
 from climatology.processing.polygons import (
@@ -81,8 +82,8 @@ class Tier:
 
     @cached_property
     def fetch_wkt(self) -> str:
-        """WKT of the wet domain for the DB fetch."""
-        return self.wet.wkt
+        """WKT of the grid bounding box for the polygon clip during the DB polygon's fetch."""
+        return shapely.geometry.box(*self.grid.bounds).wkt
 
 
 @dataclass(frozen=True)

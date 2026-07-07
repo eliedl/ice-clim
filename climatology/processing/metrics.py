@@ -63,7 +63,7 @@ class ThresholdCount:
 
 @dataclass(frozen=True)
 class MetricSpec:
-    """A climatology metric as a declarative record: compute kernel + the DB fields it consumes + slug (injected from the registry key)."""
+    """Climatology metric"""
 
     compute: Callable[[pd.DataFrame, Tier], DataGrid]
     fields: tuple[str, ...] = ("CT",)
