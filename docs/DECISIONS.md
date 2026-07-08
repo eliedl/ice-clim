@@ -475,4 +475,20 @@ This log records all scientific decisions, assumptions, and edge-case choices id
 
 ---
 
+## DEC-048 — Landfast Metrics Kernel: Direct FA Fast-Ice Indicator, Not the CT=1.0 Proxy
+
+- **Context**: The four landfast metrics (`landfast_freeze_up_date`, `landfast_breakup_date`, `landfast_duration`, `landfast_exposure`) were initially registered on the **CT=1.0 proxy** — reusing the CT kernels/`CT_CONVERSION` at threshold 1.0, on the observation that compact ice (`CT='92'`) and fast ice (`FA='08'`, per the 2010-rev2 table pinned in DEC-045) coincide almost everywhere in the GSL. Probe 019 validated the equivalence per-polygon (~99 % two-way agreement); probe 020 validated it at the level that matters for the climatology — median-then-threshold (DEC-025/027) cell values — by computing both climatologies on the same sept-îles 2011–2020 grid and cell-diffing them. Inspection of the CIS normals methodology then settled the question on standards grounds rather than error grounds.
+- **Confirmation source**: [CIS Normals EC n.d.] (READING_LOG e145, 2026-07-08) — for its landfast normals, CIS assigns a **binary landfast presence directly from the form of ice** per chart and thresholds the climatological **median at 50%** (a cell is landfast when its median form of ice is landfast); probe 020 (`backend/probes/020_landfast_proxy_validation/`, output `2026-07-01_173448_sept-iles_2011-2020.txt`) for the quantified proxy error.
+- **Options considered**:
+  1. **CT=1.0 proxy** (status quo): thresholds the median CT at 1.0; no new conversion strategy; landfast rides entirely on existing CT infrastructure.
+  2. **Direct FA kernel**: per-polygon indicator `1.0 iff FA=='08' else 0.0` (`LANDFAST_CONVERSION`, promoted verbatim from probe 020), median-then-threshold at **0.5** — exactly the CIS convention of e145 expressed on the 0/1 indicator, and the direct analogue of the DEC-025/027 rule. Exposure is the same test inverted (median < 0.5).
+- **Choice made**: Option 2 — direct FA kernel with `LANDFAST_CONVERSION` at threshold 0.5 for all four metrics.
+- **Rationale**: The CIS standard computes landfast climatologies on the fast-ice attribute itself, not on a compactness proxy (e145) — methodological alignment with the institutional convention outweighs the proxy's convenience, especially for a product line whose credibility rests on CIS comparability. Probe 020 bounds what the switch changes: exact cell agreement 99.15 % (duration), 100.00 % (freeze-up), 97.13 % (breakup), zero presence mismatches in either direction, and every non-zero delta **negative** (proxy − direct ∈ {−1, −2}) — the proxy systematically *clipped* the landfast season (shorter duration, earlier breakup, ≤ 2 days) where fast ice persists at median CT just under compact. The direct kernel removes this small one-sided bias at zero methodological cost: no new kernel code, only a conversion strategy and a threshold, since the compute kernels are conversion-agnostic by design.
+- **Validation status**: **APPROVED (2026-07-08)** — user-directed following inspection of the CIS normals methodology (e145); proxy error quantified by probe 020.
+- **Implementation refs**: `climatology/services/units_conversion_maps.py` (`LANDFAST_CONVERSION`, adopted from probe 020's local definition per its staged-promotion note); `climatology/processing/metrics.py` (`landfast_*` specs → `fields=("FA",)`, `conversion=LANDFAST_CONVERSION`, thresholds 1.0 → 0.5, exposure `lt 0.5`); `backend/probes/019_landfast_concentration/` (per-polygon), `backend/probes/020_landfast_proxy_validation/` (median-level). 
+- **Literature cross-ref**: [CIS Normals EC n.d.] via READING_LOG e145. Relates to DEC-045 (decision 4: landfast keyed on form code `08`, 2010-rev2 table), DEC-025/027 (median-then-threshold framework the 0.5 indicator threshold instantiates), DEC-015 ('9+'=0.97 — why near-compact fast ice sits below the proxy's 1.0 bar).
+
+---
+
+
 *Decisions are logged with their validation status. Approved entries are confirmed; PENDING entries await human validation.*

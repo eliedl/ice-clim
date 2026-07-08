@@ -49,8 +49,8 @@ OUTPUT_DIR = Path(__file__).parent / "output"
 
 # Direct landfast ground truth: per-polygon indicator 1.0 iff primary form is
 # fast ice ('08'), else 0.0 (non-landfast ice and water). Median >= 0.5 then
-# marks cells fast in the majority of seasons. Local to this probe (not yet
-# adopted into units_conversion_maps — that awaits this validation).
+# marks cells fast in the majority of seasons. Local to this probe
+# adopted into units_conversion_maps.
 LANDFAST_CONVERSION = ConversionStrategy(
     lambda df: df.assign(ct=(df["fa_code"] == "08").astype(float)))
 

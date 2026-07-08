@@ -33,7 +33,7 @@ pointers, leaving this log untouched.
 
 ---
 
-<!-- next-id: e145 -->
+<!-- next-id: e146 -->
 
 ## 2026-06-01
 
@@ -235,6 +235,10 @@ pointers, leaving this log untouched.
 ## 2026-06-10
 
 - e144 · [CIS Normals EC n.d.] The CIS website climatology methodology mentions data corrections applied to the charts feeding the normals. Cross-era quality/homogeneity would come from these **post-corrections** on the CIS_EC historical charts — a data-quality mechanism distinct from the end-of-season historical production method (→ e116, which explains intrinsic per-chart quality). Open: whether the SFTP-delivered CIS_EC files carry these corrections. → cis-004 → DEC-033 #data-quality #cross-era-normalization #open-question
+
+## 2026-07-08
+
+- e145 · [CIS Normals EC n.d.] For the landfast-ice normals, CIS uses the landfast **form of ice directly** to assign a binary landfast presence per chart, then thresholds the climatological **median at 50%**: a cell is landfast when its median form of ice over the normal period is landfast. Direct-attribute computation — not a CT-compactness proxy. → DEC-048 #climatology-methodology #landfast #data-standard #concentration-threshold
 
 ---
 
