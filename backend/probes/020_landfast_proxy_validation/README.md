@@ -51,8 +51,9 @@ from the direct `FA='08'` fast-ice climatology:
   at the climatology level: median-then-threshold fully suppresses it, confirming
   the hypothesis.
 - The residual ≤2-day deltas (duration: proxy 1–2 d shorter for ~5 k cells;
-  breakup: proxy ~1 d earlier for ~1.8 k cells) are one-HD quantization at the
-  season edges, not contamination — freeze-up is bit-exact.
+  breakup: proxy ~1 d earlier for ~1.8 k cells) possibly comes from the following:
+    - Fast-ice polygons charted at CT='91' (9+) instead of '92' — the physical/encoding cause. Probe 019's ~1% per-polygon disagreement includes polygons with FA='08' but CT<'92'. On those days the direct indicator is 1.0 but CT_CONVERSION gives 0.97, which brings the median to be lower than the >= 1.0 threshold. Direct counts these days, proxy doesn't → negative delta. The fact that breakup is affected but freeze-up isn't fits this well: fast ice plausibly gets downgraded to 9+ during decay while still charted as fast, whereas at freeze-up it's charted compact from the start.
+  
 
 ### Implication
 
