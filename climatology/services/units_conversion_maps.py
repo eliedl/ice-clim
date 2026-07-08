@@ -155,3 +155,6 @@ def egg_code_units(df: RawPolygons) -> ConvertedPolygons:
 
 CT_CONVERSION = ConversionStrategy(lambda df: df.assign(ct=df["ct_code"].map(CONCENTRATION_FRACTION)))
 VOLUME_CONVERSION = ConversionStrategy(egg_code_units)
+# Landfast indicator: 1.0 iff primary form is fast ice ('08'), else 0.0 (probe 020).
+LANDFAST_CONVERSION = ConversionStrategy(
+    lambda df: df.assign(ct=(df["fa_code"] == "08").astype(float)))

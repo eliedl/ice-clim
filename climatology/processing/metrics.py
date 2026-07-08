@@ -12,7 +12,11 @@ import numpy as np
 from climatology.processing.event_detection import build_median_ct_cube, extract_event_date
 from climatology.processing.rasterize import GRID_CRS
 from climatology.processing.regions import Tier
-from climatology.services.units_conversion_maps import CT_CONVERSION, ConversionStrategy
+from climatology.services.units_conversion_maps import (
+    CT_CONVERSION,
+    LANDFAST_CONVERSION,
+    ConversionStrategy,
+)
 from climatology.utils._types import BoolCube, ConvertedPolygons, DataGrid, SeasonDataCube
 
 # --- Computing kernels
@@ -97,10 +101,14 @@ _SPECS: dict[str, MetricSpec] = {
     "season_duration":         MetricSpec(ThresholdCount(0.4, operator.ge)),
     "season_duration_10":      MetricSpec(ThresholdCount(0.1, operator.ge)),
     "storm_exposure_duration": MetricSpec(ThresholdCount(0.3, operator.le)),
-    "landfast_freeze_up_date": MetricSpec(EventDate(1.0, "first_above")),
-    "landfast_breakup_date":   MetricSpec(EventDate(1.0, "last_above")),
-    "landfast_duration":       MetricSpec(ThresholdCount(1.0, operator.ge)),
-    "landfast_exposure":       MetricSpec(ThresholdCount(1.0, operator.lt)),
+    "landfast_freeze_up_date": MetricSpec(EventDate(0.5, "first_above"),
+                                          fields=("FA",), conversion=LANDFAST_CONVERSION),
+    "landfast_breakup_date":   MetricSpec(EventDate(0.5, "last_above"),
+                                          fields=("FA",), conversion=LANDFAST_CONVERSION),
+    "landfast_duration":       MetricSpec(ThresholdCount(0.5, operator.ge),
+                                          fields=("FA",), conversion=LANDFAST_CONVERSION),
+    "landfast_exposure":       MetricSpec(ThresholdCount(0.5, operator.lt),
+                                          fields=("FA",), conversion=LANDFAST_CONVERSION),
 }
 METRICS: dict[str, MetricSpec] = {slug: replace(spec, slug=slug)
                                   for slug, spec in _SPECS.items()}
