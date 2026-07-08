@@ -4,3 +4,5 @@ jaxtyping
 sqlalchemy
 psycopg2-binary
 python-dotenv
+radon
+cognitive_complexity
