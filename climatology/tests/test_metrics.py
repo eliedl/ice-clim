@@ -100,6 +100,17 @@ def test_breakup_last_above():
     assert np.all(np.isnan(out[:, 2:])), "never-crossing water stays NaN"
 
 
+def test_feb29_rows_dropped_by_season_calendar():
+    """Real leap-day charts (e.g. 2012-02-29) must be dropped by admissibility, not crash the day_of_season mapping (leap-safe invariant)."""
+    left = box(0, 0, 2, 4)
+    rows = [{"obs_date": d, "ct_code": "92", "geometry": left}
+            for d in ("2012-01-01", "2012-01-08", "2012-02-29", "2013-01-01", "2013-01-08")]
+    metric = METRICS["season_duration"]
+    prepared = FetchResult(pd.DataFrame(rows)).prepare(metric.conversion)
+    assert set(prepared["day_of_season"]) == {day_of_season("01-01"), day_of_season("01-08")}, \
+        "02-29 must be excluded; admissible days must survive"
+
+
 def _large_fixture(n_seasons: int = 10, n_days: int = 15) -> pd.DataFrame:
     """Many-row duration fixture (~2·n_seasons·n_days rows) for timing the prepare step."""
     left, right = box(0, 0, 2, 4), box(2, 0, 4, 4)

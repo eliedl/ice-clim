@@ -66,13 +66,15 @@ def winter_season(obs_date: pd.Series) -> pd.Series:
 
 
 def attach_season_calendar(df: RawPolygons) -> RawPolygons:
-    """Attach obs_date_dt / month_day / season columns, drop non-admissible month-days (WMO rule), and order rows by day_of_season (temporal single source, DEC-027)."""
+    """Attach season / day_of_season columns, drop non-admissible month-days (WMO rule), and order rows by day_of_season (temporal single source, DEC-027)."""
     df = df.copy()
-    df["obs_date_dt"] = pd.to_datetime(df["obs_date"])
-    df["month_day"] = df["obs_date_dt"].dt.strftime("%m-%d")
+    df["month_day"] = pd.to_datetime(df["obs_date"]).dt.strftime("%m-%d")
     df["season"] = winter_season(df["obs_date"])
+    # Filter before mapping day_of_season: the ordinal is only defined on
+    # admissible days (02-29 has no ordinal — see the SEASON_ORIGIN invariant).
     df = df[df["month_day"].isin(admissible_days_of_season(df))]
-    return df.sort_values("month_day", key=lambda s: s.map(day_of_season))
+    df = df.assign(day_of_season=df["month_day"].map(day_of_season))
+    return df.sort_values("day_of_season").drop(columns=["month_day"])
 
 
 def admissible_days_of_season(df: RawPolygons, *, coverage: float = 0.8) -> list[str]:

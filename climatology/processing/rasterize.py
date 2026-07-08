@@ -6,6 +6,7 @@ from typing import NamedTuple
 
 import numpy as np
 from affine import Affine
+from jaxtyping import Float
 from rasterio.features import rasterize as rio_rasterize
 from rasterio.transform import from_bounds
 
@@ -13,8 +14,7 @@ from climatology.utils._types import BoolGrid, DataGrid, GridBounds
 
 log = logging.getLogger(__name__)
 
-# Canonical analysis CRS — geometries are rasterized, written and
-# plotted in it (DEC-040; was 26919 UTM-19N).
+# Canonical analysis CRS 
 GRID_CRS = 32198  # NAD83 / Québec Lambert
 GRID_RES = 35     # default grid resolution (m); legacy single-tier regions
 
@@ -44,6 +44,11 @@ def burn_values(geom_value_pairs, grid: Grid) -> DataGrid:
     shapes = [(g.__geo_interface__, float(v)) for g, v in geom_value_pairs]
     return rio_rasterize(shapes, out_shape=(grid.height, grid.width),
                          transform=grid.transform, fill=np.nan, dtype=np.float32)
+
+
+def burn_value_stack(groups, grid: Grid, *, wet: BoolGrid) -> Float[np.ndarray, "n_groups n_wet"]:
+    """Burn each (geom, value)-pair group and restrict to wet cells: an ``(n_groups, n_wet)`` stack."""
+    return np.stack([burn_values(pairs, grid)[wet] for pairs in groups], axis=0)
 
 
 def build_grid(wet, res_m: float) -> Grid:

@@ -1,73 +1,41 @@
-"""Region-scale climatology metrics: declarative specs over two compute kernels."""
+"""Region-scale climatology metrics: declarative specs over the reduction kernels."""
 
 from __future__ import annotations
 
 import operator
-from collections.abc import Callable
 from dataclasses import dataclass, replace
-from typing import Literal
 
-import numpy as np
-
-from climatology.processing.event_detection import build_median_ct_cube, extract_event_date
 from climatology.processing.rasterize import GRID_CRS
+from climatology.processing.reductions import (
+    MEDIAN_THEN_THRESHOLD,
+    Kernel,
+    Reduction,
+    ThresholdDate,
+    ThresholdDateDelta,
+    ThresholdDuration,
+)
 from climatology.processing.regions import Tier
 from climatology.services.units_conversion_maps import (
     CT_CONVERSION,
     LANDFAST_CONVERSION,
     ConversionStrategy,
 )
-from climatology.utils._types import BoolCube, ConvertedPolygons, DataGrid, SeasonDataCube
-
-# --- Computing kernels
-@dataclass(frozen=True)
-class EventDate:
-    """Per-cell event date (day-of-season) at a CT-threshold crossing; ``mode`` picks first/last."""
-
-    threshold: float
-    mode: Literal["first_above", "last_above"]
-
-    def __call__(self, df: ConvertedPolygons, tier: Tier) -> DataGrid:
-        return extract_event_date(df, tier=tier, threshold=self.threshold, mode=self.mode)
-
-
-@dataclass(frozen=True)
-class EventDateDelta:
-    """Per-cell day count between two EventDate crossings on the same rows (late minus early)."""
-
-    late: EventDate
-    early: EventDate
-
-    def __call__(self, df: ConvertedPolygons, tier: Tier) -> DataGrid:
-        # Non-negative by construction: registry entries pass the temporally-later
-        # crossing as `late` (higher threshold on first_above, lower on last_above);
-        # NaN (event never reached) propagates.
-        return self.late(df, tier) - self.early(df, tier)
-
-
-@dataclass(frozen=True)
-class ThresholdCount:
-    """Per-cell count of admissible steps whose median CT satisfies ``op`` (ge=duration, le=exposure)."""
-
-    threshold: float
-    op: Callable[[SeasonDataCube, float], BoolCube] = operator.ge
-
-    def __call__(self, df: ConvertedPolygons, tier: Tier) -> DataGrid:
-        cube = build_median_ct_cube(df, tier=tier)
-        # float32, not int: the never-observed mask below needs NaN
-        out = np.sum(self.op(cube, self.threshold), axis=0, dtype=np.float32)
-        out[np.all(np.isnan(cube), axis=0)] = np.nan
-        return out
+from climatology.utils._types import ConvertedPolygons, DataGrid
 
 
 @dataclass(frozen=True)
 class MetricSpec:
     """Climatology metric"""
 
-    compute: Callable[[ConvertedPolygons, Tier], DataGrid]
+    kernel: Kernel
     fields: tuple[str, ...] = ("CT",)
     slug: str = ""
     conversion: ConversionStrategy = CT_CONVERSION
+    reduction: Reduction = MEDIAN_THEN_THRESHOLD
+
+    def compute(self, df: ConvertedPolygons, tier: Tier) -> DataGrid:
+        """Fold the prepared rows into this metric's (H, W) grid via the reduction order."""
+        return self.reduction(self.kernel, df, tier)
 
     def sql(self, *, table: str, bbox_wkt: str,
             climatology_start_date: str, climatology_end_date: str) -> str:
@@ -90,24 +58,24 @@ class MetricSpec:
 
 # CLI metric choices
 _SPECS: dict[str, MetricSpec] = {
-    "freeze_up_date":          MetricSpec(EventDate(0.4, "first_above")),
-    "breakup_date":            MetricSpec(EventDate(0.4, "last_above")),
-    "first_occurrence_date":   MetricSpec(EventDate(0.1, "first_above")),
-    "last_occurrence_date":    MetricSpec(EventDate(0.1, "last_above")),
-    "formation_lag":           MetricSpec(EventDateDelta(EventDate(0.4, "first_above"),
-                                                         EventDate(0.1, "first_above"))),
-    "melt_lag":                MetricSpec(EventDateDelta(EventDate(0.1, "last_above"),
-                                                        EventDate(0.4, "last_above"))),
-    "season_duration":         MetricSpec(ThresholdCount(0.4, operator.ge)),
-    "season_duration_10":      MetricSpec(ThresholdCount(0.1, operator.ge)),
-    "storm_exposure_duration": MetricSpec(ThresholdCount(0.3, operator.le)),
-    "landfast_freeze_up_date": MetricSpec(EventDate(0.5, "first_above"),
+    "freeze_up_date":          MetricSpec(ThresholdDate(0.4, "first_above")),
+    "breakup_date":            MetricSpec(ThresholdDate(0.4, "last_above")),
+    "first_occurrence_date":   MetricSpec(ThresholdDate(0.1, "first_above")),
+    "last_occurrence_date":    MetricSpec(ThresholdDate(0.1, "last_above")),
+    "formation_lag":           MetricSpec(ThresholdDateDelta(ThresholdDate(0.4, "first_above"),
+                                                             ThresholdDate(0.1, "first_above"))),
+    "melt_lag":                MetricSpec(ThresholdDateDelta(ThresholdDate(0.1, "last_above"),
+                                                             ThresholdDate(0.4, "last_above"))),
+    "season_duration":         MetricSpec(ThresholdDuration(0.4, operator.ge)),
+    "season_duration_10":      MetricSpec(ThresholdDuration(0.1, operator.ge)),
+    "storm_exposure_duration": MetricSpec(ThresholdDuration(0.3, operator.le)),
+    "landfast_freeze_up_date": MetricSpec(ThresholdDate(0.5, "first_above"),
                                           fields=("FA",), conversion=LANDFAST_CONVERSION),
-    "landfast_breakup_date":   MetricSpec(EventDate(0.5, "last_above"),
+    "landfast_breakup_date":   MetricSpec(ThresholdDate(0.5, "last_above"),
                                           fields=("FA",), conversion=LANDFAST_CONVERSION),
-    "landfast_duration":       MetricSpec(ThresholdCount(0.5, operator.ge),
+    "landfast_duration":       MetricSpec(ThresholdDuration(0.5, operator.ge),
                                           fields=("FA",), conversion=LANDFAST_CONVERSION),
-    "landfast_exposure":       MetricSpec(ThresholdCount(0.5, operator.lt),
+    "landfast_exposure":       MetricSpec(ThresholdDuration(0.5, operator.lt),
                                           fields=("FA",), conversion=LANDFAST_CONVERSION),
 }
 METRICS: dict[str, MetricSpec] = {slug: replace(spec, slug=slug)
