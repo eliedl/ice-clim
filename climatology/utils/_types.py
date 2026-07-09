@@ -33,7 +33,8 @@ WetStack = Float[np.ndarray, "n_seasons n_wet"]  # one WetVector per season, sta
 # polygon frames (schema is doc-only; all pandas DataFrames)
 RawPolygons           = pd.DataFrame   # fetch output: geometry + obs_date + <field>_code columns (+ season calendar)
 ConvertedPolygons     = pd.DataFrame   # RawPolygons + the kernel value column (ct / volume_per_area)
-DateConvertedPolygons = pd.DataFrame   # one day/week-of-season's ConvertedPolygons rows, across seasons
+DateConvertedPolygons = pd.DataFrame   # polygons for a given day_of_season across seasons
+SeasonConvertedPolygons = pd.DataFrame   # polygons for a given season across day_of_seasons
 
 # spatial extent
 GridBounds = tuple[float, float, float, float]   # (xmin, ymin, xmax, ymax) in grid-CRS units

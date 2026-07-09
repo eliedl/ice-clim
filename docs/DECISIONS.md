@@ -490,5 +490,20 @@ This log records all scientific decisions, assumptions, and edge-case choices id
 
 ---
 
+## DEC-049 — Threshold-Then-Median (TTM) Reduction Order: Reintroduction as a Run-Level Strategy Axis
+
+- **Context**: The original codebase (c32ab0b) computed date metrics threshold-then-median — per-season event dates, then a cross-season median; DEC-025/027 replaced it with median-then-threshold (MTT) following the CIS normals convention. TTM is reintroduced *alongside* MTT to quantify the products' sensitivity to the reduction order and to validate against the MPO ground truth (`~/data/staged/IceGridOccurrence.GEC.climatology.zip`). Enabled by the kernel × reduction-order strategy split (commit 95b4c7e + the wet-space stream rework): kernels (`ThresholdDate`/`ThresholdDateDelta`/`ThresholdDuration`) are shape-agnostic day-axis folds; the reduction order decides on which side of the kernel the season axis collapses. Both orders share one stream primitive (`_stream_day_stacks`, `(n_seasons, n_wet)` per admissible day, **fixed season axis** — alignment across days is load-bearing for TTM): MTT compresses each day stack with the upper-middle median *before* the kernel; TTM feeds the stacks through the kernel — folding all seasons in parallel — and medians the `(n_seasons, n_wet)` result *after*.
+- **Decisions**:
+  1. **Run axis, not registry entries**: `--reduction {mtt,ttm}` CLI flag, applied at resolve time via `dataclasses.replace(spec, reduction=REDUCTIONS[slug])`. The 13 metric slugs, `PLOT_STYLES` keys, and MTT product names are unchanged; TTM products carry a `_ttm` filename suffix and every manifest records `reduction`.
+  2. **Cross-season reducer = interpolating `np.nanmedian`, PROVISIONAL**: c32ab0b used it. To be settled by whichever convention reproduces the MPO ground truth.
+  3. **Season-coverage rule (MPO)**: a cell's TTM median is emitted only when at least 50 % of seasons contribute a per-season value (`MPO_MIN_SEASON_COVERAGE = 0.5`, inclusive: 5/10 kept, 1/3 masked). The median is computed only on coverage-passing cells, which doubles as the all-NaN guard. **[NEEDS REVIEW]**: interpretation of the MPO "covered at least 50 % of the dates" wording as *season*-coverage — to be pinned against the MPO product.
+  4. **Lag metrics** = median of per-season deltas (true TTM), not delta of TTM medians — falls out of `ThresholdDateDelta` folding the day stacks (per-season deltas in the `(n_seasons, n_wet)` result, medianed after).
+- **Options considered**: per-metric `*_ttm` registry slugs (rejected: 13 duplicate rows + `PLOT_STYLES` key breakage); TTM replacing MTT (rejected: the sensitivity study needs both on every metric); per-season Python-loop folds (superseded: the vectorized day-stack fold shares the stream primitive with MTT and removes the loop).
+- **Validation status**: **PENDING** — median convention (decision 2) and coverage-rule interpretation (decision 3) await the MPO ground-truth comparison; first Experiment: manicouagan / 2011–2020 / sgrda, all 13 metrics, MTT-vs-TTM diff (design phase to follow).
+- **Implementation refs**: `climatology/processing/reductions.py` (`ThresholdThenMedian`, `_stream_day_stacks`, `_aligned_season_groups`, `REDUCTIONS`); `climatology/pipeline.py` (`reduction_slug` threading, `_method_tag`, manifest key); `climatology/main.py` (`--reduction`); `climatology/utils/_types.py` (`WetVector`/`WetStack` wet-space types); `climatology/tests/test_metrics.py` (TTM semantics: interpolating median, MTT/TTM divergence fixture, coverage rule).
+- **Literature cross-ref**: MPO IceGridOccurrence climatology (staged ground truth, validation pending). Relates to DEC-025/027 (MTT convention), DEC-035 (median convention — scope question raised by decision 2), DEC-047 (wet-space burn the streams generalize), DEC-048 (kernel/conversion orthogonality this axis completes).
+
+---
+
 
 *Decisions are logged with their validation status. Approved entries are confirmed; PENDING entries await human validation.*

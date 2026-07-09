@@ -12,8 +12,11 @@ import numpy as np
 import pandas as pd
 from shapely.geometry import box
 
+from dataclasses import replace
+
 from climatology.pipeline import FetchResult, _compute_raster
 from climatology.processing.metrics import METRICS
+from climatology.processing.reductions import THRESHOLD_THEN_MEDIAN
 from climatology.processing.rasterize import build_grid
 from climatology.processing.regions import Tier
 from climatology.services.temporal import day_of_season
@@ -109,6 +112,55 @@ def test_feb29_rows_dropped_by_season_calendar():
     prepared = FetchResult(pd.DataFrame(rows)).prepare(metric.conversion)
     assert set(prepared["day_of_season"]) == {day_of_season("01-01"), day_of_season("01-08")}, \
         "02-29 must be excluded; admissible days must survive"
+
+
+def _ttm(metric):
+    """The TTM variant of a registry metric — mirrors pipeline._resolve."""
+    return replace(metric, reduction=THRESHOLD_THEN_MEDIAN)
+
+
+def _mtt_vs_ttm_fixture():
+    """Two winters, 4x4 grid: the left half freezes on the first HD in 2001 but only on the second in 2002."""
+    left, right = box(0, 0, 2, 4), box(2, 0, 4, 4)
+    left_ct = {"2001-01-01": "92", "2001-01-08": "92", "2002-01-01": "00", "2002-01-08": "92"}
+    rows = []
+    for d, ct in left_ct.items():
+        rows.append({"obs_date": d, "ct_code": ct, "geometry": left})
+        rows.append({"obs_date": d, "ct_code": "00", "geometry": right})
+    return pd.DataFrame(rows)
+
+
+def test_ttm_freeze_up_interpolating_median():
+    """TTM freeze-up = interpolating nanmedian of per-season crossings {Jan 1, Jan 8} -> their midpoint (DEC-049)."""
+    out = _raster(_ttm(METRICS["freeze_up_date"]), _mtt_vs_ttm_fixture(), _synthetic_tier(land_mask=None))
+    mid = (day_of_season("01-01") + day_of_season("01-08")) / 2
+    assert np.all(out[:, :2] == mid), "median of the two per-season dates"
+    assert np.all(np.isnan(out[:, 2:])), "never-freezing water stays NaN"
+
+
+def test_mtt_freeze_up_disagrees_with_ttm():
+    """Same rows, MTT order: the upper-middle median CT already crosses on the first HD."""
+    out = _raster(METRICS["freeze_up_date"], _mtt_vs_ttm_fixture(), _synthetic_tier(land_mask=None))
+    assert np.all(out[:, :2] == day_of_season("01-01"))
+
+
+def test_ttm_duration_median_of_counts():
+    """TTM duration = median of per-season counts {2, 1} -> 1.5; observed ice-free water -> 0, not NaN."""
+    out = _raster(_ttm(METRICS["season_duration"]), _mtt_vs_ttm_fixture(), _synthetic_tier(land_mask=None))
+    assert np.all(out[:, :2] == 1.5), "interpolating median of {2, 1}"
+    assert np.all(out[:, 2:] == 0), "observed ice-free water counts 0"
+
+
+def test_ttm_season_coverage_rule():
+    """Cells with an event in fewer than 50% of seasons are masked (MPO rule, DEC-049)."""
+    left, right = box(0, 0, 2, 4), box(2, 0, 4, 4)
+    rows = []
+    for yr, right_ct in ((2001, "92"), (2002, "00"), (2003, "00")):
+        rows.append({"obs_date": f"{yr}-01-01", "ct_code": "92", "geometry": left})
+        rows.append({"obs_date": f"{yr}-01-01", "ct_code": right_ct, "geometry": right})
+    out = _raster(_ttm(METRICS["freeze_up_date"]), pd.DataFrame(rows), _synthetic_tier(land_mask=None))
+    assert np.all(out[:, :2] == day_of_season("01-01")), "3/3 seasons -> kept"
+    assert np.all(np.isnan(out[:, 2:])), "1/3 seasons < 50% -> masked"
 
 
 def _large_fixture(n_seasons: int = 10, n_days: int = 15) -> pd.DataFrame:

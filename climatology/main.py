@@ -26,6 +26,7 @@ sys.path.insert(0, str(Path(__file__).parents[1]))
 
 from climatology.pipeline import run
 from climatology.processing.metrics import METRICS
+from climatology.processing.reductions import REDUCTIONS
 from climatology.processing.regions import REGION_SLUGS
 from climatology.processing.sources import CHART_TABLES
 
@@ -53,6 +54,9 @@ def _parse_args() -> argparse.Namespace:
     p.add_argument("--period", type=_parse_period, default="2011-2020",
                    metavar="YYYY-YYYY",
                    help="Climatology period in winters (default: 2011-2020).")
+    p.add_argument("--reduction", choices=sorted(REDUCTIONS), default="mtt",
+                   help="Reduction order: mtt = median-then-threshold "
+                        "(default, DEC-027); ttm = threshold-then-median (DEC-049).")
     p.add_argument("--geotiff", action="store_true",
                    help="Also write one float32 GeoTIFF per tier (EPSG:32198, "
                         "NaN nodata) alongside the PNG products.")
@@ -62,6 +66,7 @@ def _parse_args() -> argparse.Namespace:
 if __name__ == "__main__":
     args = _parse_args()
     try:
-        run(args.metric, args.region, args.source, args.period, geotiff=args.geotiff)
+        run(args.metric, args.region, args.source, args.period,
+            reduction_slug=args.reduction, geotiff=args.geotiff)
     except ValueError as e:
         sys.exit(f"ERROR: {e}")

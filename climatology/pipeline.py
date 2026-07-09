@@ -3,11 +3,12 @@
 from __future__ import annotations
 
 import logging
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 
 import numpy as np
 
 from climatology.processing.metrics import METRICS, MetricSpec
+from climatology.processing.reductions import MEDIAN_THEN_THRESHOLD, REDUCTIONS
 from climatology.processing.regions import RegionSpec, Tier, resolve_region
 from climatology.processing.sources import CHART_TABLES, LAND_MASK_PATH, ChartTable
 from climatology.services.db import load_polygons
@@ -80,6 +81,12 @@ def _composite_label(spec: RegionSpec, *, multi: bool) -> str:
     return "adaptive" if multi else f"{int(round(spec.tiers[0].res_m))}m"
 
 
+def _method_tag(label: str, ctx: RunContext) -> str:
+    """Suffix non-default temporal-method products so MTT and TTM outputs coexist."""
+    slug = ctx.metric.reduction.slug
+    return label if slug == MEDIAN_THEN_THRESHOLD.slug else f"{label}_{slug}"
+
+
 def _geotiff_tags(manifest: dict, ctx: RunContext) -> dict:
     """GeoTIFF metadata tags from a run manifest, plus date-metric decoding keys."""
     tags = {**manifest, "display_label": metric_label(ctx.metric.slug, ctx.source)}
@@ -95,6 +102,7 @@ def _build_manifest(ctx: RunContext, tier: Tier, *, n_rows: int) -> dict:
     grid = tier.grid
     return {
         "metric": ctx.metric.slug, "region": ctx.region.slug, "source": ctx.source.slug,
+        "reduction": ctx.metric.reduction.slug,
         "period": ctx.period.slug, "climatology_start": clim_start,
         "climatology_end": clim_end, "tier": tier.level, "grid_res_m": tier.res_m,
         "bounds": [float(b) for b in grid.bounds],
@@ -106,13 +114,14 @@ def _build_manifest(ctx: RunContext, tier: Tier, *, n_rows: int) -> dict:
 # --- run stages ------------------------------------------------------------
 
 def _resolve(metric_slug: str, region_slug: str, source_slug: str,
-             period_slug: str) -> RunContext:
+             period_slug: str, reduction_slug: str) -> RunContext:
     """Resolve slugs to metric/source/region/period objects (the run's identity)."""
-    ctx = RunContext(metric=METRICS[metric_slug], source=CHART_TABLES[source_slug],
+    metric = replace(METRICS[metric_slug], reduction=REDUCTIONS[reduction_slug])
+    ctx = RunContext(metric=metric, source=CHART_TABLES[source_slug],
                      region=resolve_region(region_slug), period=Period(period_slug))
-    log.info("Region: %s (slug=%s) | Metric: %s | Source: %s | Winters: %s | %d tier(s)",
-             ctx.region.display, ctx.region.slug, ctx.metric.slug, ctx.source.slug,
-             ctx.period.slug, len(ctx.region.tiers))
+    log.info("Region: %s (slug=%s) | Metric: %s | Reduction: %s | Source: %s | Winters: %s | %d tier(s)",
+             ctx.region.display, ctx.region.slug, ctx.metric.slug, ctx.metric.reduction.slug,
+             ctx.source.slug, ctx.period.slug, len(ctx.region.tiers))
     return ctx
 
 
@@ -158,7 +167,7 @@ def _emit_tier(product: TierProduct, ctx: RunContext, fetch: FetchResult,
     """Persist one tier product: archive raster (+ GeoTIFF when requested)."""
     tier = product.tier
     multi = len(ctx.region.tiers) > 1
-    label = _tier_label(tier, multi=multi)
+    label = _method_tag(_tier_label(tier, multi=multi), ctx)
     manifest = _build_manifest(ctx, tier, n_rows=fetch.n_rows)
     tier_png = output_png(ctx.region.slug, ctx.metric.slug, period_slug=ctx.period.slug,
                           source_slug=ctx.source.slug, label=label)
@@ -183,7 +192,7 @@ def _render_composite(products: list[TierProduct], ctx: RunContext) -> None:
     multi = len(ctx.region.tiers) > 1
     composite_png = output_png(ctx.region.slug, ctx.metric.slug, period_slug=ctx.period.slug,
                                source_slug=ctx.source.slug,
-                               label=_composite_label(ctx.region, multi=multi))
+                               label=_method_tag(_composite_label(ctx.region, multi=multi), ctx))
     layers = [(p.values, p.tier.grid.bounds) for p in products]
     plot_metric(layers, png_path=composite_png, ctx=ctx)
 
@@ -196,9 +205,9 @@ def _export(products: list[TierProduct], ctx: RunContext, fetch: FetchResult,
 
 
 def run(metric_slug: str, region_slug: str, source_slug: str, period_slug: str,
-        *, geotiff: bool = False) -> None:
-    """Produce the climatology for one (metric, region, source, period)."""
-    context = _resolve(metric_slug, region_slug, source_slug, period_slug)
+        *, reduction_slug: str = MEDIAN_THEN_THRESHOLD.slug, geotiff: bool = False) -> None:
+    """Produce the climatology for one (metric, region, source, period, reduction order)."""
+    context = _resolve(metric_slug, region_slug, source_slug, period_slug, reduction_slug)
     fetch = _fetch(context)
     _validate(fetch, context)
 
