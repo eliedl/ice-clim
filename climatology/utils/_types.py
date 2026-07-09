@@ -10,11 +10,11 @@ Dimension vocabulary
   H, W               grid height / width (cells)
   n_wet              wet cells of a tier (``wet_mask.sum()``); the H*W grid
                      flattened to its analysed cells
+  n_seasons          climatology seasons withtin RunContext.period.window
 
 Single-use shapes are deliberately annotated inline rather than aliased here
-(e.g. ``_nanmedian_high``'s ``Float["n_seasons *rest"] -> Float["*rest"]``,
-``burn_value_stack``'s ``Float["n_groups n_wet"]``): the collapse/stack
-relationship only reads clearly at the signature itself.
+(e.g. ``_nanmedian_high``'s ``Float["n_seasons *rest"] -> Float["*rest"]``):
+the collapse relationship only reads clearly at the signature itself.
 """
 from jaxtyping import Bool, Float
 import numpy as np
@@ -28,11 +28,12 @@ BoolGrid = Bool[np.ndarray, "H W"]          # land / clip masks (True = land / i
 # back to (H, W) only at the reduction boundary
 WetVector = Float[np.ndarray, "n_wet"]      # float32 over wet cells; NaN = never-observed
 BoolVector = Bool[np.ndarray, "n_wet"]      # predicate over wet cells (threshold / observed)
+WetStack = Float[np.ndarray, "n_seasons n_wet"]  # one WetVector per season, stacked (pre-median)
 
 # polygon frames (schema is doc-only; all pandas DataFrames)
 RawPolygons           = pd.DataFrame   # fetch output: geometry + obs_date + <field>_code columns (+ season calendar)
 ConvertedPolygons     = pd.DataFrame   # RawPolygons + the kernel value column (ct / volume_per_area)
-DateConvertedPolygons = pd.DataFrame   # one day-of-season's ConvertedPolygons rows, across seasons
+DateConvertedPolygons = pd.DataFrame   # one day/week-of-season's ConvertedPolygons rows, across seasons
 
 # spatial extent
 GridBounds = tuple[float, float, float, float]   # (xmin, ymin, xmax, ymax) in grid-CRS units

@@ -6,11 +6,10 @@ from typing import NamedTuple
 
 import numpy as np
 from affine import Affine
-from jaxtyping import Float
 from rasterio.features import rasterize as rio_rasterize
 from rasterio.transform import from_bounds
 
-from climatology.utils._types import BoolGrid, DataGrid, GridBounds
+from climatology.utils._types import BoolGrid, DataGrid, GridBounds, WetStack
 
 log = logging.getLogger(__name__)
 
@@ -46,8 +45,8 @@ def burn_values(geom_value_pairs, grid: Grid) -> DataGrid:
                          transform=grid.transform, fill=np.nan, dtype=np.float32)
 
 
-def burn_value_stack(groups, grid: Grid, *, wet: BoolGrid) -> Float[np.ndarray, "n_groups n_wet"]:
-    """Burn each (geom, value)-pair group and restrict to wet cells: an ``(n_groups, n_wet)`` stack."""
+def burn_value_stack(groups, grid: Grid, *, wet: BoolGrid) -> WetStack:
+    """Burn each season's (geom, value)-pair group and restrict to wet cells: an ``(n_seasons, n_wet)`` stack."""
     return np.stack([burn_values(pairs, grid)[wet] for pairs in groups], axis=0)
 
 
