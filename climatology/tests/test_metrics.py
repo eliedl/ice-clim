@@ -95,12 +95,36 @@ def test_freeze_up_first_above():
     assert np.all(np.isnan(out[:, 2:])), "never-crossing water stays NaN"
 
 
-def test_breakup_last_above():
-    """Break-up = last admissible HD where median CT >= 4/10 (last_above)."""
-    df = _duration_fixture()
+def _breakup_fixture():
+    """4x4 grid, two winters x three HDs: the left half clears on the third HD, the right half never does."""
+    left, right = box(0, 0, 2, 4), box(2, 0, 4, 4)
+    rows = []
+    for yr in (2001, 2002):
+        for d, left_ct in ((f"{yr}-01-01", "92"), (f"{yr}-01-08", "92"), (f"{yr}-01-15", "00")):
+            rows.append({"obs_date": d, "ct_code": left_ct, "geometry": left})
+            rows.append({"obs_date": d, "ct_code": "92", "geometry": right})
+    return pd.DataFrame(rows)
+
+
+def test_breakup_first_below():
+    """Break-up = the clearing day: first admissible HD below 4/10 after the last crossing above (probe 028 — the CIS `break` convention)."""
+    df = _breakup_fixture()
     out = _raster(METRICS["breakup_date"], df, _synthetic_tier(land_mask=None))
-    assert np.all(out[:, :2] == day_of_season("01-08")), "ice still present on the last HD"
-    assert np.all(np.isnan(out[:, 2:])), "never-crossing water stays NaN"
+    assert np.all(out[:, :2] == day_of_season("01-15")), \
+        "break-up is the HD the ice clears, not the last HD it is present"
+    assert np.all(np.isnan(out[:, 2:])), \
+        "a cell still above threshold on the final HD never clears -> NaN"
+
+
+def test_breakup_ignores_pre_ice_open_water():
+    """The sub-threshold days *before* freeze-up must not register as a clearing day."""
+    left = box(0, 0, 2, 4)
+    rows = [{"obs_date": d, "ct_code": ct, "geometry": left}
+            for yr in (2001, 2002)
+            for d, ct in ((f"{yr}-01-01", "00"), (f"{yr}-01-08", "92"), (f"{yr}-01-15", "00"))]
+    out = _raster(METRICS["breakup_date"], pd.DataFrame(rows), _synthetic_tier(land_mask=None))
+    assert np.all(out[:, :2] == day_of_season("01-15")), \
+        "open water on 01-01 precedes any crossing above — only the post-ice clearing counts"
 
 
 def test_feb29_rows_dropped_by_season_calendar():

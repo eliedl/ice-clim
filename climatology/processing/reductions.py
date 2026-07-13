@@ -29,24 +29,29 @@ SliceStream = Callable[[], Iterator[tuple[int, WetSlice]]]
 
 @dataclass(frozen=True)
 class ThresholdDate:
-    """Day-of-season of the threshold crossing; ``mode`` picks first/last."""
+    """Day-of-season of the threshold crossing; ``mode`` picks which crossing."""
 
     threshold: float
-    mode: str  # "first_above" | "last_above"
+    mode: str  # "first_above" | "last_above" | "first_below"
 
     def reduce(self, slices: SliceStream) -> WetSlice:
-        result = already_found = None
+        result = seen_above = None
         for ordinal, values in slices():
             if result is None:  # shapes come from the stream's first slice
                 result = np.full(values.shape, np.nan, dtype=np.float32)
-                already_found = np.zeros(values.shape, dtype=bool)
+                seen_above = np.zeros(values.shape, dtype=bool)
             above = values >= self.threshold
             if self.mode == "first_above":
-                newly = above & ~already_found # one cell cannot be true twice
-                result[newly] = ordinal
-                already_found |= newly
-            else:  # last_above
+                result[above & ~seen_above] = ordinal  # one cell cannot cross up twice
+            elif self.mode == "last_above":
                 result[above] = ordinal
+            else:  # first_below — the clearing day: the first sub-threshold day
+                # *after the last* crossing above, so a re-freeze discards the
+                # dip that preceded it. NaN days (unobserved) never clear a cell,
+                # and a cell still above on the final day never clears at all.
+                result[above] = np.nan
+                result[~above & ~np.isnan(values) & seen_above & np.isnan(result)] = ordinal
+            seen_above |= above
         return result
 
 
@@ -58,9 +63,7 @@ class ThresholdDateDelta:
     early: ThresholdDate
 
     def reduce(self, slices: SliceStream) -> WetSlice:
-        # Non-negative by construction: registry entries pass the temporally-later
-        # crossing as `late` (higher threshold on first_above, lower on last_above);
-        # NaN (event never reached) propagates.
+    
         return self.late.reduce(slices) - self.early.reduce(slices)
 
 

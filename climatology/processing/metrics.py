@@ -59,13 +59,13 @@ class MetricSpec:
 # CLI metric choices
 _SPECS: dict[str, MetricSpec] = {
     "freeze_up_date":          MetricSpec(ThresholdDate(0.4, "first_above")),
-    "breakup_date":            MetricSpec(ThresholdDate(0.4, "last_above")),
+    "breakup_date":            MetricSpec(ThresholdDate(0.4, "first_below")),
     "first_occurrence_date":   MetricSpec(ThresholdDate(0.1, "first_above")),
     "last_occurrence_date":    MetricSpec(ThresholdDate(0.1, "last_above")),
     "formation_lag":           MetricSpec(ThresholdDateDelta(ThresholdDate(0.4, "first_above"),
                                                              ThresholdDate(0.1, "first_above"))),
     "melt_lag":                MetricSpec(ThresholdDateDelta(ThresholdDate(0.1, "last_above"),
-                                                             ThresholdDate(0.4, "last_above"))),
+                                                             ThresholdDate(0.4, "first_below"))),
     "season_duration":         MetricSpec(ThresholdDuration(0.4, operator.ge)),
     "season_duration_10":      MetricSpec(ThresholdDuration(0.1, operator.ge)),
     "storm_exposure_duration": MetricSpec(ThresholdDuration(0.3, operator.le)),
