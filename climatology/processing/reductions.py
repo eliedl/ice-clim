@@ -63,7 +63,6 @@ class ThresholdDateDelta:
     early: ThresholdDate
 
     def reduce(self, slices: SliceStream) -> WetSlice:
-    
         return self.late.reduce(slices) - self.early.reduce(slices)
 
 

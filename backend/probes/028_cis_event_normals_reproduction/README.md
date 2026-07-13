@@ -98,12 +98,12 @@ are pinned by `test_breakup_first_below` and `test_breakup_ignores_pre_ice_open_
 is the break-up crossing and moved with it:
 `ThresholdDateDelta(last_above(0.1), first_below(0.4))`.
 
-**[NEEDS REVIEW]** This deliberately mixes endpoint conventions and therefore **can go
+This deliberately mixes endpoint conventions and therefore **can go
 negative**: a cell dropping from ≥ 4/10 straight to ice-free has its 1/10 ice gone on day
-`L` while its 4/10 clearing day is `L + 7`, giving `melt_lag = −7 d`. `ThresholdDateDelta`'s
+`L` while its 4/10 clearing day is `L + 7`, giving `melt_lag = −7 d` for sgrdr and `-1 d` for sgrda. `ThresholdDateDelta`'s
 former "non-negative by construction" invariant no longer holds and its comment has been
 corrected. The alternative (both legs `first_below`) stays non-negative and is numerically
-identical for contiguous melt-out; it was considered and not taken.
+identical for contiguous melt-out is implemented. 
 
 `season_duration` / `season_duration_10` are **unchanged**. `ThresholdDuration` is a count
 of admissible steps satisfying a predicate — it has no endpoints, so no first-below /
