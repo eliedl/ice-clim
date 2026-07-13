@@ -33,7 +33,7 @@ pointers, leaving this log untouched.
 
 ---
 
-<!-- next-id: e146 -->
+<!-- next-id: e166 -->
 
 ## 2026-06-01
 
@@ -240,6 +240,31 @@ pointers, leaving this log untouched.
 
 - e145 · [CIS Normals EC n.d.] For the landfast-ice normals, CIS uses the landfast **form of ice directly** to assign a binary landfast presence per chart, then thresholds the climatological **median at 50%**: a cell is landfast when its median form of ice over the normal period is landfast. Direct-attribute computation — not a CT-compactness proxy. → DEC-048 #climatology-methodology #landfast #data-standard #concentration-threshold
 
+## 2026-07-13
+
+- e146 · [ECCC CMIP5 2023] **Resolves e139.** The value shown for each 20-yr period (2021–2040, 2041–2060, 2061–2080, 2081–2100) is a **20-year mean of the projected *change*** — an anomaly vs the 1986–2005 reference — reported as an **ensemble percentile (5th/25th/50th/75th/95th) across models**, not a single model's value. Two distinct products share the banner: *absolute* SIC/SIT fields (monthly, 1900–2100) and *change* fields (the four 20-yr windows). The 20-yr windows apply only to the change product. → e139 → e137 #projection #methodology
+- e147 · [ECCC CMIP5 2023] **Resolves e141 (inputs).** The input question is two-level. **Level A — inputs to the ECCC product**: it ingests the CMIP5 `sic`/`sit` fields from the PCMDI archive (downloaded 15 Apr 2014), subsets to Canada, interpolates each model from its native ocean grid onto a common 1×1°, then takes percentiles across models. **Level B — inputs to the underlying GCMs**: the standardized CMIP5 external forcings (→ e155). Crucially, **sea ice is nowhere an input — it is prognostic in every model, with no observational constraint anywhere in the chain.** CIS charts and CMIP sea ice are therefore *not* commensurable as data; only as observation vs model. → e141 → e155 #projection #forcing #methodology
+- e148 · [ECCC CMIP5 2023] **Lexicon trap.** §2 states "only **concentration-driven** experiments are used." This means the **greenhouse-gas concentration** is prescribed rather than emissions — it does **not** mean sea-ice concentration is prescribed. Misreading inverts the meaning of the whole product. #lexicon #projection
+- e149 · [ECCC CMIP5 2023] Ensemble construction: **one member per model, equal weight** ("one model, one vote"); models differing only in physical parameterization are treated as distinct. Model counts differ by variable — **29** for temperature/precipitation/wind, **28** for sea-ice concentration (BNU-ESM dropped), **26** for sea-ice thickness (BNU-ESM, GISS-E2-H, GISS-E2-R dropped), all for stated data issues. Percentile spread is explicitly *not* the full uncertainty (it mixes natural variability and model spread). #projection #methodology
+- e151 · [ECCC CMIP6 n.d.] **Resolves e142.** The CMIP6 successor product exists and is a clean upgrade: up to **35 models**, **SSP1-1.9 → SSP5-8.5**, reference period **1995–2014** (vs 1986–2005), historical 1900–2014, **both SIC and SIT**, same 1×1° grid and same 5/25/50/75/95 percentile structure, same four 20-yr change windows. If the ECCC ensemble product is used at all, **CMIP6 supersedes CMIP5**. → e142 #projection #data
+- e152 · [ECCC CMIP6 n.d.] **[OPEN — scope]** A proper analysis of the CMIP6 product is needed before any conclusion on its usability for this project can be drawn. **Out of scope for now.** The suspicion to test when it is in scope: 1° cells give O(20–30) cells for the whole Gulf against the 500 m–1 km grids this project targets (→ e045, e077, e127), i.e. a ~3-orders-of-magnitude cell-area gap. Not yet a finding. #projection #open-question #scope #resolution
+- e153 · [CanDCS n.d.] The high-resolution **downscaled** Canadian products (CanDCS-U6 / CanDCS-M6, ~6–10 km, BCCAQv2 & multivariate, SSP1-2.6/2-4.5/5-8.5) carry **temperature and precipitation only — no sea ice**. Canadian statistical downscaling has been built for T & P. **There is no high-resolution Canadian sea-ice projection product.** This gap is arguably where this project sits. #data #resolution #gap #projection
+
+- e154 · [Swart et al. 2019] ECCC's own GCM is **CanESM**, built at CCCma (Victoria BC) — one vote among the 28/29 in the ensemble products above, not their author. Sea-ice component changed completely between phases: **CanESM2** (CMIP5) used **CanSIM1**, a *cavitating-fluid* rheology (no shear strength); **CanESM5** (CMIP6) uses **LIM2** inside CanNEMO (NEMO 3.4.1, ORCA1 tripolar, ~1°, 45 levels), atmosphere CanAM5 (T63, 49 levels). CanESM5 improves sea-ice *volume* over CanESM2 but **overestimates NH winter/spring extent**, with excess ice in the **Labrador Sea** and east of Greenland — an over-icing bias in the sector feeding the Gulf. Its **ECS is 5.6 K** (CanESM2: 3.7 K), among the highest in CMIP6 — a canonical "hot model", and an emergent property, not tuned. Bears on any model weighting/selection: an equal-weight ensemble is not a neutral choice. → e149 #models #bias #projection
+
+- e155 · [PCMDI CMIP5 Forcing n.d.] The CMIP5 external forcings are **individually documented, named, downloadable datasets**, not a prose list: GHG concentrations (RCP database, IIASA); ozone (**AC&C/SPARC ozone database**, 1850–2100, Cionni et al.); aerosol & reactive-gas emissions (RCP emissions, IIASA / Jülich); land use (**LUH**, 0.5°, 1500–2100); solar irradiance (**SOLARIS**); CO₂ emissions (gridded fossil-fuel + land-use, for ESMs run in emissions-driven mode); AMIP SST & sea-ice boundary conditions (atmosphere-only runs only). **Note: no standardized volcanic-aerosol forcing is provided on the CMIP5 forcing page** — models supplied their own. #forcing #projection #reference
+- e156 · [input4MIPs n.d.] For CMIP6 the answer is much stronger: **input4MIPs** is a dedicated activity whose *whole purpose* is "making model forcing more transparent". Every boundary-condition and forcing dataset (GHG concentrations, CEDS anthropogenic emissions, biomass burning, ozone, stratospheric/volcanic aerosol, solar, LUH2 land use, AMIP SST/sea-ice) is **published on ESGF, standardized to CMIP metadata conventions, versioned, and individually citable**. → e155 #forcing #projection #reference
+- e157 · [input4MIPs n.d.] **Boundary: forcings ≠ model internals.** input4MIPs documents what is *imposed from outside* the model. It does **not** document parameterizations, tuning, initial conditions (taken from each model's piControl spin-up), bathymetry, or land-sea mask — those are model-specific and live in the **model description paper**. → e154 → e156 #forcing #open-question #reference
+
+- e158 · [Crawford et al. 2023] Evaluates **102 simulations from 37 CMIP6 models** over the Hudson Bay Complex, **1979–2014**. The closest methodological analogue found so far to this project's setting: semi-enclosed, seasonal-ice, Canadian. #methodology #projection #example-use
+- e159 · [Crawford et al. 2023] **Two-threshold phenology.** Uses **15% SIC** for *advance* / *retreat* (first/last occurrence) and **80% SIC** for *closing* / *opening* (freeze-up/break-up). Maps the **number of ice-free days** using the 15% threshold, and open water using the 80% threshold. The 80% "closing/opening" pair has no equivalent here. → DEC-025 → DEC-027 → e017 → e018 #concentration-threshold #climatology-methodology #metric
+- e160 · [Crawford et al. 2023] Uses a **figure as the phenology lexicon** — a single diagram defining advance/retreat/closing/opening/ice-free against a seasonal SIC curve. Strong candidate template for defining this project's own phenology vocabulary unambiguously in a report. #visualization #lexicon #standard #own-idea
+- e161 · [Crawford et al. 2023] **Contains references to other sea-ice phenology definitions** — a ready-made bibliography for the freeze-up/break-up definition question. Mine it before settling any further phenology convention. → e017 → e018 #to-search #methodology #open-question
+- e162 · [Crawford et al. 2023] **Observational reference set**: SIC products derived from satellite passive-microwave imagery (average of four: OSISAF, Bootstrap, NASA Team, max-SIC), plus **ERA5** reanalysis and **PIOMAS** (Pan-Arctic Ice Ocean Modeling and Assimilation System). Note the absence of ice-chart data — an opening for CIS charts as an independent reference. #data-quality #model-comparison-against-data #forcing
+- e163 · [Crawford et al. 2023] **Reporting pattern worth copying**: results given as a **distribution of values per sub-region** for each metric (Fig. 2) — sub-region average, plus the sub-regions holding the **minimum and maximum** values. Directly transferable to a per-MRC / per-municipality presentation of GSL metrics. → e013 #methodology #metric #visualization #own-idea
+- e164 · [Crawford et al. 2023] Computes **temperature-corrected phenologies** and uses **Pearson correlations** to relate phenology to forcing. #methodology #forcing #statistics
+- e165 · [Crawford et al. 2023] Partitions ice growth into **thermodynamic, convective and advective** components; sea-ice **drift computed with MetPy**. → e152 #bias #drift #methodology #finding
+
 ---
 
 ## Watchlist (potentially relevant, not yet read)
@@ -262,6 +287,34 @@ Leads surfaced during reading but not yet sourced/read. Promote to a dated entry
 - **Crocker 2002** — Crocker, G. (2002). Analysis of sea ice climate trends in Canadian waters.
   Contract report for CIS, Environment Canada, Ballicater Consulting Ltd., Report No. 01-04,
   119 pp. → [CIS Archive No.1 2006]
+
+- **[Crawford et al. 2023]** — *(partially read 2026-07-13; e158–e165 are from a skim, full
+  read pending — **high priority**)*. CMIP6 sea-ice phenology bias in the Hudson Bay Complex.
+  The closest methodological analogue to this project found so far. Read for: the two-threshold
+  phenology scheme (15% / 80%), the phenology lexicon figure, the per-sub-region distribution
+  reporting, the growth partition, and **its bibliography of other sea-ice phenology
+  definitions** (e161). → e158 → e165
+
+- **[Swart et al. 2019]** — *(partially read 2026-07-13; e154 is from a targeted read of the
+  component/sensitivity sections)*. CanESM5 model description. Read fully only if CanESM
+  output is used directly rather than through an ensemble.
+
+- **Arora et al. 2011** — Arora, V.K., Scinocca, J.F., Boer, G.J., Christian, J.R., Denman, K.L.,
+  Flato, G.M., Kharin, V.V., Lee, W.G. & Merryfield, W.J. (2011). Carbon emission limits required
+  to satisfy future representative concentration pathways of greenhouse gases. *Geophysical
+  Research Letters*, 38, L05805. <https://doi.org/10.1029/2010GL046270>
+  *(Citation verified 2026-07-13.)* The de-facto CanESM2 reference — the CMIP5-era Canadian
+  entry, and one of the 28/26 models in [ECCC CMIP5 2023]. **Caveat: it is not a model
+  description paper.** Its subject is carbon-emission limits under the RCPs; CanESM2 is
+  described only as the tool used. Cite it for CanESM2's *identity*, not for its sea-ice
+  physics — for that, the component detail (CanSIM1 cavitating fluid, CanOM4) is better taken
+  from [Swart et al. 2019]'s comparison against CanESM5, or from a dedicated CanESM2/CanCM4
+  paper not yet located. Lower priority than Crawford. → e154
+
+- **Sobie et al. 2024** — Multivariate Canadian Downscaled Climate Scenarios for CMIP6
+  (CanDCS-M6). *Geoscience Data Journal*. <https://doi.org/10.1002/gdj3.257>. Read if the
+  downscaling *method* (not the T/P data) becomes relevant — e.g. as a template for
+  downscaling a sea-ice field, which no Canadian product currently does. → e153
 
 ---
 
@@ -329,3 +382,15 @@ Leads surfaced during reading but not yet sourced/read. Promote to a dated entry
 [CIS SIGRID-3 Guide 2025]: Canadian Ice Service / Environment and Climate Change Canada (2025). Service canadien des glaces — Données sur les glaces de mer et de lac : Guide de l'utilisateur SIGRID-3, Version 1.0, octobre 2025. [French-language edition.] → docs/normative/README.md
 
 [WMO Climate Normals 2017]: World Meteorological Organization (2017). WMO Guidelines on the Calculation of Climate Normals, 2017 edition. WMO-No. 1203. [Local copy is the French edition: « Directives de l'OMM pour le calcul des normales climatiques », OMM-N° 1203.] → docs/normative/README.md
+
+[Crawford et al. 2023]: Crawford, A.D., Rosenblum, E., Lukovich, J.V. & Stroeve, J.C. (2023). Sources of seasonal sea-ice bias for CMIP6 models in the Hudson Bay Complex. *Annals of Glaciology*, 64(92), 236–253. https://doi.org/10.1017/aog.2023.42
+
+[Swart et al. 2019]: Swart, N.C. et al. (2019). The Canadian Earth System Model version 5 (CanESM5.0.3). *Geoscientific Model Development*, 12(11), 4823–4873. https://doi.org/10.5194/gmd-12-4823-2019 [Full author list not transcribed — expand if cited formally.]
+
+[ECCC CMIP6 n.d.]: ECCC (n.d.). The CMIP6 multi-model ensembles — technical documentation. https://climate-scenarios.canada.ca/?page=cmip6-technical-notes [web page; publication date unknown. Successor to [ECCC CMIP5 2023].]
+
+[CanDCS n.d.]: ECCC / PCIC (n.d.). Canadian Downscaled Climate Scenarios — Univariate and Multivariate, CMIP6 (CanDCS-U6, CanDCS-M6). https://climatedata.ca/about-candcs-u6/ and https://climate-scenarios.canada.ca/?page=CMIP6-statistical-downscaling [data product; ~6–10 km; temperature & precipitation only.]
+
+[PCMDI CMIP5 Forcing n.d.]: Program for Climate Model Diagnosis and Intercomparison (n.d.). CMIP5 Forcing Data. https://pcmdi.llnl.gov/mips/cmip5/forcing.html [web page; the per-dataset index of the external forcings imposed on all CMIP5 models.]
+
+[input4MIPs n.d.]: Program for Climate Model Diagnosis and Intercomparison (n.d.). input4MIPs — input datasets for Model Intercomparison Projects. https://pcmdi.llnl.gov/mips/input4MIPs/ ; controlled vocabularies at https://input4mips-cvs.readthedocs.io [The versioned, citable ESGF archive of every CMIP6 forcing / boundary-condition dataset. Companion tech report: Durack, P.J. & Taylor, K.E., "input4MIPs: Making model forcing more transparent", LLNL-JRNL-729886.]
