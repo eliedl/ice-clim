@@ -208,11 +208,19 @@ def _land_polygons(extent: GridBounds) -> gpd.GeoDataFrame:
     return gpd.read_file(LAND_DISPLAY_PATH, bbox=bbox_geom).to_crs(epsg=GRID_CRS)
 
 
-def _draw_basemap(ax, tile: BasemapTile | None, *, zorder: int) -> None:
-    """Draw the Mapbox render *over* the data: its sea is transparent, so only land, coastal towns and hillshade land on top."""
+def _draw_basemap_land(ax, tile: BasemapTile | None, *, zorder: int) -> None:
+    """Draw the basemap's land *over* the data: clipped to the sea, so the ice values show through."""
     if tile is None:
         return
-    ax.imshow(tile.rgba, extent=tile.extent, origin="upper",
+    ax.imshow(tile.land, extent=tile.extent, origin="upper",
+              zorder=zorder, interpolation="none")
+
+
+def _draw_basemap_labels(ax, tile: BasemapTile | None, *, zorder: int) -> None:
+    """Draw the place names last, above the coastline — a label is annotation, not geography."""
+    if tile is None:
+        return
+    ax.imshow(tile.labels, extent=tile.extent, origin="upper",
               zorder=zorder, interpolation="none")
 
 
@@ -274,7 +282,7 @@ def _save(fig, png_path: Path, *, tight: bool = True) -> None:
     are cropped by different amounts.
     """
     png_path.parent.mkdir(parents=True, exist_ok=True)
-    fig.savefig(png_path, dpi=150, bbox_inches="tight" if tight else None,
+    fig.savefig(png_path, dpi=300, bbox_inches="tight" if tight else None,
                 facecolor=fig.get_facecolor())
     log.info("Map saved to %s", png_path)
 
@@ -304,8 +312,9 @@ def plot_metric(
     land = _land_polygons(extent)
     tile = load_basemap(extent, land)
     top = len(layers) + 1
-    _draw_basemap(ax, tile, zorder=top)
+    _draw_basemap_land(ax, tile, zorder=top)
     _frame_axes(ax, land, extent, zorder=top + 1, fill=tile is None)
+    _draw_basemap_labels(ax, tile, zorder=top + 2)   # names ride above the coastline
 
     cbar = fig.colorbar(im, ax=ax, orientation="horizontal",
                         fraction=0.046, pad=0.1, extend="both")
@@ -615,8 +624,9 @@ def plot_metric_panels(
         im = _draw_layers(ax, [(l.values, l.bounds) for l in panel.layers],
                           cmap=cmap, norm=norm)
         top = len(panel.layers) + 1
-        _draw_basemap(ax, tile, zorder=top)
+        _draw_basemap_land(ax, tile, zorder=top)
         _frame_axes(ax, land, extent, zorder=top + 1, fill=tile is None)
+        _draw_basemap_labels(ax, tile, zorder=top + 2)   # names ride above the coastline
         ax.set_title(f"Winters {panel.period} — {panel.source.slug}",
                      fontsize=11, pad=6, color=DARK_FG)
         ax.tick_params(labelsize=7)

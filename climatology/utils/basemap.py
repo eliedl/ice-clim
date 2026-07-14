@@ -47,9 +47,16 @@ _warned = False
 
 @dataclass(frozen=True)
 class BasemapTile:
-    """A rendered basemap on the grid CRS: RGBA cells and the ``imshow`` extent they span."""
+    """A rendered basemap on the grid CRS, kept as two layers on one grid.
 
-    rgba: np.ndarray
+    They stay separate so the caller can slip the coastline *between* them: the coastline is
+    geography and belongs against the land, while a place name is annotation and belongs on
+    top of everything. Flattening them here would force the coastline above the labels or
+    below the land, and both read wrong.
+    """
+
+    land: np.ndarray                            # base style, clipped to the landmask
+    labels: np.ndarray                          # symbol layers, unclipped
     extent: tuple[float, float, float, float]   # (xmin, xmax, ymin, ymax), imshow order
 
 
@@ -202,7 +209,7 @@ def _alpha_over(top: np.ndarray, bottom: np.ndarray) -> np.ndarray:
 
 
 def load_basemap(extent: GridBounds, land: gpd.GeoDataFrame) -> BasemapTile | None:
-    """The basemap for ``extent``: land clipped to ``land``, labels on top; None when unavailable.
+    """The basemap for ``extent``: land clipped to ``land``, labels kept apart; None if unavailable.
 
     The labels are deliberately *not* clipped — a town's name may overhang the water it sits
     beside, and cropping it there would be an artefact of the landmask, not cartography.
@@ -215,4 +222,4 @@ def load_basemap(extent: GridBounds, land: gpd.GeoDataFrame) -> BasemapTile | No
     warped, imshow_extent = warp_to_grid(*base, extent)
     clipped = clip_to_land(warped, land_mask(land, extent, warped.shape[:2]))
     label_layer, _ = warp_to_grid(*labels, extent)
-    return BasemapTile(_alpha_over(label_layer, clipped), imshow_extent)
+    return BasemapTile(land=clipped, labels=label_layer, extent=imshow_extent)

@@ -287,10 +287,13 @@ def fig_over_data_v2(extent, land, layers) -> None:
         sys.exit("load_basemap returned None — MAPBOX_TOKEN unset?")
     cmap, norm = _scale(layers)
 
+    # The production z-order: data, land, coastline, then the names on top.
     fig, ax = plt.subplots(figsize=(11, 8))
     _draw_data(ax, layers, cmap, norm)
-    ax.imshow(tile.rgba, extent=tile.extent, origin="upper", zorder=len(layers) + 1)
-    land.boundary.plot(ax=ax, color=DARK_COAST, linewidth=0.4, zorder=len(layers) + 2)
+    top = len(layers) + 1
+    ax.imshow(tile.land, extent=tile.extent, origin="upper", zorder=top)
+    land.boundary.plot(ax=ax, color=DARK_COAST, linewidth=0.4, zorder=top + 1)
+    ax.imshow(tile.labels, extent=tile.extent, origin="upper", zorder=top + 2)
     _finish(ax, extent, "6 — basemap over the data (production `load_basemap`)\n"
                         "Manicouagan, season_duration_10, 2011–2020 sgrda")
     fig.colorbar(plt.cm.ScalarMappable(norm=norm, cmap=cmap), ax=ax,
