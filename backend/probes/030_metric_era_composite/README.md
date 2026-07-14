@@ -58,10 +58,10 @@ Two metrics by default, one per unit regime the figure must hold on one scale:
 | 1991-2020 | sgrdr | 9 | 70 d | 3,576 km² |
 | 2011-2020 | sgrda | **62** | 63 d | 3,576 km² |
 
-## Candidate: logarithmic area axis (probe-local, staged promotion)
+## Logarithmic area axis — staged here, PROMOTED to `plot.py` (2026-07-14)
 
-Production draws the distribution on a **linear** area axis. Area shares span orders of
-magnitude, so the tail is unreadable there. The probe measures how badly:
+Production drew the distribution on a **linear** area axis. Area shares span orders of
+magnitude, so the tail was unreadable there. The probe measured how badly:
 
 | metric | era | share range | decades | smallest real bar, linear |
 |---|---|---|---|---|
@@ -78,19 +78,23 @@ Every panel but one renders its smallest real value at **under 1 px** — invisi
 what prompted the log axis: the Outardes estuary's Apr 02 break-up holds 0.36% of the region
 (probe 029), vanished on the linear axis, yet dominates the map's colour.
 
-`probe.py` overrides `plot._draw_distribution` with `_draw_distribution_log` for the render
-and emits **both** scales per metric (`*_linear.png`, `*_log.png`) for comparison.
+While staged, `probe.py` overrode `plot._draw_distribution` and emitted **both** scales per
+metric (`*_linear.png`, `*_log.png`) for comparison. The log axis read the tail without
+distorting the mode, so it was **promoted into `plot.py`** and the probe-local override
+deleted — the probe now renders the production figure. The measurement above is kept as the
+record of what earned the change.
 
-**The axis is fixed at `HIST_XLIM = (0.01, 100)` %** — the full share range, with 0.01%
-standing in for the 0 a log axis cannot draw. It is deliberately *not* derived from the
-values: a data-dependent floor makes a bar's length mean something different in every panel
-and every metric, which is the same trap as a per-panel colour scale and defeats the
+**The axis is fixed at `PANEL_HIST_XLIM = (0.01, 100)` %** — the full share range, with
+0.01% standing in for the 0 a log axis cannot draw. It is deliberately *not* derived from
+the values: a data-dependent floor makes a bar's length mean something different in every
+panel and every metric, which is the same trap as a per-panel colour scale and defeats the
 comparison the figure exists for. A first pass did derive it per panel and had to be
 discarded. With fixed limits, a bar length is the same share of the region everywhere —
 comparable across eras *and* across metrics.
 
-Verdict: **the log axis reads the tail without distorting the mode — recommend promotion**
-into `plot.py`, carrying the fixed `HIST_XLIM` with it.
+A fine dotted grid (`linestyle=":"`) accompanies it: major lines on the decades and on the
+colourbar's value ticks, minor lines subdividing each decade (unlabelled, or the decade
+labels collide), drawn under the bars.
 
 ## Findings
 

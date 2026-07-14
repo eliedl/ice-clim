@@ -14,7 +14,9 @@ Design under test (see README):
   - one colour scale + one extent across the four eras, so a colour and a place mean the
     same thing in every panel;
   - the value distribution beside each map is **area-weighted** and de-overlapped across
-    tiers (validated separately by probe 029);
+    tiers (validated separately by probe 029), on a **log area axis with fixed limits**
+    (staged here, promoted to `plot.py` 2026-07-14 — the `lin. px` column below is the
+    measurement that earned it);
   - step-count metrics are scaled to days at `TierProduct` (sgrdr x7), which is what lets
     durations share a scale with sgrda at all.
 
@@ -28,16 +30,13 @@ Run:
 from __future__ import annotations
 
 import argparse
-from contextlib import contextmanager
 from datetime import datetime, timedelta
 from pathlib import Path
 
 import numpy as np
-from matplotlib.ticker import FuncFormatter, LogLocator, NullLocator
 
 from climatology.processing.metrics import METRICS
 from climatology.processing.regions import resolve_region
-from climatology.services import plot
 from climatology.services.plot import _area_weights, plot_metric_panels, threshold_label
 from climatology.services.temporal import SEASON_ORIGIN
 from climatology.utils.arithmetics import percentile_range
@@ -51,64 +50,6 @@ REGION = "manicouagan"
 # on a single scale (day-of-season ordinals vs chart counts scaled to days).
 METRICS_DEFAULT = ("freeze_up_date", "season_duration")
 KM2 = 1e6
-
-SCALES = ("linear", "log")
-# Fixed log-axis limits: the axis is the full share range, 0.01% (standing in for 0, which
-# a log axis cannot draw) to the whole region. Deriving limits from the values would make a
-# bar's length mean something different in every panel and every metric — the same trap as
-# a per-panel colour scale.
-HIST_XLIM = (0.01, 100.0)
-
-
-# --- probe-local: logarithmic area axis (staged promotion) --------------------
-# Production draws the distribution on a linear area axis, where a value holding 0.36% of
-# the region — the Outardes estuary's late break-up, a real signal — renders as ~1 px next
-# to a 45% mode. This is the candidate replacement. It overrides `plot._draw_distribution`
-# for the render only; it enters plot.py only if the comparison below justifies it.
-
-def _draw_distribution_log(hax, layers, *, cmap, norm, tick_values, tick_labels) -> None:
-    """The production distribution, on a log area axis."""
-    values, weights = _area_weights(layers)
-    vmin, vmax = norm.vmin, norm.vmax
-    edges = np.linspace(vmin, vmax, plot.PANEL_HIST_BINS + 1)
-    hist, _ = np.histogram(np.clip(values, vmin, vmax), bins=edges, weights=weights)
-    pct = 100.0 * hist / weights.sum()
-    centers = 0.5 * (edges[:-1] + edges[1:])
-
-    hax.set_facecolor(plot.DARK_OCEAN)
-    hax.barh(centers, pct, height=np.diff(edges), color=cmap(norm(centers)), edgecolor="none")
-
-    hax.set_ylim(vmax, vmin)
-    hax.set_yticks(tick_values)
-    hax.set_yticklabels(tick_labels, fontsize=7)
-
-    # Bars anchor at 0, so they read from the left spine; the fixed limits mean a bar length
-    # is the same share of the region in every panel and every metric.
-    hax.set_xscale("log")
-    hax.set_xlim(*HIST_XLIM)
-    hax.xaxis.set_major_locator(LogLocator(base=10.0, numticks=5))
-    hax.xaxis.set_major_formatter(FuncFormatter(lambda v, _: f"{v:g}"))
-    hax.xaxis.set_minor_locator(NullLocator())
-    hax.set_xlabel("% of area (log)", fontsize=7, color=plot.DARK_FG, labelpad=2)
-    hax.tick_params(axis="both", labelsize=7, colors=plot.DARK_FG, length=2, pad=1)
-    for side, spine in hax.spines.items():
-        spine.set_visible(side in ("left", "bottom"))
-        spine.set_edgecolor(plot.DARK_LINE)
-
-
-@contextmanager
-def _hist_scale(scale: str):
-    """Swap in the probe's log histogram for the duration of a render."""
-    if scale == "linear":
-        yield
-        return
-    original = plot._draw_distribution
-    plot._draw_distribution = _draw_distribution_log
-    try:
-        yield
-    finally:
-        plot._draw_distribution = original
-
 
 def _scorecard(region: str, metric: str, panels: list) -> list[str]:
     """What scale the eras land on, and what the distribution behind each panel looks like."""
@@ -144,22 +85,17 @@ def _scorecard(region: str, metric: str, panels: list) -> list[str]:
     return lines
 
 
-def _render(region: str, metric: str, stamp: str) -> tuple[list[Path], list[str]]:
-    """Reference render of one metric's composite, one per histogram scale, + its scorecard."""
+def _render(region: str, metric: str, stamp: str) -> tuple[Path, list[str]]:
+    """Reference render of one metric's composite + its scorecard."""
     tiers = [tier.level for tier in resolve_region(region).tiers]
     panels = [_load_panel(region, metric, period, source, tiers)
               for period, source in sorted(PERIOD_SOURCES.items())]
     res_label = " / ".join(f"{int(round(l.res_m))} m" for l in panels[0].layers)
 
-    pngs = []
-    for scale in SCALES:
-        png = OUTPUT_DIR / f"{stamp}_{region}_{metric}_{scale}.png"
-        with _hist_scale(scale):
-            plot_metric_panels(panels, png_path=png, metric_slug=metric,
-                               region_display=resolve_region(region).display,
-                               res_label=res_label)
-        pngs.append(png)
-    return pngs, _scorecard(region, metric, panels)
+    png = OUTPUT_DIR / f"{stamp}_{region}_{metric}.png"
+    plot_metric_panels(panels, png_path=png, metric_slug=metric,
+                       region_display=resolve_region(region).display, res_label=res_label)
+    return png, _scorecard(region, metric, panels)
 
 
 def _parse_args() -> argparse.Namespace:
@@ -180,17 +116,15 @@ def main() -> None:
              f"Run: {stamp}",
              f"Eras: {', '.join(f'{p} ({s})' for p, s in sorted(PERIOD_SOURCES.items()))}"]
 
-    n_png = 0
     for metric in metrics:
-        pngs, scorecard = _render(args.region, metric, stamp)
+        png, scorecard = _render(args.region, metric, stamp)
         lines += scorecard
-        lines += [f"  rendered: {png.name}" for png in pngs]
-        n_png += len(pngs)
+        lines.append(f"  rendered: {png.name}")
 
     report = "\n".join(lines)
     (OUTPUT_DIR / f"{stamp}.txt").write_text(report + "\n")
     print(report)
-    print(f"\nSaved: {OUTPUT_DIR / f'{stamp}.txt'} (+ {n_png} PNG)")
+    print(f"\nSaved: {OUTPUT_DIR / f'{stamp}.txt'} (+ {len(metrics)} PNG)")
 
 
 if __name__ == "__main__":

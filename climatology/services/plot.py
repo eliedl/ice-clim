@@ -17,8 +17,8 @@ import matplotlib.colors as mcolors
 import matplotlib.pyplot as plt
 import numpy as np
 from matplotlib.colors import Colormap, LinearSegmentedColormap, Normalize
+from matplotlib.ticker import FuncFormatter, LogLocator, NullFormatter
 from matplotlib.transforms import Bbox
-from matplotlib.ticker import MaxNLocator
 from shapely.geometry import box
 
 from climatology.processing.metrics import METRICS
@@ -304,6 +304,10 @@ def plot_metric(
 
 PANEL_HIST_BINS = 30
 PANEL_HIST_WIDTH = 0.30       # histogram column width, relative to its map column
+# Log area axis, fixed: the full share range, 0.01% (standing in for the 0 a log axis cannot
+# draw) to the whole region. Data-dependent limits would make a bar's length mean something
+# different in every panel — the same trap as a per-panel colour scale (probe 030).
+PANEL_HIST_XLIM = (0.01, 100.0)
 PANEL_WIDTH_IN = 8.0          # one panel (map + histogram) across
 PANEL_DECORATION_IN = 0.85    # row height beyond the map itself: title + tick labels
 PANEL_HSPACE = 0.28           # gap between rows, as a fraction of a row's height
@@ -475,13 +479,31 @@ def _draw_distribution(hax, layers: list[RasterLayer], *, cmap: Colormap, norm: 
     hax.set_ylim(vmax, vmin)        # dates increase downward, like the map's origin="upper"
     hax.set_yticks(tick_values)
     hax.set_yticklabels(tick_labels, fontsize=7)
-    hax.set_xlim(0, max(pct.max(), 1e-9) * 1.15)
-    hax.xaxis.set_major_locator(MaxNLocator(nbins=3))
-    hax.set_xlabel("% of area", fontsize=7, color=DARK_FG, labelpad=2)
+
+    # Log area axis (probe 030): shares span 2-5 decades, so on a linear axis the smallest
+    # real value renders under 1 px — the Outardes estuary's late break-up holds 0.36% of
+    # the region yet dominates the map's colour. Bars anchor at 0 and so read from the left
+    # spine; the limits are fixed, never derived from the values, so a bar length is the
+    # same share of the region in every panel and every metric.
+    hax.set_xscale("log")
+    hax.set_xlim(*PANEL_HIST_XLIM)
+    hax.xaxis.set_major_locator(LogLocator(base=10.0, numticks=5))
+    hax.xaxis.set_major_formatter(FuncFormatter(lambda v, _: f"{v:g}"))
+    hax.xaxis.set_minor_locator(LogLocator(base=10.0, subs=tuple(np.arange(2, 10) * 0.1)))
+    hax.xaxis.set_minor_formatter(NullFormatter())   # unlabelled, or the decades collide
+
+    hax.set_xlabel("% of area (log)", fontsize=7, color=DARK_FG, labelpad=2)
     hax.tick_params(axis="both", labelsize=7, colors=DARK_FG, length=2, pad=1)
     for side, spine in hax.spines.items():
         spine.set_visible(side in ("left", "bottom"))
         spine.set_edgecolor(DARK_LINE)
+
+    # Decade lines carry most of the reading on a log axis; the value lines tie a bar back
+    # to the colourbar's ticks.
+    hax.grid(True, which="major", linestyle=":", linewidth=0.5, color=DARK_LINE, alpha=0.9)
+    hax.grid(True, which="minor", axis="x", linestyle=":", linewidth=0.3,
+             color=DARK_LINE, alpha=0.5)
+    hax.set_axisbelow(True)
 
 
 @dataclass(frozen=True)
