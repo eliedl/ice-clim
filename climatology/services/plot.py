@@ -27,6 +27,7 @@ from climatology.processing.reductions import ThresholdDate, ThresholdDateDelta
 from climatology.services.temporal import SEASON_ORIGIN
 from climatology.utils._types import DataGrid, GridBounds
 from climatology.utils.arithmetics import percentile_range
+from climatology.utils.basemap import BasemapTile, load_basemap
 
 if TYPE_CHECKING:
     from climatology.pipeline import RunContext
@@ -207,11 +208,28 @@ def _land_polygons(extent: GridBounds) -> gpd.GeoDataFrame:
     return gpd.read_file(LAND_DISPLAY_PATH, bbox=bbox_geom).to_crs(epsg=GRID_CRS)
 
 
-def _frame_axes(ax, land: gpd.GeoDataFrame, extent: GridBounds, *, zorder: int) -> None:
-    """Paint land over the dry cells (wet cells keep their ice colours) and clamp the view."""
+def _draw_basemap(ax, tile: BasemapTile | None, *, zorder: int) -> None:
+    """Draw the Mapbox render *over* the data: its sea is transparent, so only land, coastal towns and hillshade land on top."""
+    if tile is None:
+        return
+    ax.imshow(tile.rgba, extent=tile.extent, origin="upper",
+              zorder=zorder, interpolation="none")
+
+
+def _frame_axes(ax, land: gpd.GeoDataFrame, extent: GridBounds, *,
+                zorder: int, fill: bool = True) -> None:
+    """Paint land over the dry cells (wet cells keep their ice colours) and clamp the view.
+
+    ``fill=False`` when the basemap already supplies the land: only the coastline is drawn,
+    so the region has exactly one — OSM's, which resolves the river channels Mapbox's own
+    land polygon buries (probe 031).
+    """
     if not land.empty:
-        land.plot(ax=ax, facecolor=DARK_LAND, edgecolor=DARK_COAST,
-                  linewidth=0.4, zorder=zorder)
+        if fill:
+            land.plot(ax=ax, facecolor=DARK_LAND, edgecolor=DARK_COAST,
+                      linewidth=0.4, zorder=zorder)
+        else:
+            land.boundary.plot(ax=ax, color=DARK_COAST, linewidth=0.4, zorder=zorder)
     xmin, ymin, xmax, ymax = extent
     ax.set_xlim(xmin, xmax)
     ax.set_ylim(ymin, ymax)
@@ -235,12 +253,15 @@ def _style_colorbar(cbar, *, label: str, tick_values: list[float],
     cbar.outline.set_edgecolor(DARK_LINE)
 
 
-def _footer(fig, *, source_label: str, res_label: str, x: float = 0.01) -> None:
+def _footer(fig, *, source_label: str, res_label: str, x: float = 0.01,
+            basemap: bool = False) -> None:
     """Provenance strip: chart source, grid resolution, CRS, land-overlay credit."""
+    # The render is requested with attribution=false, so the Mapbox credit is owed here.
+    credit = "© Mapbox © OpenStreetMap contributors" if basemap else "© OpenStreetMap contributors"
     fig.text(
         x, 0.01,
         f"Source: {source_label} | Grid: {res_label} "
-        f"EPSG:{GRID_CRS} | Land: © OpenStreetMap contributors | ",
+        f"EPSG:{GRID_CRS} | Land: {credit} | ",
         fontsize=6, color=DARK_MUTED,
     )
 
@@ -280,7 +301,11 @@ def plot_metric(
     ax.set_facecolor(DARK_OCEAN)          # dark "ocean" behind transparent cells
 
     im = _draw_layers(ax, layers, cmap=cmap, norm=norm)
-    _frame_axes(ax, _land_polygons(extent), extent, zorder=len(layers) + 1)
+    land = _land_polygons(extent)
+    tile = load_basemap(extent, land)
+    top = len(layers) + 1
+    _draw_basemap(ax, tile, zorder=top)
+    _frame_axes(ax, land, extent, zorder=top + 1, fill=tile is None)
 
     cbar = fig.colorbar(im, ax=ax, orientation="horizontal",
                         fraction=0.046, pad=0.1, extend="both")
@@ -295,7 +320,8 @@ def plot_metric(
     ax.set_ylabel(f"Northing (m, EPSG:{GRID_CRS})", color=DARK_FG)
     _style_axes(ax)
 
-    _footer(fig, source_label=ctx.source.display_label, res_label=res_label)
+    _footer(fig, source_label=ctx.source.display_label, res_label=res_label,
+            basemap=tile is not None)
     _save(fig, png_path)
     plt.show()
 
@@ -560,6 +586,7 @@ def plot_metric_panels(
         np.concatenate([p.values for p in panels]), style)
     extent = _union_extent([(l.values, l.bounds) for p in panels for l in p.layers])
     land = _land_polygons(extent)
+    tile = load_basemap(extent, land)   # one extent across panels -> fetched once, drawn n times
 
     # Each panel is a map column plus a narrow histogram column to its right. Row height
     # follows the region's own aspect, so the cells hug the (equal-aspect) maps instead of
@@ -587,7 +614,9 @@ def plot_metric_panels(
         ax.set_facecolor(DARK_OCEAN)
         im = _draw_layers(ax, [(l.values, l.bounds) for l in panel.layers],
                           cmap=cmap, norm=norm)
-        _frame_axes(ax, land, extent, zorder=len(panel.layers) + 1)
+        top = len(panel.layers) + 1
+        _draw_basemap(ax, tile, zorder=top)
+        _frame_axes(ax, land, extent, zorder=top + 1, fill=tile is None)
         ax.set_title(f"Winters {panel.period} — {panel.source.slug}",
                      fontsize=11, pad=6, color=DARK_FG)
         ax.tick_params(labelsize=7)
@@ -609,6 +638,7 @@ def plot_metric_panels(
     margin = _balance_margins(fig)
 
     sources = sorted({p.source.display_label for p in panels})
-    _footer(fig, source_label=" + ".join(sources), res_label=res_label, x=margin)
+    _footer(fig, source_label=" + ".join(sources), res_label=res_label, x=margin,
+            basemap=tile is not None)
     _save(fig, png_path, tight=False)   # keep the margins so the suptitle stays centred
     plt.close(fig)
