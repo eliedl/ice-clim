@@ -11,40 +11,65 @@ estuaries the metrics actually resolve.
 
 ## Method
 
-The style is rendered through the **Static Images API**, warped into the grid CRS, clipped to
+A style is rendered through the **Static Images API**, warped into the grid CRS, clipped to
 the OSM landmask, and drawn **over** the metric rasters. Run on Manicouagan /
 `season_duration_10` / 2011–2020 / sgrda, read back from the pipeline's own archives (no
 probe-local recomputation) — Manicouagan holds the Outardes and Manicouagan river mouths,
 which is exactly where the coastline question bites.
 
-    fetch  Static Images render, coastline stroke suppressed at request time (setfilter)
+Two stacks are kept side by side, for lineage.
+
+**v1 — the OGSL style, borrowed (superseded, `--legacy`).** One flattened render we did not
+own, made usable by two workarounds:
+
+    fetch  admin-ogsl style, coastline stroke suppressed at request time (setfilter)
+    clip   drop the render over OSM water, *luminance-aware* so labels survive
+    draw   over the data
+
+**v2 — two styles we own (current; what `climatology/utils/basemap.py` implements).** The
+split is the design: it makes the clip exact and leaves the labels alone.
+
+    fetch  two styles on the `eliedl` account, both on *public* Mapbox tilesets —
+             base    flat land + hillshade + roads, opaque, no coastline of its own
+             labels  the symbol layers alone, transparent elsewhere
     warp   EPSG:3857 -> EPSG:32198   (the API only ever renders Web Mercator)
-    clip   drop the render over OSM water, luminance-aware so labels survive
+    clip   drop the *base* over OSM water — exact, no heuristic
+    over   composite the *labels* on top, unclipped
     draw   over the data; OSM supplies the single coastline, in DARK_COAST
 
-Four figures, one per claim the recipe rests on.
-
-| figure | claim |
-|---|---|
-| `1_registration` | the warped render lands on the OSM coastline |
-| `2_over_data` | the style's water is a true alpha hole, so "basemap over data" works |
-| `3_coastline` | Mapbox's custom land buries the Rivière-aux-Outardes; OSM does not |
-| `4_label_clip` | a hard clip crops labels overhanging the sea; the luminance clip does not |
+| figure | stack | claim |
+|---|---|---|
+| `1_registration` | v1 | the warped render lands on the OSM coastline |
+| `2_over_data` | v1 | the style's water is a true alpha hole, so "basemap over data" works |
+| `3_coastline` | v1 | Mapbox's custom land buries the Rivière-aux-Outardes; OSM does not |
+| `4_label_clip` | v1 | a hard clip crops labels overhanging the sea; the luminance clip does not |
+| `5_registration` | v2 | terrain and roads stop on the OSM coastline — the warp is right |
+| `6_over_data` | v2 | the production result, straight from `load_basemap` |
+| `7_clip` | v2 | the OSM clip *is* the coastline, and it opens the Outardes |
+| `8_label_order` | v2 | clip-then-label keeps the names; label-then-clip crops them |
 
 ## Run
 
 ```bash
-MAPBOX_TOKEN=... MAPBOX_REFERER=... \
-  .venv/bin/python -m backend.probes.031_mapbox_basemap.probe [--recompute]
+# v2, the current stack — needs only our own token
+MAPBOX_TOKEN=... .venv/bin/python -m backend.probes.031_mapbox_basemap.probe [--recompute]
+
+# ...plus the superseded v1 stack, which renders a style on someone else's account
+OGSL_MAPBOX_TOKEN=... MAPBOX_REFERER=https://nautilo.ca/ \
+  .venv/bin/python -m backend.probes.031_mapbox_basemap.probe --legacy
 ```
+
+The two stacks take **different credentials** — v1 renders an `admin-ogsl` style, v2 renders
+ours — so they cannot share `MAPBOX_TOKEN`. Once the borrowed token is revoked, `--legacy`
+stops running and the figures it produced remain in `output/` as the record.
 
 Renders are cached on disk by `climatology.utils.basemap` (`~/.cache/ice-clim/basemap/`),
 so re-runs are offline; `--recompute` drops the cache and re-fetches.
 
-## Outcome (2026-07-14)
+## Outcome — v1, the OGSL style (2026-07-14, superseded)
 
-**The recipe works and is now implemented in `climatology/utils/basemap.py`, wired into
-both `plot_metric` and `plot_metric_panels`.** Four findings carried the design.
+**The compositing recipe works.** Four findings carried the design; three of them still hold
+in v2, and the fourth is what forced the rewrite.
 
 ### 1. The style renders water as a true alpha hole — so the basemap goes *over* the data
 
@@ -105,18 +130,63 @@ recovers **2 366 label pixels** the hard clip destroyed (`4_label_clip`). Its on
 Mapbox's dark label *halos* are themselves dark, so over-water labels lose their halo and sit
 directly on the colormap at slightly reduced contrast.
 
+## Outcome — v2, two styles we own (2026-07-14, current)
+
+**The OGSL style could not be cloned — and did not need to be.** A source audit settled it:
+
+| tileset | visibility | maxzoom |
+|---|---|---|
+| `mapbox.mapbox-streets-v8` | public | 16 |
+| `mapbox.mapbox-terrain-v2` | public | 15 |
+| `admin-ogsl.land_layer_main_10m` | **private** | 10 |
+| `admin-ogsl.7fn1vped` | **private** | 10 |
+
+The style's land comes from two tilesets private to `admin-ogsl`, so a style on another
+account cannot reference them — a literal clone yields no land at all. Their `maxzoom=10`
+also independently confirms finding 3: the land geometry is baked at z10, so **no zoom could
+ever have resolved the Outardes**.
+
+But those two private tilesets are exactly the part we were fighting. The landmask already
+overrides them, and everything actually used — hillshade, roads, labels — comes from the two
+*public* tilesets. So the four layers reading the private sources were **dropped**, the land
+they painted replaced by a flat `background` (`#14151f`), and the symbol layers split into a
+second style (`make_styles.py` derives both from the source style; `style/*.json`).
+
+This retires both v1 workarounds and one dependency:
+
+| | v1 (OGSL) | v2 (ours) |
+|---|---|---|
+| coastline stroke | suppressed via `setfilter` | **absent by construction** |
+| land / water | luminance-aware clip (heuristic) | **exact** hard clip to OSM |
+| labels | light pixels rescued, halos lost | fetched separately, composited **unclipped**, halos intact |
+| token | borrowed, `nautilo.ca`-restricted | ours, no referer |
+| billing | charged to OGSL | charged to us |
+
+`8_label_order` measures the gain: the split preserves **6 019** label pixels that a single
+flattened render would crop — against the **2 366** the luminance heuristic could rescue, the
+difference being the halos.
+
+The order of operations is the whole point, and it is not commutative:
+
+    right:  alpha_over(labels, clip(base, mask))     names intact
+    wrong:  clip(alpha_over(labels, base), mask)     names over water cropped
+
+### Cost
+
+Mapbox's free tier is **50 000 Static Images requests/month**. The cache key is
+`(region extent, style, size)`, and the extent comes from the region's tier grid — so it is
+independent of metric, period and source: **every metric and era for one region shares one
+render**. A full sweep of all 9 regions costs 18 requests (2 styles each). Even wiping the
+cache and re-fetching every region daily is ~540/month, ~1 % of the free tier. Billing is not
+a realistic concern.
+
 ## Caveats / open items
 
-- **The token is borrowed and URL-restricted.** The OGSL public token is scoped to
-  `nautilo.ca`: the API 403s without a matching `Referer`, so `MAPBOX_REFERER` must be set.
-  Every render also bills map-loads to OGSL's account. Used with the account owner's
-  permission; not a durable arrangement.
-- **The clean label fix needs a style split, not a query param.** Cloning the style into a
-  personal Mapbox account and splitting it into a *base* style (fills/lines/hillshade) and a
-  *labels* style would let labels be composited fully unclipped, halos included, retiring the
-  luminance heuristic. This also retires the borrowed token and the referer. Both custom
-  sources (`land_layer_main_10m`, `7fn1vped`) are owned by `admin-ogsl` and are the thing to
-  check for cloneability.
+- **Sprite substitution.** The derived styles point at the stock `mapbox://sprites/mapbox/
+  dark-v11`, since the OGSL style's own sprite is bound to that style. Text labels are
+  unaffected; road shields may differ. Not observed to matter at regional zooms.
 - **Attribution.** Renders are requested with `attribution=false&logo=false`, so the credit is
   owed in the figure: `_footer` prints `© Mapbox © OpenStreetMap contributors` whenever a
   basemap was drawn.
+- **Revoke the borrowed token.** The OGSL token should be dropped from `.env` once `--legacy`
+  is no longer needed; the v1 figures in `output/` are the durable record.

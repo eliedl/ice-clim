@@ -4,11 +4,9 @@ from __future__ import annotations
 
 import hashlib
 import io
-import json
 import logging
 import os
 import urllib.error
-import urllib.parse
 import urllib.request
 from dataclasses import dataclass
 from pathlib import Path
@@ -27,28 +25,20 @@ from climatology.utils._types import GridBounds
 
 log = logging.getLogger(__name__)
 
-# OGSL "production-nautilo-theme-sombre". This style paints land and leaves water as a true
-# alpha hole, so the render composites *over* the metric rasters: land, coastal towns and
-# hillshade on top, the ice values showing through the sea at full saturation (probe 031).
-MAPBOX_STYLE = "admin-ogsl/cmm9eq9ek001j01ry7a4h1j2b"
-
-# The style draws its own light coastline stroke, which reads as a bright rim skimming the
-# data. Suppressed at request time with an always-false filter so the OSM landmask supplies
-# the single coastline. The Static Images API accepts exactly one setfilter per request —
-# a second one is a 422 — which is why the labels cannot be split out the same way (probe 031).
-COAST_LINE_LAYER = "zoom-in-eastern-land-with-fjord-bigge"
-_FILTER_FALSE = ("==", ["literal", 0], ["literal", 1])
+# Two styles, rendered separately and composited here (probe 031). Splitting them is what lets
+# the land be clipped to the OSM coastline while the labels are *not*: a single flattened
+# render would have its coastal town names cropped along with the land under them, and the
+# Static Images API allows only one setfilter per request, so the split cannot be done at
+# request time. Both read only public Mapbox tilesets (streets-v8, terrain-v2).
+#
+#   base    flat land background + hillshade + roads. Opaque everywhere — it carries no
+#           coastline of its own, because the OSM landmask is what cuts the water out.
+#   labels  the symbol layers alone, transparent elsewhere.
+BASE_STYLE = "eliedl/cmrl0ypr000hb01s4asnhepdi"
+LABEL_STYLE = "eliedl/cmrl0yq1y00ih01s708t8cpbe"
 
 STATIC_MAX_DIM = 1280        # Static Images API cap, per side
 DENSIFY_N = 25               # samples per bbox edge; projected edges curve, corners under-cover
-
-# Mapbox's custom land polygon is coarser than OSM in narrow channels (it buries the
-# Rivière-aux-Outardes), so the render is clipped to the OSM landmask. The clip is
-# luminance-aware: over water it drops only *dark* pixels (land fill, hillshade) and keeps
-# *light* ones, because label glyphs overhang the water and must not be cropped with it.
-# Splitting labels off properly needs a labels-only style (probe 031).
-LABEL_LUMA = 110
-_LUMA = np.array([0.299, 0.587, 0.114])
 
 CACHE_DIR = Path.home() / ".cache" / "ice-clim" / "basemap"
 
@@ -98,16 +88,12 @@ def _request_geometry(extent: GridBounds):
     return bbox_ll, (mx0, my0, mx1, my1), size
 
 
-def _static_url(bbox_ll, size, token: str, hide_layer: str | None) -> str:
-    """The Static Images API URL for one bbox, optionally rendering ``hide_layer`` empty."""
+def _static_url(style: str, bbox_ll, size, token: str) -> str:
+    """The Static Images API URL rendering one style over one bbox."""
     width, height = size
     bbox = "[" + ",".join(f"{v:.6f}" for v in bbox_ll) + "]"
-    url = (f"https://api.mapbox.com/styles/v1/{MAPBOX_STYLE}/static/{bbox}/{width}x{height}@2x"
-           f"?access_token={token}&attribution=false&logo=false")
-    if hide_layer:
-        url += (f"&layer_id={urllib.parse.quote(hide_layer)}"
-                f"&setfilter={urllib.parse.quote(json.dumps(_FILTER_FALSE))}")
-    return url
+    return (f"https://api.mapbox.com/styles/v1/{style}/static/{bbox}/{width}x{height}@2x"
+            f"?access_token={token}&attribution=false&logo=false")
 
 
 def _fetch_png(url: str, referer: str | None) -> bytes:
@@ -117,11 +103,12 @@ def _fetch_png(url: str, referer: str | None) -> bytes:
         return r.read()
 
 
-def fetch_style_png(extent: GridBounds, *, hide_layer: str | None = COAST_LINE_LAYER
+def fetch_style_png(extent: GridBounds, style: str
                     ) -> tuple[np.ndarray, tuple[float, float, float, float]] | None:
-    """The style rendered over ``extent`` as RGBA, with its EPSG:3857 bounds; None if unconfigured.
+    """One style rendered over ``extent`` as RGBA, with its EPSG:3857 bounds; None if unconfigured.
 
-    Cached on disk by request, so a sweep re-rendering the same region never re-fetches.
+    Cached on disk by request, so a sweep re-rendering the same region never re-fetches: the
+    extent comes from the region's tier grid, so every metric and period share one render.
     """
     global _warned
     token = os.getenv("MAPBOX_TOKEN")
@@ -132,7 +119,7 @@ def fetch_style_png(extent: GridBounds, *, hide_layer: str | None = COAST_LINE_L
         return None
 
     bbox_ll, bounds_3857, size = _request_geometry(extent)
-    url = _static_url(bbox_ll, size, token, hide_layer)
+    url = _static_url(style, bbox_ll, size, token)
 
     key = hashlib.sha1(url.replace(token, "").encode()).hexdigest()[:16]
     cached = CACHE_DIR / f"{key}.png"
@@ -142,7 +129,8 @@ def fetch_style_png(extent: GridBounds, *, hide_layer: str | None = COAST_LINE_L
         try:
             png = _fetch_png(url, os.getenv("MAPBOX_REFERER"))
         except urllib.error.HTTPError as e:
-            # 403 here almost always means the token is URL-restricted: set MAPBOX_REFERER.
+            # A 403 here means the token is URL-restricted; either set MAPBOX_REFERER or,
+            # for server-side rendering, use a token with no URL restriction.
             log.warning("Mapbox basemap fetch failed (HTTP %s) — plotting without it.", e.code)
             return None
         except OSError as e:
@@ -151,8 +139,8 @@ def fetch_style_png(extent: GridBounds, *, hide_layer: str | None = COAST_LINE_L
         CACHE_DIR.mkdir(parents=True, exist_ok=True)
         cached.write_bytes(png)
 
-    # convert("RGBA") is load-bearing: the water is a palette transparency index, and flattening
-    # to RGB would fill the sea with black and hide the data underneath.
+    # convert("RGBA") is load-bearing: the labels style carries its transparency as a palette
+    # index, and flattening to RGB would turn every transparent pixel into an opaque black one.
     rgba = np.asarray(Image.open(io.BytesIO(png)).convert("RGBA"))
     return rgba, bounds_3857
 
@@ -194,25 +182,37 @@ def land_mask(land: gpd.GeoDataFrame, extent: GridBounds, shape: tuple[int, int]
                      transform=transform, fill=0, dtype="uint8")
 
 
-def clip_to_land(rgba: np.ndarray, mask: np.ndarray, *, color_aware: bool = True) -> np.ndarray:
-    """Drop the render over water so the metric shows through, keeping label glyphs.
+def clip_to_land(rgba: np.ndarray, mask: np.ndarray) -> np.ndarray:
+    """Drop the render over water, so the metric shows through the sea at full saturation.
 
-    A hard clip would also crop every label overhanging the sea, since the render flattens land,
-    hillshade and labels into one raster. Labels are light and land is dark, so over water only
-    the dark pixels are dropped.
+    Exact, because it only ever sees the base style: the landmask is authoritative for
+    land/water, and the labels are composited afterwards so nothing crops them.
     """
-    water = mask == 0
-    drop = water & (rgba[..., :3] @ _LUMA < LABEL_LUMA) if color_aware else water
     out = rgba.copy()
-    out[..., 3] = np.where(drop, 0, rgba[..., 3])
+    out[..., 3] = np.where(mask == 0, 0, rgba[..., 3])
     return out
 
 
+def _alpha_over(top: np.ndarray, bottom: np.ndarray) -> np.ndarray:
+    """``top`` composited over ``bottom`` (straight alpha)."""
+    ta = top[..., 3:4] / 255.0
+    rgb = top[..., :3] * ta + bottom[..., :3] * (1.0 - ta)
+    alpha = top[..., 3] + bottom[..., 3] * (1.0 - ta[..., 0])
+    return np.concatenate([rgb, alpha[..., None]], axis=-1).round().astype(np.uint8)
+
+
 def load_basemap(extent: GridBounds, land: gpd.GeoDataFrame) -> BasemapTile | None:
-    """The basemap for ``extent``, warped and clipped to ``land``; None when unavailable."""
-    fetched = fetch_style_png(extent)
-    if fetched is None:
+    """The basemap for ``extent``: land clipped to ``land``, labels on top; None when unavailable.
+
+    The labels are deliberately *not* clipped — a town's name may overhang the water it sits
+    beside, and cropping it there would be an artefact of the landmask, not cartography.
+    """
+    base = fetch_style_png(extent, BASE_STYLE)
+    labels = fetch_style_png(extent, LABEL_STYLE)
+    if base is None or labels is None:
         return None
-    warped, imshow_extent = warp_to_grid(*fetched, extent)
+
+    warped, imshow_extent = warp_to_grid(*base, extent)
     clipped = clip_to_land(warped, land_mask(land, extent, warped.shape[:2]))
-    return BasemapTile(clipped, imshow_extent)
+    label_layer, _ = warp_to_grid(*labels, extent)
+    return BasemapTile(_alpha_over(label_layer, clipped), imshow_extent)
