@@ -32,10 +32,15 @@ def log_distribution(values: DataGrid) -> None:
     log.info("  p01=%.1f p05=%.1f p25=%.1f p50=%.1f p75=%.1f p95=%.1f p99=%.1f", *pcts)
 
 
+def _product_dir(slug: str, metric_slug: str, *, period_slug: str, source_slug: str) -> Path:
+    """Directory holding every product of one (region, metric, period, source)."""
+    return OUTPUT_DIR / slug / metric_slug / period_slug / source_slug
+
+
 def _output_path(slug: str, metric_slug: str, *, period_slug: str,
                  source_slug: str, label: str, ext: str) -> Path:
     """Product path for a (region, metric, period, source, label) tuple."""
-    return (OUTPUT_DIR / slug / metric_slug / period_slug / source_slug
+    return (_product_dir(slug, metric_slug, period_slug=period_slug, source_slug=source_slug)
             / f"{metric_slug}_{slug}_{period_slug}_{source_slug}_{label}.{ext}")
 
 
@@ -78,6 +83,43 @@ def archive_product(values: DataGrid, png_path: Path, manifest: dict) -> Path:
     npz.with_suffix(".json").write_text(json.dumps(manifest, indent=2, default=str))
     log.info("Archived product raster: %s", npz)
     return npz
+
+
+def archive_dir(slug: str, metric_slug: str, *, period_slug: str, source_slug: str) -> Path:
+    """Where ``archive_product`` parks a product's rasters and manifests."""
+    return _product_dir(slug, metric_slug, period_slug=period_slug,
+                        source_slug=source_slug) / "archive"
+
+
+def find_archived(slug: str, metric_slug: str, *, period_slug: str, source_slug: str,
+                  tier_level: str, reduction_slug: str) -> tuple[Path, dict]:
+    """Newest archived raster for one product, selected on its manifest — never on its filename.
+
+    A filename glob cannot separate the reduction orders: the MTT label (``fine_100m``) is a
+    *prefix* of the TTM one (``fine_100m_ttm``), so ``*_fine_*`` matches both and the newest
+    hit may be the wrong reduction. The manifest states ``tier`` and ``reduction`` outright.
+
+    Returns the ``.npz`` path and its manifest (bounds, grid_res_m, ... for the caller).
+    """
+    arch = archive_dir(slug, metric_slug, period_slug=period_slug, source_slug=source_slug)
+    if not arch.is_dir():
+        raise FileNotFoundError(
+            f"No archive at {arch} — run the climatology for this product first.")
+
+    matches = []
+    for manifest_path in arch.glob("*.json"):
+        manifest = json.loads(manifest_path.read_text())
+        if manifest.get("tier") == tier_level and manifest.get("reduction") == reduction_slug:
+            matches.append((manifest["created"], arch / manifest["raster"], manifest))
+    if not matches:
+        seen = sorted({(m.get("tier"), m.get("reduction"))
+                       for m in (json.loads(p.read_text()) for p in arch.glob("*.json"))})
+        raise FileNotFoundError(
+            f"No archived raster in {arch} for tier={tier_level!r} "
+            f"reduction={reduction_slug!r}. Present: {seen}")
+
+    _, npz, manifest = max(matches)   # 'created' stamps sort oldest -> newest
+    return npz, manifest
 
 
 def write_geotiff(values: DataGrid, transform, *, path: Path,

@@ -36,17 +36,16 @@ Run:
 from __future__ import annotations
 
 import argparse
-import glob
-import json
 from datetime import datetime, timedelta
 from pathlib import Path
 
 import numpy as np
 
+from climatology.processing.reductions import MEDIAN_THEN_THRESHOLD, REDUCTIONS
 from climatology.processing.regions import resolve_region
 from climatology.services.plot import RasterLayer, _area_weights, _deposit
 from climatology.services.temporal import SEASON_ORIGIN
-from climatology.utils.export import OUTPUT_DIR
+from climatology.utils.export import find_archived
 
 OUTPUT_DIR_PROBE = Path(__file__).parent / "output"
 
@@ -70,18 +69,14 @@ def _wet_layers(region_slug: str) -> list[RasterLayer]:
     return layers
 
 
-def _archived_layers(region: str, metric: str, period: str, source: str) -> list[RasterLayer]:
-    """The archived product rasters, coarse first (mirrors the composite's loader)."""
-    tiers = [t.level for t in resolve_region(region).tiers]
+def _archived_layers(region: str, metric: str, period: str, source: str,
+                     reduction: str) -> list[RasterLayer]:
+    """The archived product rasters, coarse first — selected on the manifest, so the MTT and TTM products never get confused."""
     layers = []
-    for tier in tiers:
-        hits = sorted(glob.glob(str(OUTPUT_DIR / region / metric / period / source
-                                    / "archive" / f"*_{tier}_*.npz")))
-        if not hits:
-            raise FileNotFoundError(
-                f"No archived {tier} raster for {metric}/{period}/{source} — run sweep.py first.")
-        manifest = json.loads(Path(hits[-1]).with_suffix(".json").read_text())
-        layers.append(RasterLayer(np.load(hits[-1])["values"],
+    for tier in resolve_region(region).tiers:
+        npz, manifest = find_archived(region, metric, period_slug=period, source_slug=source,
+                                      tier_level=tier.level, reduction_slug=reduction)
+        layers.append(RasterLayer(np.load(npz)["values"],
                                   tuple(manifest["bounds"]),
                                   float(manifest["grid_res_m"])))
     return layers
@@ -177,6 +172,8 @@ def _parse_args() -> argparse.Namespace:
     p.add_argument("--metric", default=METRIC)
     p.add_argument("--period", default=PERIOD)
     p.add_argument("--source", default=SOURCE)
+    p.add_argument("--reduction", choices=sorted(REDUCTIONS),
+                   default=MEDIAN_THEN_THRESHOLD.slug)
     return p.parse_args()
 
 
@@ -193,7 +190,8 @@ def main() -> None:
     lines += report_cell_size(wet, args.region)
     lines += report_deoverlap(wet, truth, f"{args.region} wet masks")
 
-    product = _archived_layers(args.region, args.metric, args.period, args.source)
+    product = _archived_layers(args.region, args.metric, args.period, args.source,
+                               args.reduction)
     lines += report_deoverlap(product, truth, f"{args.region} / {args.metric} product")
     lines += report_distribution(product, args.metric, args.period, args.source)
 

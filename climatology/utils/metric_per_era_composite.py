@@ -16,7 +16,6 @@ Usage:
 from __future__ import annotations
 
 import argparse
-import json
 import logging
 import sys
 from pathlib import Path
@@ -28,10 +27,11 @@ load_dotenv(Path(__file__).parents[2] / ".env")
 sys.path.insert(0, str(Path(__file__).parents[2]))
 
 from climatology.processing.metrics import METRICS
+from climatology.processing.reductions import MEDIAN_THEN_THRESHOLD, REDUCTIONS
 from climatology.processing.regions import REGION_SLUGS, resolve_region
 from climatology.processing.sources import CHART_TABLES
 from climatology.services.plot import MetricPanel, RasterLayer, plot_metric_panels
-from climatology.utils.export import OUTPUT_DIR
+from climatology.utils.export import OUTPUT_DIR, find_archived
 from climatology.utils.sweep import DEFAULT_REGION, PERIOD_SOURCES
 
 logging.basicConfig(
@@ -42,41 +42,36 @@ logging.basicConfig(
 log = logging.getLogger("composite")
 
 
-def _archive_dir(region: str, metric: str, period: str, source: str) -> Path:
-    """Where ``archive_product`` parks a run's rasters (mirrors ``export._output_path``)."""
-    return OUTPUT_DIR / region / metric / period / source / "archive"
-
-
-def _load_layer(arch: Path, tier: str) -> RasterLayer:
-    """The newest archived raster for one tier, with its bounds and resolution from the manifest."""
-    npz = sorted(arch.glob(f"*_{tier}_*.npz"))[-1]      # timestamped names sort oldest -> newest
-    manifest = json.loads(npz.with_suffix(".json").read_text())
+def _load_layer(region: str, metric: str, period: str, source: str,
+                tier: str, reduction: str) -> RasterLayer:
+    """The newest archived raster for one tier of this reduction order, with its geometry from the manifest."""
+    npz, manifest = find_archived(region, metric, period_slug=period, source_slug=source,
+                                  tier_level=tier, reduction_slug=reduction)
     return RasterLayer(values=np.load(npz)["values"],
                        bounds=tuple(manifest["bounds"]),
                        res_m=float(manifest["grid_res_m"]))
 
 
 def _load_panel(region: str, metric: str, period: str, source: str,
-                tiers: list[str]) -> MetricPanel:
+                tiers: list[str], reduction: str = MEDIAN_THEN_THRESHOLD.slug) -> MetricPanel:
     """One era's panel: every tier's raster, coarse first so the fine tier draws on top."""
-    arch = _archive_dir(region, metric, period, source)
-    if not arch.is_dir():
-        raise FileNotFoundError(f"No archive at {arch} — run sweep.py for this metric first.")
     return MetricPanel(period=period, source=CHART_TABLES[source],
-                       layers=[_load_layer(arch, tier) for tier in tiers])
+                       layers=[_load_layer(region, metric, period, source, tier, reduction)
+                               for tier in tiers])
 
 
-def _composite_path(region: str, metric: str) -> Path:
-    """Output path for the per-era composite (one per region x metric)."""
-    return OUTPUT_DIR / region / metric / f"{metric}_{region}_eras.png"
+def _composite_path(region: str, metric: str, reduction: str) -> Path:
+    """Output path for the per-era composite; the non-default reduction is suffixed so MTT and TTM composites coexist (as their tier products do)."""
+    tag = "" if reduction == MEDIAN_THEN_THRESHOLD.slug else f"_{reduction}"
+    return OUTPUT_DIR / region / metric / f"{metric}_{region}_eras{tag}.png"
 
 
-def _render(region: str, metric: str, tiers: list[str]) -> Path | None:
+def _render(region: str, metric: str, tiers: list[str], reduction: str) -> Path | None:
     """Build and write one metric's composite; ``None`` when its eras aren't comparable."""
-    panels = [_load_panel(region, metric, period, source, tiers)
+    panels = [_load_panel(region, metric, period, source, tiers, reduction)
               for period, source in sorted(PERIOD_SOURCES.items())]
     res_label = " / ".join(f"{int(round(layer.res_m))} m" for layer in panels[0].layers)
-    png = _composite_path(region, metric)
+    png = _composite_path(region, metric, reduction)
     try:
         plot_metric_panels(panels, png_path=png, metric_slug=metric,
                            region_display=resolve_region(region).display,
@@ -94,6 +89,10 @@ def _parse_args() -> argparse.Namespace:
     p.add_argument("--metric", action="append", choices=sorted(METRICS),
                    metavar="SLUG", dest="metrics",
                    help="Restrict to these metrics (repeatable; default: all).")
+    p.add_argument("--reduction", choices=sorted(REDUCTIONS),
+                   default=MEDIAN_THEN_THRESHOLD.slug,
+                   help="Reduction order whose archives to compose "
+                        f"(default: {MEDIAN_THEN_THRESHOLD.slug}).")
     return p.parse_args()
 
 
@@ -103,9 +102,10 @@ if __name__ == "__main__":
 
     written, skipped = [], []
     for metric in args.metrics or sorted(METRICS):
-        png = _render(args.region, metric, tiers)
+        png = _render(args.region, metric, tiers, args.reduction)
         (written if png else skipped).append(metric)
 
-    log.info("=== %d composite(s) written, %d skipped ===", len(written), len(skipped))
+    log.info("=== %d composite(s) written, %d skipped (reduction=%s) ===",
+             len(written), len(skipped), args.reduction)
     if skipped:
         log.info("  not comparable across eras: %s", ", ".join(skipped))
