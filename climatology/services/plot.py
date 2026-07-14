@@ -21,9 +21,13 @@ from matplotlib.ticker import FuncFormatter, LogLocator, NullFormatter
 from matplotlib.transforms import Bbox
 from shapely.geometry import box
 
-from climatology.processing.metrics import METRICS
 from climatology.processing.rasterize import GRID_CRS
-from climatology.processing.reductions import ThresholdDate, ThresholdDateDelta
+from climatology.processing.reductions import (
+    MEDIAN_THEN_THRESHOLD,
+    MPO_MIN_SEASON_COVERAGE,
+    ThresholdDate,
+    ThresholdDateDelta,
+)
 from climatology.services.temporal import SEASON_ORIGIN
 from climatology.utils._types import DataGrid, GridBounds
 from climatology.utils.arithmetics import percentile_range
@@ -31,6 +35,7 @@ from climatology.utils.basemap import BasemapTile, load_basemap
 
 if TYPE_CHECKING:
     from climatology.pipeline import RunContext
+    from climatology.processing.metrics import MetricSpec
     from climatology.processing.regions import Tier
     from climatology.processing.sources import ChartTable
 
@@ -119,33 +124,91 @@ def _count_ticks(tick_values: list[float]) -> list[str]:
 
 @dataclass(frozen=True)
 class PlotStyle:
-    """Presentation for one metric: colourbar label and tick formatter, keyed by slug."""
+    """Presentation for one metric: one colourbar label **per reduction order**, and a tick formatter.
 
-    label: str | Callable[[ChartTable], str]
+    MTT and TTM do not compute the same quantity, so one string cannot describe both.
+    MTT (DEC-027) takes the cross-season median CT per day and *then* folds the kernel over
+    days: the result is a date read off a smoothed series, so a mid-season thaw is averaged
+    out before the kernel ever sees it — it is not a median of dates. TTM (DEC-049) folds the
+    kernel per season and *then* medians across seasons: that one is.
+
+    Counts are always in days (``TierProduct`` scales a weekly source's step counts by
+    ``step_days``), so no label has to interpolate the source's observation unit.
+    """
+
+    label: dict[str, str]        # reduction slug -> label
     format_ticks: Callable[[list[float]], list[str]]
 
 
+# MTT wording says what the number *is*: a crossing of the cross-season median series.
+# TTM wording is the domain phrasing, because TTM really does produce a median of per-season
+# values. Landfast metrics run on FA, not CT: LANDFAST_CONVERSION turns the form code into a
+# 0/1 fast-ice indicator, so the kernel's 0.5 reads as "fast ice in more than half the
+# seasons" under MTT, and simply as "fast ice" per season under TTM.
 PLOT_STYLES: dict[str, PlotStyle] = {
-    "freeze_up_date":          PlotStyle("Freeze-up climatology", _date_ticks),
-    "breakup_date":            PlotStyle("Median date of break-up (CT < 4/10)", _date_ticks),
-    "first_occurrence_date":   PlotStyle("Median date of first ice occurrence (CT >= 1/10)", _date_ticks),
-    "last_occurrence_date":    PlotStyle("Median date of last ice occurrence (CT >= 1/10)", _date_ticks),
-    "formation_lag":           PlotStyle("Formation lag (days from first ice CT >= 1/10 to freeze-up CT >= 4/10)", _count_ticks),
-    "melt_lag":                PlotStyle("Melt lag (days from break-up CT < 4/10 to last ice CT < 1/10)", _count_ticks),
-    "season_duration":         PlotStyle(lambda s: f"Median ice presence ({s.obs_unit}, CT >= 4/10)", _count_ticks),
-    "season_duration_10":      PlotStyle(lambda s: f"Median ice presence ({s.obs_unit}, CT >= 1/10)", _count_ticks),
-    "storm_exposure_duration": PlotStyle(lambda s: f"Storm exposure duration ({s.obs_unit}, CT <= 3/10)", _count_ticks),
-    "landfast_freeze_up_date": PlotStyle("Landfast freeze-up climatology (CT = 10/10)", _date_ticks),
-    "landfast_breakup_date":   PlotStyle("Median date of landfast break-up (CT = 10/10)", _date_ticks),
-    "landfast_duration":       PlotStyle(lambda s: f"Landfast ice presence ({s.obs_unit}, CT = 10/10)", _count_ticks),
-    "landfast_exposure":       PlotStyle(lambda s: f"Landfast exposure — days without fast ice ({s.obs_unit}, CT < 10/10)", _count_ticks),
+    "freeze_up_date": PlotStyle({
+        "mtt": "First date the median CT reaches ≥ 4/10",
+        "ttm": "Median date of freeze-up (CT ≥ 4/10)",
+    }, _date_ticks),
+    "breakup_date": PlotStyle({
+        "mtt": "First date the median CT falls < 4/10",
+        "ttm": "Median date of break-up (CT < 4/10)",
+    }, _date_ticks),
+    "first_occurrence_date": PlotStyle({
+        "mtt": "First date the median CT reaches ≥ 1/10",
+        "ttm": "Median date of first ice occurrence (CT ≥ 1/10)",
+    }, _date_ticks),
+    "last_occurrence_date": PlotStyle({
+        "mtt": "Last date the median CT holds ≥ 1/10",
+        "ttm": "Median date of last ice occurrence (CT ≥ 1/10)",
+    }, _date_ticks),
+    "formation_lag": PlotStyle({
+        "mtt": "Formation lag (days from median CT ≥ 1/10 to median CT ≥ 4/10)",
+        "ttm": "Median formation lag (days from CT ≥ 1/10 to CT ≥ 4/10)",
+    }, _count_ticks),
+    "melt_lag": PlotStyle({
+        "mtt": "Melt lag (days from median CT < 4/10 to median CT < 1/10)",
+        "ttm": "Median melt lag (days from CT < 4/10 to CT < 1/10)",
+    }, _count_ticks),
+    "season_duration": PlotStyle({
+        "mtt": "Ice presence (days with median CT ≥ 4/10)",
+        "ttm": "Median ice presence (days, CT ≥ 4/10)",
+    }, _count_ticks),
+    "season_duration_10": PlotStyle({
+        "mtt": "Ice presence (days with median CT ≥ 1/10)",
+        "ttm": "Median ice presence (days, CT ≥ 1/10)",
+    }, _count_ticks),
+    "storm_exposure_duration": PlotStyle({
+        "mtt": "Storm exposure (days with median CT ≤ 3/10)",
+        "ttm": "Median storm exposure duration (days, CT ≤ 3/10)",
+    }, _count_ticks),
+    "landfast_freeze_up_date": PlotStyle({
+        "mtt": "First date the median FA = '08' > 0.5",
+        "ttm": "Median date of landfast freeze-up (FA = '08')",
+    }, _date_ticks),
+    "landfast_breakup_date": PlotStyle({
+        "mtt": "First date the median FA = '08' falls < 0.5",
+        "ttm": "Median date of landfast break-up (FA = '08')",
+    }, _date_ticks),
+    "landfast_duration": PlotStyle({
+        "mtt": "Landfast ice presence (days with median FA = '08' > 0.5)",
+        "ttm": "Median landfast ice presence (days, FA = '08')",
+    }, _count_ticks),
+    "landfast_exposure": PlotStyle({
+        "mtt": "Landfast exposure (days with median FA = '08' < 0.5)",
+        "ttm": "Median landfast exposure (days, FA ≠ '08')",
+    }, _count_ticks),
 }
 
 
-def metric_label(slug: str, source: ChartTable) -> str:
-    """Resolve a metric's colourbar label, interpolating the source's obs unit when needed."""
-    label = PLOT_STYLES[slug].label
-    return label(source) if callable(label) else label
+def metric_label(metric: MetricSpec) -> str:
+    """The metric's colourbar label for the reduction order it was actually computed under."""
+    labels = PLOT_STYLES[metric.slug].label
+    slug = metric.reduction.slug
+    if slug not in labels:
+        raise KeyError(f"No label for metric '{metric.slug}' under reduction '{slug}' — "
+                       f"PLOT_STYLES carries {sorted(labels)}.")
+    return labels[slug]
 
 
 # Threshold direction, read off the kernel rather than restated: ThresholdDate says which
@@ -164,15 +227,29 @@ def _kernel_threshold(kernel, field: str) -> str:
     return f"{field} {op} {round(kernel.threshold * 10)}/10"
 
 
-def threshold_label(slug: str) -> str:
+# The reduction order is a methodology statement, so it rides in the footer with the other
+# provenance rather than in the title. TTM additionally drops cells that lack a per-season
+# value in enough seasons (MPO rule, DEC-049) — a real coverage caveat on what is drawn.
+REDUCTION_NOTES: dict[str, str] = {
+    "mtt": "Method: median-then-threshold (cross-season median CT per day, then the crossing)",
+    "ttm": ("Method: threshold-then-median (per-season crossing, then the cross-season median; "
+            f"cells need ≥ {MPO_MIN_SEASON_COVERAGE:.0%} season coverage)"),
+}
+
+
+def reduction_note(metric: MetricSpec) -> str:
+    """Footer note naming the reduction order the product was computed under."""
+    return REDUCTION_NOTES[metric.reduction.slug]
+
+
+def threshold_label(metric: MetricSpec) -> str:
     """The threshold a metric is actually computed on, taken from its spec."""
-    spec = METRICS[slug]
-    field = spec.fields[0]
+    field = metric.fields[0]
     if field != "CT":
         # LANDFAST_CONVERSION turns the FA form code into a 0/1 landfast indicator, so the
         # kernel's 0.5 is a boolean midpoint — not a concentration, and not "5/10".
         return f"landfast ice ({field})"
-    return _kernel_threshold(spec.kernel, field)
+    return _kernel_threshold(metric.kernel, field)
 
 
 # --- shared rendering primitives -------------------------------------------
@@ -261,14 +338,14 @@ def _style_colorbar(cbar, *, label: str, tick_values: list[float],
     cbar.outline.set_edgecolor(DARK_LINE)
 
 
-def _footer(fig, *, source_label: str, res_label: str, x: float = 0.01,
+def _footer(fig, *, source_label: str, res_label: str, method: str, x: float = 0.01,
             basemap: bool = False) -> None:
-    """Provenance strip: chart source, grid resolution, CRS, land-overlay credit."""
+    """Provenance strip: chart source, reduction order, grid resolution, CRS, land credit."""
     # The render is requested with attribution=false, so the Mapbox credit is owed here.
     credit = "© Mapbox © OpenStreetMap contributors" if basemap else "© OpenStreetMap contributors"
     fig.text(
         x, 0.01,
-        f"Source: {source_label} | Grid: {res_label} "
+        f"Source: {source_label} | {method} | Grid: {res_label} "
         f"EPSG:{GRID_CRS} | Land: {credit} | ",
         fontsize=6, color=DARK_MUTED,
     )
@@ -297,7 +374,7 @@ def plot_metric(
 ) -> None:
     """Render one or more raster layers, drawn back-to-front, into one map."""
     style = PLOT_STYLES[ctx.metric.slug]
-    display_label = metric_label(ctx.metric.slug, ctx.source)
+    display_label = metric_label(ctx.metric)
     res_label = " / ".join(f"{int(round(t.res_m))} m" for t in ctx.region.tiers)
 
     all_values = np.concatenate([v.ravel() for v, _ in layers])
@@ -330,7 +407,7 @@ def plot_metric(
     _style_axes(ax)
 
     _footer(fig, source_label=ctx.source.display_label, res_label=res_label,
-            basemap=tile is not None)
+            method=reduction_note(ctx.metric), basemap=tile is not None)
     _save(fig, png_path)
     plt.show()
 
@@ -548,6 +625,7 @@ class MetricPanel:
     period: str
     source: ChartTable
     layers: list[RasterLayer]
+    reduction: str = MEDIAN_THEN_THRESHOLD.slug   # order the archives were produced under
 
     @property
     def values(self) -> np.ndarray:
@@ -555,20 +633,34 @@ class MetricPanel:
         return np.concatenate([layer.values.ravel() for layer in self.layers])
 
 
-def _assert_comparable(panels: list[MetricPanel], metric_slug: str) -> None:
+def _assert_comparable(panels: list[MetricPanel], metric: MetricSpec) -> None:
     """Reject a shared colour scale over mixed observation units.
 
     Step-count metrics only land on a common unit because ``TierProduct`` scales them to
     days; this is the backstop if a source ever reports its counts in something else.
     """
-    if not METRICS[metric_slug].counts_steps:
+    if not metric.counts_steps:
         return
     units = {p.source.obs_unit for p in panels}
     if len(units) > 1:
         raise ValueError(
-            f"Metric '{metric_slug}' is counted in the source's observation unit "
+            f"Metric '{metric.slug}' is counted in the source's observation unit "
             f"({', '.join(sorted(units))}) — panels from different chart cadences "
             "cannot share one colour scale. Plot one source per figure."
+        )
+
+
+def _assert_one_reduction(panels: list[MetricPanel], metric: MetricSpec) -> None:
+    """The rasters must come from the reduction order the figure claims to label.
+
+    MTT and TTM compute different quantities from the same charts, so a figure labelled for
+    one and drawn from the other's archives is silently wrong.
+    """
+    wrong = sorted({p.reduction for p in panels} - {metric.reduction.slug})
+    if wrong:
+        raise ValueError(
+            f"Panels carry reduction {wrong} but the figure is labelled for "
+            f"'{metric.reduction.slug}' — the rasters and the label disagree."
         )
 
 
@@ -576,7 +668,7 @@ def plot_metric_panels(
     panels: list[MetricPanel],
     *,
     png_path: Path,
-    metric_slug: str,
+    metric: MetricSpec,
     region_display: str,
     res_label: str,
     ncols: int = PANEL_NCOLS,
@@ -584,10 +676,11 @@ def plot_metric_panels(
     """Render one metric across periods as a panel grid sharing one colour scale and one extent."""
     if not panels:
         raise ValueError("plot_metric_panels needs at least one panel.")
-    _assert_comparable(panels, metric_slug)
+    _assert_comparable(panels, metric)
+    _assert_one_reduction(panels, metric)
 
-    style = PLOT_STYLES[metric_slug]
-    display_label = metric_label(metric_slug, panels[0].source)
+    style = PLOT_STYLES[metric.slug]
+    display_label = metric_label(metric)
 
     # One scale and one extent across panels — the point of the figure is that
     # a colour and a location mean the same thing in every period.
@@ -642,13 +735,14 @@ def plot_metric_panels(
     _style_colorbar(cbar, label=display_label, tick_values=tick_values,
                     tick_labels=tick_labels)
 
-    fig.suptitle(f"{display_label}\n{region_display} region — {threshold_label(metric_slug)}",
+    fig.suptitle(f"{display_label}\n{region_display} region",
                  fontsize=14, color=DARK_FG)
     _match_map_heights(fig, pairs)   # after the colourbar has claimed its space
     margin = _balance_margins(fig)
 
     sources = sorted({p.source.display_label for p in panels})
     _footer(fig, source_label=" + ".join(sources), res_label=res_label, x=margin,
+            method=reduction_note(metric),
             basemap=tile is not None)
     _save(fig, png_path, tight=False)   # keep the margins so the suptitle stays centred
     plt.close(fig)

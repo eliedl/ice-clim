@@ -30,12 +30,14 @@ Run:
 from __future__ import annotations
 
 import argparse
+from dataclasses import replace
 from datetime import datetime, timedelta
 from pathlib import Path
 
 import numpy as np
 
 from climatology.processing.metrics import METRICS
+from climatology.processing.reductions import MEDIAN_THEN_THRESHOLD, REDUCTIONS
 from climatology.processing.regions import resolve_region
 from climatology.services.plot import _area_weights, plot_metric_panels, threshold_label
 from climatology.services.temporal import SEASON_ORIGIN
@@ -51,6 +53,11 @@ REGION = "manicouagan"
 METRICS_DEFAULT = ("freeze_up_date", "season_duration")
 KM2 = 1e6
 
+def _spec(metric: str):
+    """The metric resolved against the reduction these archives were produced under."""
+    return replace(METRICS[metric], reduction=REDUCTIONS[MEDIAN_THEN_THRESHOLD.slug])
+
+
 def _scorecard(region: str, metric: str, panels: list) -> list[str]:
     """What scale the eras land on, and what the distribution behind each panel looks like."""
     pooled = np.concatenate([p.values for p in panels])
@@ -61,7 +68,7 @@ def _scorecard(region: str, metric: str, panels: list) -> list[str]:
 
     lines = [
         "",
-        f"--- {metric} ({threshold_label(metric)}) ---",
+        f"--- {metric} ({threshold_label(_spec(metric))}) ---",
         f"  shared scale: {vmin:.0f} .. {vmax:.0f}  [{fmt(vmin)} .. {fmt(vmax)}]",
         f"  {'era':10} {'source':7} {'distinct':>9} {'median':>10} {'area km2':>10} "
         f"{'min share':>10} {'max share':>10} {'decades':>8} {'lin. px':>8}",
@@ -93,7 +100,7 @@ def _render(region: str, metric: str, stamp: str) -> tuple[Path, list[str]]:
     res_label = " / ".join(f"{int(round(l.res_m))} m" for l in panels[0].layers)
 
     png = OUTPUT_DIR / f"{stamp}_{region}_{metric}.png"
-    plot_metric_panels(panels, png_path=png, metric_slug=metric,
+    plot_metric_panels(panels, png_path=png, metric=_spec(metric),
                        region_display=resolve_region(region).display, res_label=res_label)
     return png, _scorecard(region, metric, panels)
 

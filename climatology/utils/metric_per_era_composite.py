@@ -18,6 +18,7 @@ from __future__ import annotations
 import argparse
 import logging
 import sys
+from dataclasses import replace
 from pathlib import Path
 
 import numpy as np
@@ -57,7 +58,8 @@ def _load_panel(region: str, metric: str, period: str, source: str,
     """One era's panel: every tier's raster, coarse first so the fine tier draws on top."""
     return MetricPanel(period=period, source=CHART_TABLES[source],
                        layers=[_load_layer(region, metric, period, source, tier, reduction)
-                               for tier in tiers])
+                               for tier in tiers],
+                       reduction=reduction)
 
 
 def _composite_path(region: str, metric: str, reduction: str) -> Path:
@@ -72,8 +74,9 @@ def _render(region: str, metric: str, tiers: list[str], reduction: str) -> Path 
               for period, source in sorted(PERIOD_SOURCES.items())]
     res_label = " / ".join(f"{int(round(layer.res_m))} m" for layer in panels[0].layers)
     png = _composite_path(region, metric, reduction)
+    spec = replace(METRICS[metric], reduction=REDUCTIONS[reduction])
     try:
-        plot_metric_panels(panels, png_path=png, metric_slug=metric,
+        plot_metric_panels(panels, png_path=png, metric=spec,
                            region_display=resolve_region(region).display,
                            res_label=res_label)
     except ValueError as e:      # mixed observation units across the eras' sources

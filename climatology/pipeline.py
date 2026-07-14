@@ -102,7 +102,7 @@ def _method_tag(label: str, ctx: RunContext) -> str:
 
 def _geotiff_tags(manifest: dict, ctx: RunContext) -> dict:
     """GeoTIFF metadata tags from a run manifest, plus date-metric decoding keys."""
-    tags = {**manifest, "display_label": metric_label(ctx.metric.slug, ctx.source)}
+    tags = {**manifest, "display_label": metric_label(ctx.metric)}
     if ctx.metric.slug.endswith("_date"):
         tags["value_encoding"] = "day_of_season"
         tags["season_origin"] = SEASON_ORIGIN.isoformat()
@@ -189,7 +189,7 @@ def _emit_tier(product: TierProduct, ctx: RunContext, fetch: FetchResult,
         tier_tif = output_geotiff(ctx.region.slug, ctx.metric.slug, period_slug=ctx.period.slug,
                                   source_slug=ctx.source.slug, label=label)
         write_geotiff(product.values, tier.grid.transform,
-                      path=tier_tif, band_description=metric_label(ctx.metric.slug, ctx.source),
+                      path=tier_tif, band_description=metric_label(ctx.metric),
                       tags=_geotiff_tags(manifest, ctx))
 
 
