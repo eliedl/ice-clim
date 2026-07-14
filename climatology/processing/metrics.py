@@ -33,6 +33,11 @@ class MetricSpec:
     conversion: ConversionStrategy = CT_CONVERSION
     reduction: Reduction = MEDIAN_THEN_THRESHOLD
 
+    @property
+    def counts_steps(self) -> bool:
+        """True when the kernel counts chart steps, so its result is in the source's cadence and needs scaling to days (date kernels return day-of-season ordinals and are already source-agnostic)."""
+        return isinstance(self.kernel, ThresholdDuration)
+
     def compute(self, df: ConvertedPolygons, tier: Tier) -> DataGrid:
         """Fold the prepared rows into this metric's (H, W) grid via the reduction order."""
         return self.reduction(self.kernel, df, tier)

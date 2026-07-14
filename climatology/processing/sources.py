@@ -26,20 +26,24 @@ class ChartTable:
     table: str
     cadence: Literal["daily", "hd_weekly"]
     display_label: str        # plot footer source attribution
-    obs_unit: str             # unit of the season-duration count
+    obs_unit: str             # unit of the season-duration count, after step_days scaling
+    step_days: int            # days one chart stands for; scales step counts to days
     slug: str = ""
 
 
+# Step-count kernels tick once per chart, so a weekly chart's count is in weeks and a daily
+# chart's in days. ``step_days`` converts both to days at the product boundary (TierProduct),
+# which is what makes durations comparable across sources.
 _TABLES: dict[str, ChartTable] = {
     "sgrda": ChartTable(
         table="sgrda_32198", cadence="daily",
         display_label="CIS SIGRID3 daily charts (SGRDA)",
-        obs_unit="observation-days",
+        obs_unit="days", step_days=1,
     ),
     "sgrdr": ChartTable(
         table="sgrdr_32198", cadence="hd_weekly",
         display_label="CIS SIGRID3 weekly historical charts (SGRDR)",
-        obs_unit="observation-weeks",
+        obs_unit="days", step_days=7,
     ),
 }
 CHART_TABLES: dict[str, ChartTable] = {slug: replace(ct, slug=slug)

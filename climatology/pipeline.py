@@ -67,6 +67,19 @@ class TierProduct:
     tier: Tier
     values: DataGrid
 
+    @classmethod
+    def build(cls, tier: Tier, values: DataGrid, ctx: RunContext) -> "TierProduct":
+        """The tier's raster in its final unit: step counts scaled from charts to days.
+
+        A step-count kernel ticks once per chart, so a weekly source counts weeks and a
+        daily source counts days. Scaling here — at the product boundary, before archive,
+        GeoTIFF and plot — means every consumer sees days and durations from different
+        sources are directly comparable.
+        """
+        if ctx.metric.counts_steps:
+            values = values * ctx.source.step_days
+        return cls(tier=tier, values=values)
+
 
 # --- product naming + metadata helpers -------------------------------------
 
@@ -158,7 +171,7 @@ def _compute_raster(metric: MetricSpec, df: ConvertedPolygons, tier: Tier) -> Da
 def _compute_tiers(fetch: FetchResult, ctx: RunContext) -> list[TierProduct]:
     """Compute one product per region tier."""
     df = fetch.prepare(ctx.metric.conversion)
-    return [TierProduct(tier=tier, values=_compute_raster(ctx.metric, df, tier))
+    return [TierProduct.build(tier, _compute_raster(ctx.metric, df, tier), ctx)
             for tier in ctx.region.tiers]
 
 
