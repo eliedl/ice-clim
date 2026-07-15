@@ -136,69 +136,77 @@ class PlotStyle:
     ``step_days``), so no label has to interpolate the source's observation unit.
     """
 
-    label: dict[str, str]        # reduction slug -> label
+    title: str                   # metric name — the figure title; suffixed "date" / "duration"
+    label: dict[str, str]        # reduction slug -> colourbar label
     format_ticks: Callable[[list[float]], list[str]]
 
 
-# MTT wording says what the number *is*: a crossing of the cross-season median series.
-# TTM wording is the domain phrasing, because TTM really does produce a median of per-season
-# values. Landfast metrics run on FA, not CT: LANDFAST_CONVERSION turns the form code into a
-# 0/1 fast-ice indicator, so the kernel's 0.5 reads as "fast ice in more than half the
-# seasons" under MTT, and simply as "fast ice" per season under TTM.
+# ``title`` names the metric (reduction-independent, suffixed by value type: a "date" or a
+# "duration"); ``label`` is the precise computed quantity on the colourbar. MTT label wording
+# says what the number *is*: a crossing of the cross-season median series. TTM label wording
+# is the domain phrasing, because TTM really does produce a median of per-season values.
+# Landfast metrics run on FA, not CT: LANDFAST_CONVERSION turns the form code into a 0/1
+# fast-ice indicator, so the kernel's 0.5 reads as "fast ice in more than half the seasons"
+# under MTT, and simply as "fast ice" per season under TTM.
 PLOT_STYLES: dict[str, PlotStyle] = {
-    "freeze_up_date": PlotStyle({
+    "freeze_up_date": PlotStyle("Freeze-up", {
         "mtt": "First date the median CT reaches ≥ 4/10",
         "ttm": "Median date of freeze-up (CT ≥ 4/10)",
     }, _date_ticks),
-    "breakup_date": PlotStyle({
+    "breakup_date": PlotStyle("Break-up", {
         "mtt": "First date the median CT falls < 4/10",
         "ttm": "Median date of break-up (CT < 4/10)",
     }, _date_ticks),
-    "first_occurrence_date": PlotStyle({
+    "first_occurrence_date": PlotStyle("First occurence", {
         "mtt": "First date the median CT reaches ≥ 1/10",
         "ttm": "Median date of first ice occurrence (CT ≥ 1/10)",
     }, _date_ticks),
-    "last_occurrence_date": PlotStyle({
+    "last_occurrence_date": PlotStyle("Last occurence", {
         "mtt": "Last date the median CT holds ≥ 1/10",
         "ttm": "Median date of last ice occurrence (CT ≥ 1/10)",
     }, _date_ticks),
-    "formation_lag": PlotStyle({
+    "formation_lag": PlotStyle("Formation lag", {
         "mtt": "Formation lag (days from median CT ≥ 1/10 to median CT ≥ 4/10)",
         "ttm": "Median formation lag (days from CT ≥ 1/10 to CT ≥ 4/10)",
     }, _count_ticks),
-    "melt_lag": PlotStyle({
+    "melt_lag": PlotStyle("Melt lag", {
         "mtt": "Melt lag (days from median CT < 4/10 to median CT < 1/10)",
         "ttm": "Median melt lag (days from CT < 4/10 to CT < 1/10)",
     }, _count_ticks),
-    "season_duration": PlotStyle({
+    "season_duration": PlotStyle("Season duration (4/10)", {
         "mtt": "Ice presence (days with median CT ≥ 4/10)",
         "ttm": "Median ice presence (days, CT ≥ 4/10)",
     }, _count_ticks),
-    "season_duration_10": PlotStyle({
+    "season_duration_10": PlotStyle("Season duration (1/10)", {
         "mtt": "Ice presence (days with median CT ≥ 1/10)",
         "ttm": "Median ice presence (days, CT ≥ 1/10)",
     }, _count_ticks),
-    "storm_exposure_duration": PlotStyle({
+    "storm_exposure_duration": PlotStyle("Storm exposure duration", {
         "mtt": "Storm exposure (days with median CT ≤ 3/10)",
         "ttm": "Median storm exposure duration (days, CT ≤ 3/10)",
     }, _count_ticks),
-    "landfast_freeze_up_date": PlotStyle({
+    "landfast_freeze_up_date": PlotStyle("Landfast freeze-up", {
         "mtt": "First date the median FA = '08' > 0.5",
         "ttm": "Median date of landfast freeze-up (FA = '08')",
     }, _date_ticks),
-    "landfast_breakup_date": PlotStyle({
+    "landfast_breakup_date": PlotStyle("Landfast break-up", {
         "mtt": "First date the median FA = '08' falls < 0.5",
         "ttm": "Median date of landfast break-up (FA = '08')",
     }, _date_ticks),
-    "landfast_duration": PlotStyle({
+    "landfast_duration": PlotStyle("Landfast ice duration", {
         "mtt": "Landfast ice presence (days with median FA = '08' > 0.5)",
         "ttm": "Median landfast ice presence (days, FA = '08')",
     }, _count_ticks),
-    "landfast_exposure": PlotStyle({
+    "landfast_exposure": PlotStyle("Landfast absence duration", {
         "mtt": "Landfast exposure (days with median FA = '08' < 0.5)",
         "ttm": "Median landfast exposure (days, FA ≠ '08')",
     }, _count_ticks),
 }
+
+
+def metric_title(metric: MetricSpec) -> str:
+    """The metric's display name — the figure title, independent of reduction order."""
+    return PLOT_STYLES[metric.slug].title
 
 
 def metric_label(metric: MetricSpec) -> str:
@@ -399,7 +407,7 @@ def plot_metric(
                     tick_labels=tick_labels)
 
     ax.set_title(
-        f"{display_label}\n{ctx.region.display} region — winters {ctx.period.slug}",
+        f"{metric_title(ctx.metric)}\n{ctx.region.display} region — winters {ctx.period.slug}",
         fontsize=12, pad=10, color=DARK_FG,
     )
     ax.set_xlabel(f"Easting (m, EPSG:{GRID_CRS})", color=DARK_FG)
@@ -735,7 +743,7 @@ def plot_metric_panels(
     _style_colorbar(cbar, label=display_label, tick_values=tick_values,
                     tick_labels=tick_labels)
 
-    fig.suptitle(f"{display_label}\n{region_display} region",
+    fig.suptitle(f"{metric_title(metric)}\n{region_display} region",
                  fontsize=14, color=DARK_FG)
     _match_map_heights(fig, pairs)   # after the colourbar has claimed its space
     margin = _balance_margins(fig)

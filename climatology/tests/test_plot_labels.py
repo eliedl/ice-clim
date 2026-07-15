@@ -18,6 +18,7 @@ from climatology.services.plot import (
     PLOT_STYLES,
     REDUCTION_NOTES,
     metric_label,
+    metric_title,
     reduction_note,
     threshold_label,
 )
@@ -35,6 +36,33 @@ def test_plot_styles_cover_every_metric():
 
 def test_reduction_notes_cover_every_reduction():
     assert set(REDUCTION_NOTES) == set(REDUCTIONS)
+
+
+@pytest.mark.parametrize(("slug", "reduction"), SPECS)
+def test_title_is_independent_of_reduction(slug: str, reduction: str):
+    """A break-up is a break-up whichever order computed it — the title names the metric, not the method."""
+    assert metric_title(_spec(slug, reduction)) == PLOT_STYLES[slug].title
+
+
+def test_titles_are_unique():
+    """Two metrics must not share a title, or a figure can't be told apart (the season_duration pair)."""
+    titles = [style.title for style in PLOT_STYLES.values()]
+    assert len(titles) == len(set(titles))
+
+
+@pytest.mark.parametrize("slug", sorted(METRICS))
+def test_title_carries_the_value_type_suffix(slug: str):
+    """Every title states its value type — 'date' or 'duration' — possibly before a threshold tag."""
+    title = PLOT_STYLES[slug].title.lower()
+    want = "date" if slug.endswith("_date") else "duration"
+    # the word must head the suffix; a threshold parenthetical ("... duration (4/10)") may follow
+    assert title.endswith(want) or f"{want} (" in title
+
+
+def test_both_ice_season_titles_carry_the_threshold():
+    """season_duration and season_duration_10 differ only by threshold, so the title must show it."""
+    assert "4/10" in PLOT_STYLES["season_duration"].title
+    assert "1/10" in PLOT_STYLES["season_duration_10"].title
 
 
 @pytest.mark.parametrize(("slug", "reduction"), SPECS)
