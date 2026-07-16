@@ -38,8 +38,7 @@ class MetricSpec:
     reduction: Reduction = MEDIAN_THEN_THRESHOLD
 
     def __post_init__(self):
-        # A kernel thresholds one variable per conversion value column, in
-        # order — a mismatched spec must fail at import, not mid-burn.
+        # Threshold <-> selected df values guard 
         kernels = ((self.kernel.late, self.kernel.early)
                    if isinstance(self.kernel, ThresholdDateDelta) else (self.kernel,))
         for kernel in kernels:

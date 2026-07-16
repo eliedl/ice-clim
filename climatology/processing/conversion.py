@@ -14,7 +14,6 @@ from climatology.utils._types import ConvertedPolygons, RawPolygons
 log = logging.getLogger(__name__)
 
 
-
 # --- Conversion maps
 
 # Uniform CIS trace concentration (DEC-044). Equals map('92') - map('91').
@@ -161,17 +160,14 @@ def egg_code_units(df: RawPolygons) -> ConvertedPolygons:
     denom = weight.sum(axis=1)
     mean_thk = np.divide(np.nansum(weight * np.nan_to_num(thk), axis=1), denom,
                          out=np.zeros_like(denom), where=denom > 0.0)
+    
     return df.assign(ct=df["ct_code"].map(CONCENTRATION_FRACTION),
                      mean_thk=mean_thk,
                      volume_per_area=ct0 * mean_thk)
 
-
-CT_CONVERSION = ConversionStrategy(lambda df: df.assign(ct=df["ct_code"].map(CONCENTRATION_FRACTION)))
-VOLUME_CONVERSION = ConversionStrategy(egg_code_units, value_cols=("volume_per_area",))
-# Developed-ice pair: concentration and concentration-weighted mean thickness,
-# thresholded jointly by the developed_ice_* kernels (mean_thk is 0.0, never
-# NaN, for stage-less polygons — observed thin/open water, not missing data).
+# --- Conversions
+CT_CONVERSION            = ConversionStrategy(lambda df: df.assign(ct=df["ct_code"].map(CONCENTRATION_FRACTION)))
+LANDFAST_CONVERSION      = ConversionStrategy(lambda df: df.assign(ct=(df["fa_code"] == "08").astype(float)))
 DEVELOPED_ICE_CONVERSION = ConversionStrategy(egg_code_units, value_cols=("ct", "mean_thk"))
-# Landfast indicator: 1.0 iff primary form is fast ice ('08'), else 0.0 (probe 020).
-LANDFAST_CONVERSION = ConversionStrategy(
-    lambda df: df.assign(ct=(df["fa_code"] == "08").astype(float)))
+VOLUME_CONVERSION        = ConversionStrategy(egg_code_units, value_cols=("volume_per_area",))
+
