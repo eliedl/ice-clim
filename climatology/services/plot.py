@@ -165,6 +165,14 @@ PLOT_STYLES: dict[str, PlotStyle] = {
         "mtt": "Last date the median CT holds ≥ 1/10",
         "ttm": "Median date of last ice occurrence (CT ≥ 1/10)",
     }, _date_ticks),
+    "closing_date": PlotStyle("Season closing (8/10)", {
+        "mtt": "First date the median CT reaches ≥ 8/10",
+        "ttm": "Median date of season closing (CT ≥ 8/10)",
+    }, _date_ticks),
+    "opening_date": PlotStyle("Season opening (8/10)", {
+        "mtt": "First date the median CT falls < 8/10",
+        "ttm": "Median date of season opening (CT < 8/10)",
+    }, _date_ticks),
     "formation_lag": PlotStyle("Formation lag", {
         "mtt": "Formation lag (days from median CT ≥ 1/10 to median CT ≥ 4/10)",
         "ttm": "Median formation lag (days from CT ≥ 1/10 to CT ≥ 4/10)",

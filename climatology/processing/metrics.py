@@ -67,6 +67,8 @@ _SPECS: dict[str, MetricSpec] = {
     "breakup_date":            MetricSpec(ThresholdDate(0.4, "first_below")),
     "first_occurrence_date":   MetricSpec(ThresholdDate(0.1, "first_above")),
     "last_occurrence_date":    MetricSpec(ThresholdDate(0.1, "last_above")),
+    "closing_date":            MetricSpec(ThresholdDate(0.8, "first_above")),
+    "opening_date":            MetricSpec(ThresholdDate(0.8, "first_below")),
     "formation_lag":           MetricSpec(ThresholdDateDelta(ThresholdDate(0.4, "first_above"),
                                                              ThresholdDate(0.1, "first_above"))),
     "melt_lag":                MetricSpec(ThresholdDateDelta(ThresholdDate(0.1, "first_below"),
