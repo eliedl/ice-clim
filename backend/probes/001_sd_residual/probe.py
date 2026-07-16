@@ -7,7 +7,7 @@ A zero or negative residual would mean the SD stage is asserted without
 any concentration to attach to it, indicating an inconsistent encoding.
 
 Uses :func:`parse_concentration` from
-``climatology.services.units_conversion_maps`` to decode the 2-character
+``climatology.processing.conversion`` to decode the 2-character
 SIGRID-3 concentration codes (including range codes ``91`` and sentinels
 ``-9``/``9-``). Missing CA/CB/CC values are treated as 0 contribution to
 the sum, consistent with "no stage of that rank present in this polygon".
@@ -33,7 +33,7 @@ PROJECT_ROOT = Path(__file__).parents[3]
 sys.path.insert(0, str(PROJECT_ROOT))
 load_dotenv(PROJECT_ROOT / ".env")
 
-from climatology.services.units_conversion_maps import MISSING_CODES, parse_concentration  # noqa: E402
+from climatology.processing.conversion import MISSING_CODES, parse_concentration  # noqa: E402
 
 OUTPUT_DIR = Path(__file__).parent / "output"
 

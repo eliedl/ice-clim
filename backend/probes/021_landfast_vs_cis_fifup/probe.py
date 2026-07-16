@@ -41,9 +41,9 @@ from climatology.pipeline import RunContext, _compute_tiers, _fetch  # noqa: E40
 from climatology.processing.metrics import EventDate, MetricSpec  # noqa: E402
 from climatology.processing.rasterize import GRID_CRS, burn_values  # noqa: E402
 from climatology.processing.regions import resolve_region  # noqa: E402
-from climatology.processing.sources import CHART_TABLES  # noqa: E402
+from climatology.services.sources import CHART_TABLES  # noqa: E402
 from climatology.services.temporal import SEASON_ORIGIN, Period, day_of_season  # noqa: E402
-from climatology.services.units_conversion_maps import CT_CONVERSION  # noqa: E402
+from climatology.processing.conversion import CT_CONVERSION  # noqa: E402
 
 OUTPUT_DIR = Path(__file__).parent / "output"
 OURS_CACHE = OUTPUT_DIR / "ours_values.npy"

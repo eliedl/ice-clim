@@ -48,3 +48,12 @@ _TABLES: dict[str, ChartTable] = {
 }
 CHART_TABLES: dict[str, ChartTable] = {slug: replace(ct, slug=slug)
                                        for slug, ct in _TABLES.items()}
+
+# Climatology period -> chart source. The three WMO 30-yr normals predate the sgrda
+# archive (GULF starts 2006), so they are read from the historical weekly table.
+PERIOD_SOURCES: dict[str, str] = {
+    "1971-2000": "sgrdr",
+    "1981-2010": "sgrdr",
+    "1991-2020": "sgrdr",
+    "2011-2020": "sgrda",
+}

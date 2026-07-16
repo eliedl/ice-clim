@@ -21,7 +21,7 @@ cell-diffed (the probe-010 pattern, internal ground truth):
   `ThresholdCount(0.5, ge)` / `EventDate(0.5, …)`: fast ice in >50% of seasons.
 
 The direct conversion is defined locally in the probe (not yet adopted into
-`units_conversion_maps.py` — that awaited this validation). Both run through the
+`conversion.py` — that awaited this validation). Both run through the
 current pipeline (`RunContext` + `FetchResult.prepare` + `_compute_tiers`), so the
 diff isolates only the proxy-vs-indicator difference. Metrics compared: duration,
 freeze-up, breakup.

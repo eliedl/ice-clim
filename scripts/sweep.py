@@ -6,8 +6,8 @@ period, since only ``sgrdr`` (HD weekly) reaches back before 2006 while the
 recorded and the sweep continues; the exit status reflects whether any failed.
 
 Usage:
-    python climatology/utils/sweep.py [--region manicouagan] [--period 1991-2020 ...]
-                                      [--metric freeze_up_date ...] [--geotiff] [--dry-run]
+    python scripts/sweep.py [--region manicouagan] [--period 1991-2020 ...]
+                            [--metric freeze_up_date ...] [--geotiff] [--dry-run]
 """
 
 from __future__ import annotations
@@ -22,12 +22,13 @@ from pathlib import Path
 
 from dotenv import load_dotenv
 
-load_dotenv(Path(__file__).parents[2] / ".env")
-sys.path.insert(0, str(Path(__file__).parents[2]))
+load_dotenv(Path(__file__).parents[1] / ".env")
+sys.path.insert(0, str(Path(__file__).parents[1]))
 
 from climatology.pipeline import run
 from climatology.processing.metrics import METRICS
 from climatology.processing.regions import REGION_SLUGS
+from climatology.services.sources import PERIOD_SOURCES
 
 logging.basicConfig(
     level=logging.INFO,
@@ -37,15 +38,6 @@ logging.basicConfig(
 log = logging.getLogger("sweep")
 
 DEFAULT_REGION = "manicouagan"
-
-# Period -> chart source. The three WMO 30-yr normals predate the sgrda archive
-# (GULF starts 2006), so they are read from the historical weekly table.
-PERIOD_SOURCES: dict[str, str] = {
-    "1971-2000": "sgrdr",
-    "1981-2010": "sgrdr",
-    "1991-2020": "sgrdr",
-    "2011-2020": "sgrda",
-}
 
 
 @dataclass(frozen=True)

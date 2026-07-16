@@ -1,6 +1,6 @@
 """Probe 029 — tier area de-overlap validation (multi-tier area weighting).
 
-The per-era composite (`climatology/utils/metric_per_era_composite.py`) draws an
+The per-era composite (`scripts/metric_per_era_composite.py`) draws an
 area-weighted value distribution beside each map. Adaptive regions carry two tiers that
 cover the *same ground* at different resolutions (coarse 1 km over the whole MRC, fine
 100 m over the coastal buffer), so a raw cell count would let a 100 m cell and a 1 km cell
@@ -26,7 +26,7 @@ instead attributes each patch of ground to the finest tier holding data there.
      distribution, which must sum to 100% of the region.
 
 Read-only: uses the region geometry and (for C) the archived rasters written by
-`climatology/utils/sweep.py`. No DB, no write-back.
+`scripts/sweep.py`. No DB, no write-back.
 
 Run:
     .venv/bin/python -m backend.probes.029_tier_area_deoverlap.probe

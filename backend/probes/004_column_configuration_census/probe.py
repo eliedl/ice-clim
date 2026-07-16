@@ -35,7 +35,7 @@ PROJECT_ROOT = Path(__file__).parents[3]
 sys.path.insert(0, str(PROJECT_ROOT))
 load_dotenv(PROJECT_ROOT / ".env")
 
-from climatology.services.units_conversion_maps import MISSING_CODES  # noqa: E402
+from climatology.processing.conversion import MISSING_CODES  # noqa: E402
 
 OUTPUT_DIR = Path(__file__).parent / "output"
 FIELDS = ["CT", "CA", "CB", "CC", "CN", "CD", "SA", "SB", "SC"]

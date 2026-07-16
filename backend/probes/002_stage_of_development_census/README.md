@@ -34,7 +34,7 @@ Stage codes in the SGRDA archive are **2-character SIGRID-3 v3.1 codes**, not th
 - Observed but with no SIGRID-3 v3.1 thickness range: `{95, 96, 97, 98, 99}` — **resolved/closed (DEC-043)**: stages 95/96/97 → 1.600 m (same family as code 93, Brad Drummond/CIS pers. comm. 2026-06-25); stages 98/99 → None by methodological choice (ice of land origin excluded from volume climatology).
 - Invalid / encoding errors (18 rows total): `{7C, 9C, 5-, 6-, 10, 50}`
 
-Conversion table in [`STAGE_OF_DEVELOPMENT_THICKNESS`](../../../climatology/services/units_conversion_maps.py); midpoint convention (DFO standard). Internal unit is metres.
+Conversion table in [`STAGE_OF_DEVELOPMENT_THICKNESS`](../../../climatology/processing/conversion.py); midpoint convention (DFO standard). Internal unit is metres.
 
 ### #2 Invalid-codes census
 

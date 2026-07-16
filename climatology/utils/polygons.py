@@ -8,7 +8,7 @@ import geopandas as gpd
 from shapely.geometry.base import BaseGeometry
 
 from climatology.processing.rasterize import GRID_CRS
-from climatology.processing.sources import LAND_MASK_PATH
+from climatology.services.sources import LAND_MASK_PATH
 
 # Source layers (all EPSG:32198).
 BBOX_ROOT = Path("/home/eliedl/data/masks/climatology_bbox")

@@ -81,7 +81,7 @@ stages (e.g. `81` New Ice), not thick FYI. Three bands carry explicit partial co
     map, not the parser; consumed by the volume metric when implemented.
 
 Encoding/conversion (SIGRID-3 codes → fraction / thickness in m) lives in
-`climatology/services/units_conversion_maps.py` — single source of truth; unobserved codes
+`climatology/processing/conversion.py` — single source of truth; unobserved codes
 raise KeyError. The concentration and stage→thickness tables are not duplicated here (read
 the code).
 
@@ -113,11 +113,15 @@ backend/
   ingestion/  (db, main, pipeline, sources)   ← archive → PostGIS `sgrda`
   initdb/  (DDL + init)   probes/NNN_*/  (re-runnable DB/archive probes)   viz/   test/
 climatology/
-  services/units_conversion_maps.py           ← parse maps; single source of truth
-  processing/  (metrics, event_detection, pipeline, main)  ← date metrics (DEC-027)
-  utils/ (raster_to_vector, square_bbox)   viz/ (colormaps)   tests/ (test_metrics, test_grid)
+  main.py · pipeline.py                       ← one climatology run (DEC-027)
+  processing/  (metrics, reductions, regions, rasterize)  ← domain algorithms
+    conversion.py                             ← parse maps; single source of truth
+  services/  (db, plot, temporal)             ← I/O & external interfaces
+    sources.py                                ← `CHART_TABLES`, `PERIOD_SOURCES`, `LAND_MASK_PATH`
+  utils/  (arithmetics, basemap, export, polygons, _types)   tests/
   (volume metric — attribution specified in DEC-029/044, not yet implemented)
-scripts/ (audit)   refs/ (WMO PDF)   docker-compose.yml · .env
+scripts/  (sweep, metric_per_era_composite)   ← batch drivers; run from repo root
+refs/ (WMO PDF)   docker-compose.yml · .env
 
 ## Session start protocol
 ~/CLAUDE.md and this file are auto-loaded into context each session, so reading them from

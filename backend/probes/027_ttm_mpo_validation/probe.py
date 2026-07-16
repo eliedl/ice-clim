@@ -54,7 +54,7 @@ from climatology.processing.reductions import (
     _stream_day_stacks,
 )
 from climatology.processing.regions import resolve_region
-from climatology.processing.sources import CHART_TABLES
+from climatology.services.sources import CHART_TABLES
 from climatology.services.db import load_polygons
 from climatology.services.temporal import Period, assert_hd_aligned, attach_season_calendar
 

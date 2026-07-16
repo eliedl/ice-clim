@@ -29,7 +29,7 @@ same pattern as probes 002 / 003.
 
 Output drives:
 1. **`FORM_SIZES`** in
-   [units_conversion_maps.py](../../../climatology/services/units_conversion_maps.py)
+   [conversion.py](../../../climatology/processing/conversion.py)
    — a data-driven form-code → size map, the form-axis analog of
    `STAGE_OF_DEVELOPMENT_THICKNESS`. Only observed codes are encoded; unobserved
    codes stay out and surface as `KeyError`.
@@ -104,7 +104,7 @@ a valid code).
 
 - **`FORM_SIZES`** (form code → midpoint floe diameter, m) + **`INVALID_FORM_CODES`**
   + **`parse_form_size()`** in
-  [units_conversion_maps.py](../../../climatology/services/units_conversion_maps.py).
+  [conversion.py](../../../climatology/processing/conversion.py).
   `08`/`10`/`99` → `None` (no floe class); `07` → `10000.0` **provisional**,
   authoritative value PENDING CIS.
 - Landfast is a **separate boolean flag** on code `08`, decoupled from

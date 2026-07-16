@@ -10,7 +10,7 @@ import numpy as np
 from climatology.processing.metrics import METRICS, MetricSpec
 from climatology.processing.reductions import MEDIAN_THEN_THRESHOLD, REDUCTIONS
 from climatology.processing.regions import RegionSpec, Tier, resolve_region
-from climatology.processing.sources import CHART_TABLES, LAND_MASK_PATH, ChartTable
+from climatology.services.sources import CHART_TABLES, LAND_MASK_PATH, ChartTable
 from climatology.services.db import load_polygons
 from climatology.services.plot import metric_label, plot_metric
 from climatology.services.temporal import (
@@ -19,7 +19,7 @@ from climatology.services.temporal import (
     assert_hd_aligned,
     attach_season_calendar,
 )
-from climatology.services.units_conversion_maps import ConversionStrategy
+from climatology.processing.conversion import ConversionStrategy
 from climatology.utils._types import ConvertedPolygons, DataGrid, RawPolygons
 from climatology.utils.export import (
     archive_product,

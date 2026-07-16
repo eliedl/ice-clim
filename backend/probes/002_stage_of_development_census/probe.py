@@ -44,7 +44,7 @@ PROJECT_ROOT = Path(__file__).parents[3]
 sys.path.insert(0, str(PROJECT_ROOT))
 load_dotenv(PROJECT_ROOT / ".env")
 
-from climatology.services.units_conversion_maps import (  # noqa: E402
+from climatology.processing.conversion import (  # noqa: E402
     INVALID_STAGE_CODES,
     MISSING_CODES,
     STAGE_OF_DEVELOPMENT_THICKNESS,

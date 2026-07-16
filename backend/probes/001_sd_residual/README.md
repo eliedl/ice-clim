@@ -28,7 +28,7 @@ Output is written to `output/YYYY-MM-DD_HHMMSS.txt` and echoed to stdout.
 
 ## Outcome (2026-05-27)
 
-The hypothesis "SD concentration = `CT − (CA + CB + CC)` whenever CD is present" is supported under a **piecewise rule** (CIS convention). A sub-analysis on CT=`91` rows also justified re-encoding `91` from 0.95 (midpoint) to 1.0 in [units_conversion_maps.py](../../../climatology/services/units_conversion_maps.py) — the change collapsed >20 000 spurious negative residuals to zero, leaving only 6 deeply-negative outliers attributable to genuine encoding errors.
+The hypothesis "SD concentration = `CT − (CA + CB + CC)` whenever CD is present" is supported under a **piecewise rule** (CIS convention). A sub-analysis on CT=`91` rows also justified re-encoding `91` from 0.95 (midpoint) to 1.0 in [conversion.py](../../../climatology/processing/conversion.py) — the change collapsed >20 000 spurious negative residuals to zero, leaving only 6 deeply-negative outliers attributable to genuine encoding errors.
 
 ### Final residual breakdown (post `91 → 1.0`)
 
@@ -59,7 +59,7 @@ Conclusion: SIGRID-3 code `91` in this archive means *essentially compact covera
 
 ### Implications
 
-1. **`91` re-encoded as 1.0** in `climatology/services/units_conversion_maps.py`.
+1. **`91` re-encoded as 1.0** in `climatology/processing/conversion.py`.
 2. **SD concentration rule** (piecewise, CIS convention):
    - `residual > 0` → SD = `residual`
    - `residual ≤ 0` (CD present) → SD = `0.05` (trace)

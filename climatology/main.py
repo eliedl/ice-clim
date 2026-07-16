@@ -28,7 +28,7 @@ from climatology.pipeline import run
 from climatology.processing.metrics import METRICS
 from climatology.processing.reductions import REDUCTIONS
 from climatology.processing.regions import REGION_SLUGS
-from climatology.processing.sources import CHART_TABLES
+from climatology.services.sources import CHART_TABLES
 
 logging.basicConfig(
     level=logging.INFO,

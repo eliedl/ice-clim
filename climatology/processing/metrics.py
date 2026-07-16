@@ -15,7 +15,7 @@ from climatology.processing.reductions import (
     ThresholdDuration,
 )
 from climatology.processing.regions import Tier
-from climatology.services.units_conversion_maps import (
+from climatology.processing.conversion import (
     CT_CONVERSION,
     LANDFAST_CONVERSION,
     ConversionStrategy,

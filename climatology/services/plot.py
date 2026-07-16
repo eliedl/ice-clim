@@ -37,7 +37,7 @@ if TYPE_CHECKING:
     from climatology.pipeline import RunContext
     from climatology.processing.metrics import MetricSpec
     from climatology.processing.regions import Tier
-    from climatology.processing.sources import ChartTable
+    from climatology.services.sources import ChartTable
 
 log = logging.getLogger(__name__)
 

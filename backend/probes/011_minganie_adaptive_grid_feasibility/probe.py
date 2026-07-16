@@ -43,7 +43,7 @@ from climatology.processing.regions import (  # noqa: E402
     _coastline_buffer,
     _minganie_polygon,
 )
-from climatology.processing.sources import LAND_MASK_PATH  # noqa: E402
+from climatology.services.sources import LAND_MASK_PATH  # noqa: E402
 
 OUTPUT_DIR = Path(__file__).parent / "output"
 

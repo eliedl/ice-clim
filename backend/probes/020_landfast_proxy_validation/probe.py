@@ -38,9 +38,9 @@ load_dotenv(PROJECT_ROOT / ".env")
 from climatology.pipeline import RunContext, _compute_tiers, _fetch  # noqa: E402
 from climatology.processing.metrics import EventDate, MetricSpec, ThresholdCount  # noqa: E402
 from climatology.processing.regions import resolve_region  # noqa: E402
-from climatology.processing.sources import CHART_TABLES  # noqa: E402
+from climatology.services.sources import CHART_TABLES  # noqa: E402
 from climatology.services.temporal import Period  # noqa: E402
-from climatology.services.units_conversion_maps import (  # noqa: E402
+from climatology.processing.conversion import (  # noqa: E402
     CT_CONVERSION,
     ConversionStrategy,
 )

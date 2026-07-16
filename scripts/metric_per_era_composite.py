@@ -9,8 +9,8 @@ days for sgrda and weeks for sgrdr, so their eras cannot share one colour scale;
 reported as skipped rather than drawn on a scale that would misread.
 
 Usage:
-    python climatology/utils/metric_per_era_composite.py [--region manicouagan]
-                                                         [--metric freeze_up_date ...]
+    python scripts/metric_per_era_composite.py [--region manicouagan]
+                                               [--metric freeze_up_date ...]
 """
 
 from __future__ import annotations
@@ -24,16 +24,16 @@ from pathlib import Path
 import numpy as np
 from dotenv import load_dotenv
 
-load_dotenv(Path(__file__).parents[2] / ".env")
-sys.path.insert(0, str(Path(__file__).parents[2]))
+load_dotenv(Path(__file__).parents[1] / ".env")
+sys.path.insert(0, str(Path(__file__).parents[1]))
 
 from climatology.processing.metrics import METRICS
 from climatology.processing.reductions import MEDIAN_THEN_THRESHOLD, REDUCTIONS
 from climatology.processing.regions import REGION_SLUGS, resolve_region
-from climatology.processing.sources import CHART_TABLES
 from climatology.services.plot import MetricPanel, RasterLayer, plot_metric_panels
+from climatology.services.sources import CHART_TABLES, PERIOD_SOURCES
 from climatology.utils.export import OUTPUT_DIR, find_archived
-from climatology.utils.sweep import DEFAULT_REGION, PERIOD_SOURCES
+from scripts.sweep import DEFAULT_REGION
 
 logging.basicConfig(
     level=logging.INFO,

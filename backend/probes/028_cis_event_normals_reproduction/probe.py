@@ -53,7 +53,7 @@ from climatology.pipeline import RunContext, _compute_tiers, _fetch  # noqa: E40
 from climatology.processing.metrics import METRICS  # noqa: E402
 from climatology.processing.rasterize import GRID_CRS, Grid, burn_values  # noqa: E402
 from climatology.processing.regions import resolve_region  # noqa: E402
-from climatology.processing.sources import CHART_TABLES  # noqa: E402
+from climatology.services.sources import CHART_TABLES  # noqa: E402
 from climatology.services.temporal import SEASON_ORIGIN, Period, day_of_season  # noqa: E402
 
 CIS_ROOT = Path("/home/eliedl/data/CIS/1991-2020_climatology_shapefiles/EC")

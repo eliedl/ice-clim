@@ -23,7 +23,7 @@ excluded, all conditioned on the landfast code `08`:
    `CB` where `FB='08'`, `CC` where `FC='08'`.
 3. **CT × POLY_TYPE for `FA='08'`** — which polygon classes carry landfast.
 
-Raw text values, no casting (parse maps live in `units_conversion_maps.py`).
+Raw text values, no casting (parse maps live in `conversion.py`).
 
 ## Expected outcome
 

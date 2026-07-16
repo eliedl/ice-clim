@@ -13,7 +13,7 @@ import pytest
 
 from climatology.processing.metrics import METRICS
 from climatology.processing.reductions import REDUCTIONS
-from climatology.processing.sources import CHART_TABLES
+from climatology.services.sources import CHART_TABLES
 from climatology.services.plot import (
     PLOT_STYLES,
     REDUCTION_NOTES,

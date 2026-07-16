@@ -10,7 +10,7 @@ import numpy as np
 import shapely
 from shapely.geometry.base import BaseGeometry
 
-from climatology.processing.polygons import (
+from climatology.utils.polygons import (
     _bbox_envelope, _coastline_buffer, _landmask, _mrc_polygon,
 )
 from climatology.processing.rasterize import GRID_RES, Grid, build_grid, burn_mask

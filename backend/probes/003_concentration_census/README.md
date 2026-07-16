@@ -45,12 +45,12 @@ The 2-digit SIGRID-3 concentration encoding was directly visible in the data: `0
 
 - **`-9`** is the universal SIGRID-3 dummy variable for missing/unused fields. Counts: CT=67, CA=313 806, CB=313 797, CC=363 949.
 - **`9-`** (12 occurrences — 6 in CB, 6 in CC) is treated as a typo of `-9`.
-- **`8`** (4 rows in CA) and **`9`** (2 rows in CA) are silently substituted to `80` and `90` in the conversion map. Likely data-entry typos consistent with the 2-digit encoding; documented in `_TYPO_SUBSTITUTIONS` in [units_conversion_maps.py](../../../climatology/services/units_conversion_maps.py).
+- **`8`** (4 rows in CA) and **`9`** (2 rows in CA) are silently substituted to `80` and `90` in the conversion map. Likely data-entry typos consistent with the 2-digit encoding; documented in `_TYPO_SUBSTITUTIONS` in [conversion.py](../../../climatology/processing/conversion.py).
 - **Range codes `12`..`89`** (e.g. `34`, `45`, `78`) and **`99`** (undetermined) are NOT observed and are omitted from the conversion map. Any future encounter will surface as a `KeyError` rather than be silently mapped.
 
 ### Conversion map
 
-Lives in [climatology/services/units_conversion_maps.py](../../../climatology/services/units_conversion_maps.py). Bergy water `02` set to fraction `0.05` (5%) pending CIS validation via clim-001 outreach. `01` set to `0.05` per the "Open water/bergy water < 1 tenth" definition. `91` set to `0.97` (see LITERATURE.md; T3 decision 1.). Internal unit is fraction `[0, 1]`.
+Lives in [climatology/processing/conversion.py](../../../climatology/processing/conversion.py). Bergy water `02` set to fraction `0.05` (5%) pending CIS validation via clim-001 outreach. `01` set to `0.05` per the "Open water/bergy water < 1 tenth" definition. `91` set to `0.97` (see LITERATURE.md; T3 decision 1.). Internal unit is fraction `[0, 1]`.
 
 ### Follow-ups
 

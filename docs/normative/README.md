@@ -107,7 +107,7 @@ Where each local copy was obtained. Retrieved **2026-06-18** unless noted.
 
 ```
 normative/ (authoritative bytes)
-   ├── dereferenced by → DECISIONS.md (rulings) + units_conversion_maps.py (implementation)
+   ├── dereferenced by → DECISIONS.md (rulings) + conversion.py (implementation)
    └── cited by         → READING_LOG.md (complete references) / LITERATURE.md (synthesis)
 ```
 
