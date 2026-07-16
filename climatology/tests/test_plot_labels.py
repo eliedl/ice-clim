@@ -96,6 +96,8 @@ def test_label_agrees_with_the_kernel_threshold(slug: str):
     spec = _spec(slug, "mtt")
     if spec.fields[0] != "CT":          # landfast runs on the FA indicator, not a concentration
         return
+    if len(spec.conversion.value_cols) > 1:
+        return  # multi-variable state, no single crossing — pinned by the developed-ice test
     threshold = threshold_label(spec)   # e.g. "CT < 4/10" — derived from the kernel
     label = metric_label(spec)
     for clause in threshold.split(" → "):
@@ -108,6 +110,15 @@ def test_ttm_note_states_the_season_coverage_rule():
     """TTM drops cells short of the MPO coverage rule; the figure has to admit that."""
     note = reduction_note(_spec("breakup_date", "ttm"))
     assert "50%" in note and "coverage" in note
+
+
+def test_developed_ice_labels_name_both_criteria():
+    """Developed ice is a joint CT + thickness state — every label must state both thresholds."""
+    for slug in (s for s in METRICS if s.startswith("developed_ice")):
+        for reduction in REDUCTIONS:
+            label = metric_label(_spec(slug, reduction))
+            assert "9/10" in label and "0.5 m" in label, (
+                f"{slug}/{reduction}: label {label!r} must carry both criteria")
 
 
 def test_landfast_labels_name_fa_not_ct():

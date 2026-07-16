@@ -209,6 +209,24 @@ PLOT_STYLES: dict[str, PlotStyle] = {
         "mtt": "Landfast exposure (days with median FA = '08' < 0.5)",
         "ttm": "Median landfast exposure (days, FA ≠ '08')",
     }, _count_ticks),
+    # Developed ice = the joint state CT ≥ 9/10 AND mean thickness ≥ 0.5 m; its
+    # clearing/absence is the De Morgan complement (either criterion below).
+    "developed_ice_freeze_up_date": PlotStyle("Developed ice freeze-up", {
+        "mtt": "First date the median CT reaches ≥ 9/10 with median thickness ≥ 0.5 m",
+        "ttm": "Median date of developed-ice freeze-up (CT ≥ 9/10, thickness ≥ 0.5 m)",
+    }, _date_ticks),
+    "developed_ice_breakup_date": PlotStyle("Developed ice break-up", {
+        "mtt": "First date the median CT falls < 9/10 or median thickness < 0.5 m",
+        "ttm": "Median date of developed-ice break-up (CT < 9/10 or thickness < 0.5 m)",
+    }, _date_ticks),
+    "developed_ice_duration": PlotStyle("Developed ice duration", {
+        "mtt": "Developed ice presence (days with median CT ≥ 9/10 and median thickness ≥ 0.5 m)",
+        "ttm": "Median developed ice presence (days, CT ≥ 9/10 and thickness ≥ 0.5 m)",
+    }, _count_ticks),
+    "developed_ice_exposure": PlotStyle("Developed ice absence duration", {
+        "mtt": "Developed ice absence (days with median CT < 9/10 or median thickness < 0.5 m)",
+        "ttm": "Median developed ice absence (days, CT < 9/10 or thickness < 0.5 m)",
+    }, _count_ticks),
 }
 
 
@@ -240,7 +258,7 @@ def _kernel_threshold(kernel, field: str) -> str:
                 f"{_kernel_threshold(kernel.late, field)}")
     op = (_DATE_OPS[kernel.mode] if isinstance(kernel, ThresholdDate)
           else _DURATION_OPS[kernel.op])
-    return f"{field} {op} {round(kernel.threshold * 10)}/10"
+    return f"{field} {op} {round(kernel.threshold[0] * 10)}/10"
 
 
 # The reduction order is a methodology statement, so it rides in the footer with the other
@@ -265,6 +283,11 @@ def threshold_label(metric: MetricSpec) -> str:
         # LANDFAST_CONVERSION turns the FA form code into a 0/1 landfast indicator, so the
         # kernel's 0.5 is a boolean midpoint — not a concentration, and not "5/10".
         return f"landfast ice ({field})"
+    if len(metric.conversion.value_cols) > 1:
+        # Multi-variable kernels threshold a state, not a single crossing: name the
+        # state (the per-metric crossing direction lives in the colourbar label).
+        ct_t, thk_t = metric.kernel.threshold
+        return f"developed ice (CT ≥ {round(ct_t * 10)}/10, thickness ≥ {thk_t} m)"
     return _kernel_threshold(metric.kernel, field)
 
 

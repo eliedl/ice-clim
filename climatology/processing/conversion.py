@@ -109,9 +109,14 @@ def parse_form_size(code: str | float | None) -> float | None:
 
 @dataclass(frozen=True)
 class ConversionStrategy:
-    """Strategy: prepare a metric's raw <field>_code columns into the value column its kernel consumes."""
+    """Strategy: prepare a metric's raw <field>_code columns into the value column(s) its kernel consumes.
+
+    ``value_cols`` declares which prepared columns the reduction burns, in the
+    same order as the kernel's per-variable thresholds.
+    """
 
     prepare: Callable[[RawPolygons], ConvertedPolygons]
+    value_cols: tuple[str, ...] = ("ct",)
 
 
 def _present_col(s: pd.Series) -> np.ndarray:
@@ -120,7 +125,13 @@ def _present_col(s: pd.Series) -> np.ndarray:
 
 
 def egg_code_units(df: RawPolygons) -> ConvertedPolygons:
-    """Add ``volume_per_area`` (CT × Σ(conc·thk)/Σ(conc)) by vectorized regime-aware egg-code attribution."""
+    """Add ``ct``, ``mean_thk`` and ``volume_per_area`` (CT × Σ(conc·thk)/Σ(conc)) by vectorized regime-aware egg-code attribution.
+
+    ``ct`` keeps NaN for missing CT codes (the probe-004 ``empty``/``stage_only``
+    rows) so threshold kernels see those cells as unobserved, not ice-free;
+    the zero-filled ``ct0`` stays internal to the volume product, where
+    "missing contributes 0" is the census skip policy.
+    """
     conc_of = lambda col: df[col].replace(_TYPO_SUBSTITUTIONS).map(CONCENTRATION_FRACTION).to_numpy()
     thk_of = lambda col: df[col].map(STAGE_OF_DEVELOPMENT_THICKNESS).to_numpy(dtype=float)
 
@@ -150,11 +161,17 @@ def egg_code_units(df: RawPolygons) -> ConvertedPolygons:
     denom = weight.sum(axis=1)
     mean_thk = np.divide(np.nansum(weight * np.nan_to_num(thk), axis=1), denom,
                          out=np.zeros_like(denom), where=denom > 0.0)
-    return df.assign(volume_per_area=ct0 * mean_thk)
+    return df.assign(ct=df["ct_code"].map(CONCENTRATION_FRACTION),
+                     mean_thk=mean_thk,
+                     volume_per_area=ct0 * mean_thk)
 
 
 CT_CONVERSION = ConversionStrategy(lambda df: df.assign(ct=df["ct_code"].map(CONCENTRATION_FRACTION)))
-VOLUME_CONVERSION = ConversionStrategy(egg_code_units)
+VOLUME_CONVERSION = ConversionStrategy(egg_code_units, value_cols=("volume_per_area",))
+# Developed-ice pair: concentration and concentration-weighted mean thickness,
+# thresholded jointly by the developed_ice_* kernels (mean_thk is 0.0, never
+# NaN, for stage-less polygons — observed thin/open water, not missing data).
+DEVELOPED_ICE_CONVERSION = ConversionStrategy(egg_code_units, value_cols=("ct", "mean_thk"))
 # Landfast indicator: 1.0 iff primary form is fast ice ('08'), else 0.0 (probe 020).
 LANDFAST_CONVERSION = ConversionStrategy(
     lambda df: df.assign(ct=(df["fa_code"] == "08").astype(float)))

@@ -11,18 +11,28 @@ import numpy as np
 from climatology.processing.rasterize import burn_value_stack
 from climatology.processing.regions import Tier
 from climatology.utils._types import (
-    BoolVector, ConvertedPolygons, DataGrid, DateConvertedPolygons, WetStack, WetVector,
+    BoolVector, ConvertedPolygons, DataGrid, DateConvertedPolygons,
+    VarWetStack, VarWetVector, WetStack, WetVector,
 )
 from climatology.utils.arithmetics import _nanmedian_high
 
 # A re-iterable source of (day-of-season ordinal, wet-space slice) pairs in
-# ascending day-of-season order. Kernels are shape-agnostic: a slice is the
-# (n_wet,) cross-season median vector (MTT) or the (n_seasons, n_wet) day stack
-# (TTM), and the fold preserves whichever shape it is fed. A zero-arg factory
-# rather than a bare iterator so composite kernels (ThresholdDateDelta) can
-# fold the same stream twice.
-WetSlice = WetVector | WetStack
+# ascending day-of-season order. A slice always carries the value-column axis
+# second-from-last: (n_vars, n_wet) cross-season median slices (MTT) or the
+# (n_seasons, n_vars, n_wet) day stacks (TTM). Kernels threshold each variable
+# against its own entry of ``threshold``, collapse the n_vars axis (always
+# ``axis=-2``, whatever leads), and so stay agnostic of the leading shape:
+# they return (n_wet,) under MTT and (n_seasons, n_wet) under TTM. A zero-arg
+# factory rather than a bare iterator so composite kernels (ThresholdDateDelta)
+# can fold the same stream twice.
+WetSlice = VarWetVector | VarWetStack
+KernelResult = WetVector | WetStack
 SliceStream = Callable[[], Iterator[tuple[int, WetSlice]]]
+
+
+def _cell_shape(values: WetSlice) -> tuple[int, ...]:
+    """A slice's shape with the n_vars axis collapsed — the kernel-result shape."""
+    return values.shape[:-2] + values.shape[-1:]
 
 
 # --- Kernels: day-axis reducers folding a slice stream into a slice-shaped result.
@@ -31,26 +41,31 @@ SliceStream = Callable[[], Iterator[tuple[int, WetSlice]]]
 class ThresholdDate:
     """Day-of-season of the threshold crossing; ``mode`` picks which crossing."""
 
-    threshold: float
+    threshold: tuple[float, ...]  # one entry per value column, in value_cols order
     mode: str  # "first_above" | "last_above" | "first_below"
 
-    def reduce(self, slices: SliceStream) -> WetSlice:
+    def reduce(self, slices: SliceStream) -> KernelResult:
+        thr = np.asarray(self.threshold, dtype=np.float32)[:, None]  # (n_vars, 1)
         result = seen_above = None
         for ordinal, values in slices():
             if result is None:  # shapes come from the stream's first slice
-                result = np.full(values.shape, np.nan, dtype=np.float32)
-                seen_above = np.zeros(values.shape, dtype=bool)
-            above = values >= self.threshold
+                result = np.full(_cell_shape(values), np.nan, dtype=np.float32)
+                seen_above = np.zeros(_cell_shape(values), dtype=bool)
+            # per-variable crossing, then AND over the n_vars axis: a cell is
+            # "above" only when every variable clears its own threshold.
+            above = (values >= thr).all(axis=-2)
             if self.mode == "first_above":
                 result[above & ~seen_above] = ordinal  # one cell cannot cross up twice
             elif self.mode == "last_above":
                 result[above] = ordinal
             else:  # first_below — the clearing day: the first sub-threshold day
                 # *after the last* crossing above, so a re-freeze discards the
-                # dip that preceded it. NaN days (unobserved) never clear a cell,
-                # and a cell still above on the final day never clears at all.
+                # dip that preceded it. NaN days (unobserved on any variable)
+                # never clear a cell, and a cell still above on the final day
+                # never clears at all.
+                observed = ~np.isnan(values).any(axis=-2)
                 result[above] = np.nan
-                result[~above & ~np.isnan(values) & seen_above & np.isnan(result)] = ordinal
+                result[~above & observed & seen_above & np.isnan(result)] = ordinal
             seen_above |= above
         return result
 
@@ -62,28 +77,37 @@ class ThresholdDateDelta:
     late: ThresholdDate
     early: ThresholdDate
 
-    def reduce(self, slices: SliceStream) -> WetSlice:
+    def reduce(self, slices: SliceStream) -> KernelResult:
         return self.late.reduce(slices) - self.early.reduce(slices)
 
 
 @dataclass(frozen=True)
 class ThresholdDuration:
-    """Count of admissible steps whose slice satisfies ``op`` (ge=duration, le=exposure)."""
+    """Count of admissible steps whose slice satisfies ``op`` (ge=duration, le=exposure).
 
-    threshold: float
-    op: Callable[[WetSlice, float], BoolVector] = operator.ge
+    ``combine`` collapses the per-variable comparisons: ``np.all`` counts steps
+    where every variable satisfies ``op`` (duration), ``np.any`` steps where at
+    least one does — by De Morgan, ``(lt, any)`` is the exact complement of
+    ``(ge, all)``, so a multi-variable duration/exposure pair partitions the
+    observed days. Single-variable metrics are unaffected (all == any on one row).
+    """
 
-    def reduce(self, slices: SliceStream) -> WetSlice:
-        # Streaming accumulation, not cube materialization: one slice-shaped
+    threshold: tuple[float, ...]  # one entry per value column, in value_cols order
+    op: Callable = operator.ge
+    combine: Callable = np.all
+
+    def reduce(self, slices: SliceStream) -> KernelResult:
+        # Streaming accumulation, not cube materialization: one cell-shaped
         # accumulator instead of an (n_days, ...) cube. float32, not int: the
         # never-observed mask needs NaN.
+        thr = np.asarray(self.threshold, dtype=np.float32)[:, None]  # (n_vars, 1)
         count = observed = None
         for _ordinal, values in slices():
             if count is None:
-                count = np.zeros(values.shape, dtype=np.float32)
-                observed = np.zeros(values.shape, dtype=bool)
-            count += self.op(values, self.threshold)
-            observed |= ~np.isnan(values)
+                count = np.zeros(_cell_shape(values), dtype=np.float32)
+                observed = np.zeros(_cell_shape(values), dtype=bool)
+            count += self.combine(self.op(values, thr), axis=-2)
+            observed |= ~np.isnan(values).any(axis=-2)
         count[~observed] = np.nan
         return count
 
@@ -93,24 +117,27 @@ Kernel = ThresholdDate | ThresholdDateDelta | ThresholdDuration
 
 # --- Reduction orders: how the kernel fold and the cross-season median compose.
 
-def _aligned_season_groups(day_df: DateConvertedPolygons, seasons: list) -> list[list]:
-    """One (geometry, value)-pair list per season — empty when the season lacks this day, keeping the stack's season axis aligned across days (load-bearing for TTM)."""
-    present = {s: list(zip(g["geometry"], g["ct"])) for s, g in day_df.groupby("season")}
+def _aligned_season_groups(day_df: DateConvertedPolygons, seasons: list, col: str) -> list[list]:
+    """One (geometry, value)-pair list per season for ``col`` — empty when the season lacks this day, keeping the stack's season axis aligned across days (load-bearing for TTM)."""
+    present = {s: list(zip(g["geometry"], g[col])) for s, g in day_df.groupby("season")}
     return [present.get(s, []) for s in seasons]
 
 
-def _stream_day_stacks(df: ConvertedPolygons, *, tier: Tier) -> Iterator[tuple[int, WetStack]]:
-    """Yield ``(day-of-season, (n_seasons, n_wet) burned CT stack)`` per admissible day, ascending; fixed season axis."""
-    df = df.dropna(subset=["ct"])
+def _stream_day_stacks(df: ConvertedPolygons, *, tier: Tier,
+                       value_cols: tuple[str, ...]) -> Iterator[tuple[int, VarWetStack]]:
+    """Yield ``(day-of-season, (n_seasons, n_vars, n_wet) burned value stack)`` per admissible day, ascending; fixed season axis, one vars-axis row per value column."""
+    df = df.dropna(subset=list(value_cols))
     seasons = sorted(df["season"].unique())
     for ordinal, day_df in df.groupby("day_of_season"):
-        yield ordinal, burn_value_stack(_aligned_season_groups(day_df, seasons),
-                                        tier.grid, wet=tier.wet_mask)
+        yield ordinal, np.stack([burn_value_stack(_aligned_season_groups(day_df, seasons, col),
+                                                  tier.grid, wet=tier.wet_mask)
+                                 for col in value_cols], axis=1)
 
 
-def _stream_median_ct_slices(df: ConvertedPolygons, *, tier: Tier) -> Iterator[tuple[int, WetVector]]:
-    """Yield ``(day-of-season, cross-season median CT wet vector)`` per admissible day: the day stack compressed before the kernel (DEC-027)."""
-    for ordinal, stack in _stream_day_stacks(df, tier=tier):
+def _stream_median_slices(df: ConvertedPolygons, *, tier: Tier,
+                          value_cols: tuple[str, ...]) -> Iterator[tuple[int, VarWetVector]]:
+    """Yield ``(day-of-season, (n_vars, n_wet) cross-season median slice)`` per admissible day: the day stack compressed before the kernel (DEC-027)."""
+    for ordinal, stack in _stream_day_stacks(df, tier=tier, value_cols=value_cols):
         yield ordinal, _nanmedian_high(stack)
 
 
@@ -127,9 +154,11 @@ class MedianThenThreshold:
 
     slug = "mtt"
 
-    def __call__(self, kernel: Kernel, df: ConvertedPolygons, tier: Tier) -> DataGrid:
+    def __call__(self, kernel: Kernel, df: ConvertedPolygons, tier: Tier,
+                 *, value_cols: tuple[str, ...] = ("ct",)) -> DataGrid:
         # Kernels fold over compact wet-cell vectors; scatter to (H, W) once, here.
-        result = kernel.reduce(lambda: _stream_median_ct_slices(df, tier=tier))
+        result = kernel.reduce(lambda: _stream_median_slices(df, tier=tier,
+                                                             value_cols=value_cols))
         return _scatter_to_grid(result, tier)
 
 
@@ -145,8 +174,10 @@ class ThresholdThenMedian:
     slug = "ttm"
     min_season_coverage: float = MPO_MIN_SEASON_COVERAGE
 
-    def __call__(self, kernel: Kernel, df: ConvertedPolygons, tier: Tier) -> DataGrid:
-        per_season: WetStack = kernel.reduce(lambda: _stream_day_stacks(df, tier=tier))
+    def __call__(self, kernel: Kernel, df: ConvertedPolygons, tier: Tier,
+                 *, value_cols: tuple[str, ...] = ("ct",)) -> DataGrid:
+        per_season: WetStack = kernel.reduce(lambda: _stream_day_stacks(df, tier=tier,
+                                                                        value_cols=value_cols))
         n_valid = np.sum(~np.isnan(per_season), axis=0)
         keep: BoolVector = n_valid >= np.ceil(self.min_season_coverage * per_season.shape[0])
         # median only where the MPO season-coverage rule passes — which doubles as

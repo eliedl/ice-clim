@@ -11,6 +11,8 @@ Dimension vocabulary
   n_wet              wet cells of a tier (``wet_mask.sum()``); the H*W grid
                      flattened to its analysed cells
   n_seasons          climatology seasons withtin RunContext.period.window
+  n_vars             value columns burned per polygon (1 for CT-only metrics;
+                     2 for the developed-ice (ct, mean_thk) pair)
 
 Single-use shapes are deliberately annotated inline rather than aliased here
 (e.g. ``_nanmedian_high``'s ``Float["n_seasons *rest"] -> Float["*rest"]``):
@@ -29,6 +31,11 @@ BoolGrid = Bool[np.ndarray, "H W"]          # land / clip masks (True = land / i
 WetVector = Float[np.ndarray, "n_wet"]      # float32 over wet cells; NaN = never-observed
 BoolVector = Bool[np.ndarray, "n_wet"]      # predicate over wet cells (threshold / observed)
 WetStack = Float[np.ndarray, "n_seasons n_wet"]  # one WetVector per season, stacked (pre-median)
+
+# kernel input slices: one row per burned value column; the kernels collapse
+# the n_vars axis (always second-from-last) and return WetVector / WetStack
+VarWetVector = Float[np.ndarray, "n_vars n_wet"]           # MTT slice (post-median)
+VarWetStack = Float[np.ndarray, "n_seasons n_vars n_wet"]  # TTM slice (per-season day stack)
 
 # polygon frames (schema is doc-only; all pandas DataFrames)
 RawPolygons           = pd.DataFrame   # fetch output: geometry + obs_date + <field>_code columns (+ season calendar)

@@ -111,10 +111,10 @@ def fetch_prepared(tier):
 
 def per_season_folds(prepared, tier):
     """The real kernels folded over the shared day-stack stream: three (n_seasons, n_wet) results."""
-    stream = lambda: _stream_day_stacks(prepared, tier=tier)
-    first = ThresholdDate(CT_THRESHOLD, "first_above").reduce(stream)
-    last = ThresholdDate(CT_THRESHOLD, "last_above").reduce(stream)
-    dur = ThresholdDuration(CT_THRESHOLD, operator.ge).reduce(stream)
+    stream = lambda: _stream_day_stacks(prepared, tier=tier, value_cols=("ct",))
+    first = ThresholdDate((CT_THRESHOLD,), "first_above").reduce(stream)
+    last = ThresholdDate((CT_THRESHOLD,), "last_above").reduce(stream)
+    dur = ThresholdDuration((CT_THRESHOLD,), operator.ge).reduce(stream)
     return first, last, dur
 
 
