@@ -117,21 +117,23 @@ Kernel = ThresholdDate | ThresholdDateDelta | ThresholdDuration
 
 # --- Reduction orders: how the kernel fold and the cross-season median compose.
 
-def _aligned_season_groups(day_df: DateConvertedPolygons, seasons: list, col: str) -> list[list]:
-    """One (geometry, value)-pair list per season for ``col`` — empty when the season lacks this day, keeping the stack's season axis aligned across days (load-bearing for TTM)."""
-    present = {s: list(zip(g["geometry"], g[col])) for s, g in day_df.groupby("season")}
-    return [present.get(s, []) for s in seasons]
+def _aligned_season_groups(day_df: DateConvertedPolygons, seasons: list,
+                           value_cols: tuple[str, ...]) -> list[tuple]:
+    """One (geometries, (n_polys, n_vars) values) pair per season — empty when the season lacks this day, keeping the stack's season axis aligned across days (load-bearing for TTM)."""
+    empty = ([], np.empty((0, len(value_cols)), dtype=np.float32))
+    present = {s: (g["geometry"].to_numpy(), g[list(value_cols)].to_numpy(dtype=np.float32))
+               for s, g in day_df.groupby("season")}
+    return [present.get(s, empty) for s in seasons]
 
 
 def _stream_day_stacks(df: ConvertedPolygons, *, tier: Tier,
                        value_cols: tuple[str, ...]) -> Iterator[tuple[int, VarWetStack]]:
-    """Yield ``(day-of-season, (n_seasons, n_vars, n_wet) burned value stack)`` per admissible day, ascending; fixed season axis, one vars-axis row per value column."""
+    """Yield ``(day-of-season, (n_seasons, n_vars, n_wet) burned value stack)`` per admissible day, ascending; fixed season axis."""
     df = df.dropna(subset=list(value_cols))
     seasons = sorted(df["season"].unique())
     for ordinal, day_df in df.groupby("day_of_season"):
-        yield ordinal, np.stack([burn_value_stack(_aligned_season_groups(day_df, seasons, col),
-                                                  tier.grid, wet=tier.wet_mask)
-                                 for col in value_cols], axis=1)
+        yield ordinal, burn_value_stack(_aligned_season_groups(day_df, seasons, value_cols),
+                                        tier.grid, wet=tier.wet_mask)
 
 
 def _stream_median_slices(df: ConvertedPolygons, *, tier: Tier,

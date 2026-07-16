@@ -13,7 +13,7 @@ scores the assumptions it rests on.
 ## Method
 
 Rebuilds the panels from the sweep archives via the *production* loader
-(`scripts/metric_per_era_composite.py::_load_panel`) and renders through
+(`climatology/scripts/metric_per_era_composite.py::_load_panel`) and renders through
 `plot.plot_metric_panels` — no probe-local reimplementation, so the probe exercises the
 shipping code path rather than shadowing it. Writes a timestamped reference PNG per metric
 plus a scorecard.
@@ -114,8 +114,8 @@ labels collide), drawn under the bars.
 ## Provenance
 
 Renders `climatology/services/plot.py::plot_metric_panels`; panels built by
-`scripts/metric_per_era_composite.py`; archives from
-`scripts/sweep.py`. Area weighting validated by **probe 029**. Unit conversion
+`climatology/scripts/metric_per_era_composite.py`; archives from
+`climatology/scripts/sweep.py`. Area weighting validated by **probe 029**. Unit conversion
 in `climatology/pipeline.py::TierProduct.build` + `services/sources.py::step_days`.
 
 Run:

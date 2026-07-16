@@ -51,12 +51,13 @@ def test_titles_are_unique():
 
 
 @pytest.mark.parametrize("slug", sorted(METRICS))
-def test_title_carries_the_value_type_suffix(slug: str):
-    """Every title states its value type — 'date' or 'duration' — possibly before a threshold tag."""
+def test_title_states_the_value_type(slug: str):
+    """Count metrics say what the number is ('duration' / 'lag'); date metrics are named for the event itself, so a literal 'date' would be redundant (title reformat, e8b5cce)."""
     title = PLOT_STYLES[slug].title.lower()
-    want = "date" if slug.endswith("_date") else "duration"
-    # the word must head the suffix; a threshold parenthetical ("... duration (4/10)") may follow
-    assert title.endswith(want) or f"{want} (" in title
+    if slug.endswith("_date"):
+        assert "date" not in title
+    else:
+        assert "duration" in title or "lag" in title
 
 
 def test_both_ice_season_titles_carry_the_threshold():

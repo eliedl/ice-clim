@@ -157,11 +157,11 @@ PLOT_STYLES: dict[str, PlotStyle] = {
         "mtt": "First date the median CT falls < 4/10",
         "ttm": "Median date of break-up (CT < 4/10)",
     }, _date_ticks),
-    "first_occurrence_date": PlotStyle("First occurence", {
+    "first_occurrence_date": PlotStyle("First occurrence", {
         "mtt": "First date the median CT reaches ≥ 1/10",
         "ttm": "Median date of first ice occurrence (CT ≥ 1/10)",
     }, _date_ticks),
-    "last_occurrence_date": PlotStyle("Last occurence", {
+    "last_occurrence_date": PlotStyle("Last occurrence", {
         "mtt": "Last date the median CT holds ≥ 1/10",
         "ttm": "Median date of last ice occurrence (CT ≥ 1/10)",
     }, _date_ticks),

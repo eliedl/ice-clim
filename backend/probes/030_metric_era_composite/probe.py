@@ -5,7 +5,7 @@ Rebuilds the multi-era panel figure end-to-end from the sweep archives and write
 diffable independently of the production script.
 
 The panel construction is imported from production
-(`scripts/metric_per_era_composite.py`) rather than reimplemented — this probe
+(`climatology/scripts/metric_per_era_composite.py`) rather than reimplemented — this probe
 exercises that code path, it does not shadow it. What it adds is the scorecard: for each
 metric, the shared colour scale the four eras end up on, the distinct-value count (weekly
 sources quantize date metrics to 7-day steps), and the area the distribution covers.
@@ -20,7 +20,7 @@ Design under test (see README):
   - step-count metrics are scaled to days at `TierProduct` (sgrdr x7), which is what lets
     durations share a scale with sgrda at all.
 
-Read-only: consumes the archives written by `scripts/sweep.py`. No DB.
+Read-only: consumes the archives written by `climatology/scripts/sweep.py`. No DB.
 
 Run:
     .venv/bin/python -m backend.probes.030_metric_era_composite.probe
@@ -39,11 +39,11 @@ import numpy as np
 from climatology.processing.metrics import METRICS
 from climatology.processing.reductions import MEDIAN_THEN_THRESHOLD, REDUCTIONS
 from climatology.processing.regions import resolve_region
+from climatology.scripts.metric_per_era_composite import _load_panel
 from climatology.services.plot import _area_weights, plot_metric_panels, threshold_label
 from climatology.services.sources import PERIOD_SOURCES
 from climatology.services.temporal import SEASON_ORIGIN
 from climatology.utils.arithmetics import percentile_range
-from scripts.metric_per_era_composite import _load_panel
 
 OUTPUT_DIR = Path(__file__).parent / "output"
 

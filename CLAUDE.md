@@ -118,9 +118,9 @@ climatology/
     conversion.py                             ← parse maps; single source of truth
   services/  (db, plot, temporal)             ← I/O & external interfaces
     sources.py                                ← `CHART_TABLES`, `PERIOD_SOURCES`, `LAND_MASK_PATH`
+  scripts/  (sweep, metric_per_era_composite)  ← batch drivers; run from repo root
   utils/  (arithmetics, basemap, export, polygons, _types)   tests/
   (volume metric — attribution specified in DEC-029/044, not yet implemented)
-scripts/  (sweep, metric_per_era_composite)   ← batch drivers; run from repo root
 refs/ (WMO PDF)   docker-compose.yml · .env
 
 ## Session start protocol

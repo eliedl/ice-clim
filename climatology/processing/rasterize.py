@@ -6,10 +6,11 @@ from typing import NamedTuple
 
 import numpy as np
 from affine import Affine
+from jaxtyping import Float, Int
 from rasterio.features import rasterize as rio_rasterize
 from rasterio.transform import from_bounds
 
-from climatology.utils._types import BoolGrid, DataGrid, GridBounds, WetStack
+from climatology.utils._types import BoolGrid, GridBounds, VarWetStack
 
 log = logging.getLogger(__name__)
 
@@ -36,18 +37,42 @@ def burn_mask(geoms, grid: Grid) -> BoolGrid:
                          transform=grid.transform, fill=0, dtype=np.uint8).astype(bool)
 
 
-def burn_values(geom_value_pairs, grid: Grid) -> DataGrid:
-    """Rasterize (geom, value) pairs to a float32 array; NaN where no polygon covers."""
-    if not geom_value_pairs:
-        return np.full((grid.height, grid.width), np.nan, dtype=np.float32)
-    shapes = [(g.__geo_interface__, float(v)) for g, v in geom_value_pairs]
+def burn_ids(geoms, grid: Grid) -> Int[np.ndarray, "H W"]:
+    """Rasterize geometries to a polygon-id raster (0 = uncovered), last-wins on overlap.
+
+    rio_rasterize burns one scalar per geometry into one 2D band, so the scalar
+    burned is each geometry's 1-based index: one scan-conversion answers "which
+    polygon covers this cell?" for any number of variables.
+    """
+    if len(geoms) == 0:
+        return np.zeros((grid.height, grid.width), dtype=np.int32)
+    shapes = [(g.__geo_interface__, i) for i, g in enumerate(geoms, start=1)]
     return rio_rasterize(shapes, out_shape=(grid.height, grid.width),
-                         transform=grid.transform, fill=np.nan, dtype=np.float32)
+                         transform=grid.transform, fill=0, dtype=np.int32)
 
 
-def burn_value_stack(groups, grid: Grid, *, wet: BoolGrid) -> WetStack:
-    """Burn each season's (geom, value)-pair group and restrict to wet cells: an ``(n_seasons, n_wet)`` stack."""
-    return np.stack([burn_values(pairs, grid)[wet] for pairs in groups], axis=0)
+def _values_lut(values) -> Float[np.ndarray, "n_polys_plus_1 n_vars"]:
+    """Id -> values-row lookup table; row 0 answers "uncovered" with NaN. A flat values list reads as one variable."""
+    values = np.asarray(values, dtype=np.float32)
+    if values.ndim == 1:
+        values = values[:, None]
+    return np.vstack([np.full((1, values.shape[1]), np.nan, dtype=np.float32), values])
+
+
+def burn_values(geoms, values, grid: Grid) -> Float[np.ndarray, "n_vars H W"]:
+    """Rasterize geometries and their (n_polys, n_vars) values to a float32 cube; NaN where no polygon covers."""
+    return np.moveaxis(_values_lut(values)[burn_ids(geoms, grid)], -1, 0)
+
+
+def burn_value_stack(groups, grid: Grid, *, wet: BoolGrid) -> VarWetStack:
+    """Burn each season's (geometries, values) group on wet cells: an ``(n_seasons, n_vars, n_wet)`` stack.
+
+    The id raster is restricted to the wet cells *before* the LUT expansion, so
+    the per-variable lookup runs on n_wet cells instead of the full H*W grid
+    (measured 1.4-1.5x over per-variable float burns at n_vars=2, neutral at 1).
+    """
+    return np.stack([_values_lut(values)[burn_ids(geoms, grid)[wet]].T
+                     for geoms, values in groups], axis=0)
 
 
 def build_grid(wet, res_m: float) -> Grid:

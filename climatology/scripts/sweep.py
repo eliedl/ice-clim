@@ -6,7 +6,7 @@ period, since only ``sgrdr`` (HD weekly) reaches back before 2006 while the
 recorded and the sweep continues; the exit status reflects whether any failed.
 
 Usage:
-    python scripts/sweep.py [--region manicouagan] [--period 1991-2020 ...]
+    python climatology/scripts/sweep.py [--region manicouagan] [--period 1991-2020 ...]
                             [--metric freeze_up_date ...] [--geotiff] [--dry-run]
 """
 
@@ -22,8 +22,8 @@ from pathlib import Path
 
 from dotenv import load_dotenv
 
-load_dotenv(Path(__file__).parents[1] / ".env")
-sys.path.insert(0, str(Path(__file__).parents[1]))
+load_dotenv(Path(__file__).parents[2] / ".env")
+sys.path.insert(0, str(Path(__file__).parents[2]))
 
 from climatology.pipeline import run
 from climatology.processing.metrics import METRICS
