@@ -1,8 +1,9 @@
 # Probe 007 — CIS Chart Validity & Inter-Era Comparability
 
-> **Status: scaffold — data source not yet wired.** See "Open: data source"
-> below. This probe was carved out of the former `~/data/TODO.md` CIS chart
-> lineage audit (folded into WORK_TASKS `[cis-002]` on 2026-06-02).
+> **Status: run.** `probe.py` walks the raw archive `.xml` sidecars and
+> censuses provenance + resolution metadata by era. Carved out of the former
+> `~/data/TODO.md` CIS chart lineage audit (folded into WORK_TASKS `[cis-002]`
+> on 2026-06-02).
 
 ## Hypothesis
 
@@ -27,59 +28,101 @@ to 1968 across the pre-/post-satellite transition (~1979).
 
 ## Scope
 
-Chart types to census (per archive availability):
+| Type  | Description                    | Date range          | Sampling |
+|-------|--------------------------------|---------------------|----------|
+| SGRDA | Daily analysis charts          | 2006–present        | 5 yr     |
+| SGRDI | Satellite image-analysis charts| 2006–present        | 5 yr     |
+| SGRDR | Digitized historical regional  | 1968–present        | decade   |
 
-| Type  | Description                    | Date range          |
-|-------|--------------------------------|---------------------|
-| SGRDA | Daily analysis charts          | 2006–present        |
-| SGRDR | Digitized historical regional  | 1968–present        |
+The **GSL** charts are censused: SGRDA as two series (`GULF` 2006–2023 and
+`WIS28` 2023–present — the format/naming switch is treated as a series
+boundary), SGRDI `GULF`, and SGRDR along the `EC` dir. The metadata is
+region-independent boilerplate, so the interesting axis is *time*, not region —
+`WIS26/27` and `NFLD` would only re-confirm identical templates. (SGRDO can be
+added as an extra `ChartSeries` row if needed.)
 
-(SGRDI / SGRDO can be added once SGRDA/SGRDR are characterized.)
+## Method (as implemented)
 
-Known methodology changes to keep in view:
-- SGRDA format change ~2023-04-27: GULF/NFLD naming → WIS region codes
-  (WIS26 Labrador, WIS27 Newfoundland, WIS28 Gulf). Naming-only or
-  methodology shift?
-- SGRDR spans multiple satellite eras; pre-satellite charts (pre-~1979) rely
-  on different observation methods — implications for trend analysis unknown.
+1. `_sample()` buckets each series' archives by (interval × packaging) and
+   keeps the earliest chart per bucket. Bucketing on **packaging** as well as
+   date ensures a vintage boundary that falls *inside* a bucket (the SGRDR
+   zip→tar switch, both in the 2020s) is represented, not masked by date sort.
+2. Extract the `.xml` sidecar from each sampled tar/zip (`_read_xml_bytes`).
+3. Parse the FGDC CSDGM lineage: every `<srcinfo>` block →
+   `(title, typesrc, begdate, enddate)`; plus `<absres>/<plandu>` and
+   `<procdesc>`.
+4. Derive **`active_at_date`**: the sources whose `<begdate>–<enddate>`
+   availability window contains the chart date — the only per-chart signal
+   (see findings).
+5. Emit a text report + a field-presence CSV, one row per sampled chart.
 
-## Method
+## Findings (2026-07-20)
 
-1. Sample one chart per decade (or per candidate era) for SGRDA and SGRDR.
-2. Parse each chart's `.xml` sidecar.
-3. Census, per era:
-   - presence + name + populated value of any data-source/provenance field;
-   - presence + value of any spatial-resolution field (or a proxy);
-   - map the resolution value to CISADS No. 1 Table 3.1 sensor classes.
-4. Tabulate field presence × era; flag any field that appears/disappears at a
-   vintage boundary.
+**Q1 — Is the source/sensor in the metadata? Yes, but as a catalogue, not a
+per-chart manifest.** Provenance lives in FGDC `<srcinfo>` blocks:
+`<srccite>/…/<title>` names the source (RADARSAT, NOAA, OLS, QuikScat, ERS,
+ENVISAT, MODIS, SAR, SLAR, Observed Charts, Image/Daily/Regional Analysis
+Charts), `<typesrc>` gives the platform class (Satellite / Aircraft /
+Helicopter), and `<srctime>` an availability window. **But the list is
+identical boilerplate regardless of chart date** — `<procdesc>` says so
+outright ("Over the years, data sources have included… Each data source and
+its availability… is described in their respective source information"). You
+cannot read *which* sensor made a given chart; only which sensor classes were
+program-active on its date (`active_at_date`, via the window intersection).
+Notably even **SGRDI** — the satellite *image-analysis* product, the type
+closest to a single sensor — carries the same generic catalogue, not its own
+scene's sensor.
 
-## Open: data source
+**Two era boundaries fall out of the census:**
 
-The earlier probes (001–006) query the **PostGIS DB**. The `.xml` sidecars are
-**raw-archive metadata** and are *not* in the DB. Before this probe can run,
-wire one of:
+| Series / era | Packaging | `n_srcinfo` | quality |
+|---|---|---|---|
+| SGRDA / SGRDI 2006 | tar | 11 | full |
+| SGRDA / SGRDI 2010–2025 | tar | 13 | full (adds MODIS 2004+, Regional Ice Analysis) |
+| **SGRDR 1968–2020** | **zip** | **1** | **degenerate — RADARSAT only, dated 1996+** |
+| SGRDR 2021+ | tar | 13 | full |
 
-- **filesystem walk** over the raw archive (set `ARCHIVE_ROOT` below — the old
-  Windows path `C:\Users\dumas\…\ice-raw-data-MPO` from CLAUDE.md must be
-  replaced with this machine's Linux path), **or**
-- a DB column if the `.xml` content was ingested.
+1. **SGRDA/SGRDI template bump ~2006→2010**: 11→13 blocks — cosmetic to the
+   template (both modern types move in lockstep).
+2. **The big one — the digitized-historical SGRDR `CIS_EC_*` zips are
+   degenerate.** Every pre-2020 historical chart carries a *single* RADARSAT
+   block dated 1996+, chronologically impossible on a 1968/1975 chart:
+   `active_at_date` is empty for the whole pre-satellite record. Metadata
+   richness tracks the **file packaging vintage**, not the observation date.
+   For exactly the era where provenance matters most for trend analysis, the
+   sidecar carries no usable provenance.
 
-`probe.py` currently stops with an explicit `NotImplementedError` pointing at
-this section.
+**Q2 — Is spatial resolution present? No (not observational).** There is no
+`<latres>/<longres>` and `<srcscale>` is empty. `<absres>` exists but is
+**planar coordinate precision** — a near-constant template value (`0.11118 m`,
+with one 2006 outlier `0.004096 m` shared by SGRDA & SGRDI, and occasionally
+absent, e.g. 2010). It is *not* sensor ground resolution and does **not** map
+to CISADS No. 1 Table 3.1. Resolution is inferable only indirectly, by mapping
+each sensor-class name in `active_at_date` to Table 3.1's per-sensor
+resolutions.
 
-## Expected outcome
+**SGRDA ≡ SGRDI (verified this session).** The SGRDA and SGRDI sidecars of the
+same date are **byte-identical apart from the `SGRDA`/`SGRDI` type token**:
+same 102 XML tags, same `<srcinfo>` catalogue and windows, same `<absres>`
+(incl. the 2006 outlier), and the same DBF attribute schema — including its
+per-era evolution (2006 `…CN,CD,CF,POLY_TYPE,ICE_CODE` → 2026 adds
+`COVSHP_/COVSHP_ID`, drops `ICE_CODE`). SGRDI is retained as its own series so
+the census *demonstrates* this identity rather than asserting it; it adds
+confirmation, not information, on the provenance question.
 
-- A field-presence × era table for SGRDA and SGRDR.
-- Identification of which era boundaries (if any) coincide with the
-  appearance/disappearance of a provenance or resolution field.
-- A mapping of per-era resolution to CISADS No. 1 Table 3.1 — feeding the
-  `[cis-002]` comparability judgement.
+**Bottom line for `[cis-002]`:** usable inter-era provenance exists **only**
+from the full-catalogue files (SGRDA/SGRDI all eras; SGRDREC tars 2021+), via
+`date × availability-window` → possible sensor classes → Table 3.1 resolution.
+The `CIS_EC_*` historical zips (1968–~2019) carry **no** real provenance — a
+hard caveat for long-term trend work, and itself an era boundary. No chart,
+any era or type, records the *actual* sensor(s) used for its date.
 
 ## Run
 
 ```bash
-.venv/bin/python backend/probes/007_cis_chart_validity/probe.py
+ARCHIVE_ROOT=/home/eliedl/data \
+  .venv/bin/python backend/probes/007_cis_chart_validity/probe.py
 ```
 
-Outputs to `output/YYYY-MM-DD_HHMMSS{.txt,_field_presence.csv}`.
+Stdlib only (no DB, no geopandas). Outputs to
+`output/YYYY-MM-DD_HHMMSS{.txt,_field_presence.csv}`.
