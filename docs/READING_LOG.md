@@ -33,7 +33,7 @@ pointers, leaving this log untouched.
 
 ---
 
-<!-- next-id: e166 -->
+<!-- next-id: e178 -->
 
 ## 2026-06-01
 
@@ -265,6 +265,25 @@ pointers, leaving this log untouched.
 - e164 · [Crawford et al. 2023] Computes **temperature-corrected phenologies** and uses **Pearson correlations** to relate phenology to forcing. #methodology #forcing #statistics
 - e165 · [Crawford et al. 2023] Partitions ice growth into **thermodynamic, convective and advective** components; sea-ice **drift computed with MetPy**. → e152 #bias #drift #methodology #finding
 
+## 2026-07-20
+
+Angela Cheng (head of CIS climatologies) reply of 2026-07-14 to the resolution /
+data-quality outreach; logged here as pers. comm. Resolves several long-open questions
+across T1 (grid resolution) and T3 (cross-era homogeneity).
+
+- e166 · [Cheng pers. comm. 2026] **No official archive resolution.** CIS has never officially defined a standard spatial resolution for the Digital Archive charts, and Cheng prescribes no cell size for raster statistics. Whether to stratify the computational resolution by era is exactly the question she is actively working on. Directly answers the T1/DEC-013 outreach. → e037 → e073 → DEC-013 #resolution #grid-construction
+- e167 · [Cheng pers. comm. 2026] Rasterizing the vector charts at 1 km reproduces the original polygons very faithfully, **but CIS does not treat 1 km (or any value) as the official resolution**: faithful polygon reproduction does not mean the underlying observations support analysis at that spatial precision. Tempers the 1 km climatological-grid precedent. → e077 → e045 #resolution #grid-construction
+- e168 · [Cheng pers. comm. 2026] The Digital Archive was historically also distributed in **NetCDF on a 0.25° grid for pre-2010 charts** (now abandoned). The coarse 0.25° was chosen **deliberately to stop users drawing finer-scale conclusions than the data can support**, even though the vector charts hold far more detail. Independent CIS echo of Kinnard's 0.25° choice. → e127 → e077 #resolution #data-product
+- e169 · [Cheng pers. comm. 2026] The satellite imagery behind the charts has been ~50 m for ~20 years, **but the charts are analyst-interpreted products, not a direct raster of the imagery** — image resolution must not be read as the effective/spatial precision of the charts. Caveats the per-sensor resolution tables as an upper bound on information, not on chart precision. → e111 → e112 #resolution
+- e170 · [Cheng pers. comm. 2026] The CIS modelling group at Dorval currently processes the charts on a **0.1° grid**, chosen for modelling needs — explicitly not a claim about the charts' real precision. A third CIS-internal grid datapoint alongside 1 km and 0.25°. → e168 → e138 #resolution #grid-construction
+- e171 · [Cheng pers. comm. 2026] **CISDA No.2 unavailable** — Cheng has no copy either; she believes it was prepared specifically for the old NetCDF archive that is no longer maintained. Closes the No.2 search. → e077 → cis-006 #reference #resolution
+- e172 · [Cheng pers. comm. 2026] The **end-of-season "historical" charts** are still not publicly accessible; preparing and disseminating them (via **NSIDC**) is one of Cheng's FY2026 deliverables but low priority — not expected before early 2027. Answers the 2026 inclusion open-Q of e115. → e115 → e116 → e117 #chart-preparation #data-product
+- e173 · [Cheng pers. comm. 2026] **Historical weekly-chart corrections — resolved.** Charts delivered **up to 2020 already include** the quality corrections behind the climate normals; **for 2021+ it depends on download date** — Cheng only placed the corrected versions on the FTP in **summer 2026**, so copies pulled earlier in 2026 lack them. Resolves e144 / cis-004 and supports the DEC-033 hypothesis. → e144 → DEC-033 → cis-004 #data-quality #cross-era-normalization
+- e174 · [Cheng pers. comm. 2026] On intra-chart spatial quality: **treat the information quality as uniform within a product type** — do not credit shipping lanes with higher mapping quality, even though that assumption is reasonable. Directly answers the navigation-zone question; no shipping-intensity map needed. → e074 → e084 #data-quality #spatial
+- e175 · [Cheng pers. comm. 2026] The quality distinction that **does** matter is **between product types**: weekly regional (SGRDR) vs daily (SGRDA) vs image analyses (SGRDI) — the latter cover shorter periods with more spatial detail but narrower coverage. Grounds treating each chart type as its own homogeneous quality regime. → e113 → e114 #data-quality #resolution
+- e176 · [Cheng pers. comm. 2026] "Produced for navigation" means the charts and the WMO egg code characterize the ice properties most relevant to **marine navigation** (ship-oriented ice-type classification), not local-community applications; CIS's **slight systematic overestimation of concentration** follows from this conservative, safety-first approach. First-party CIS confirmation of the Saucier high-concentration-bias note. → e009 #bias #concentration #data-quality
+- e177 · [Cheng pers. comm. 2026] Cheng **could not locate the Crocker Ballicater reports** in the CIS archives; as the most useful substitutes she points to **[Tivy et al. 2011]** (already in corpus, e002) and **[Cheng et al. 2020]** — accuracy and inter-analyst agreement of visually estimated SIC in CIS charts using single-pol RADARSAT-2 (added to Watchlist). Partial outcome for cis-006(d). → e128 → cis-006 #reference #data-quality
+
 ---
 
 ## Watchlist (potentially relevant, not yet read)
@@ -287,6 +306,13 @@ Leads surfaced during reading but not yet sourced/read. Promote to a dated entry
 - **Crocker 2002** — Crocker, G. (2002). Analysis of sea ice climate trends in Canadian waters.
   Contract report for CIS, Environment Canada, Ballicater Consulting Ltd., Report No. 01-04,
   119 pp. → [CIS Archive No.1 2006]
+
+- **[Cheng et al. 2020]** — Cheng, A., et al. (2020). Accuracy and inter-analyst agreement
+  of visually estimated sea ice concentrations in CIS ice charts using single-polarization
+  RADARSAT-2. *The Cryosphere*, 14, 1289–1310. https://tc.copernicus.org/articles/14/1289/2020/
+  Recommended by Cheng (e177) as a primary reference on CIS chart concentration accuracy /
+  analyst agreement — bears on the overestimation bias (e176, e009) and data-quality (T3).
+  **High priority.**
 
 - **[Crawford et al. 2023]** — *(partially read 2026-07-13; e158–e165 are from a skim, full
   read pending — **high priority**)*. CMIP6 sea-ice phenology bias in the Hudson Bay Complex.
@@ -356,6 +382,8 @@ Leads surfaced during reading but not yet sourced/read. Promote to a dated entry
 [AHCCD 2023]: ECCC (2023). Adjusted and Homogenized Canadian Climate Data (AHCCD) — monthly station temperature, 1840–2018. [data product]
 
 [MSC Beaufort 2023]: ECCC (2023). Meteorological Service of Canada (MSC) Beaufort Wind and Wave Reanalysis. [data product] → docs/normative/README.md
+
+[Cheng pers. comm. 2026]: Cheng, A. (Canadian Ice Service, head of climatologies). Personal communication to É. Dumas, email reply 2026-07-14. Re: effective resolution and data quality of the CIS Digital Archive for coastal climatologies.
 
 [CIS Archive No.1 2006]: Canadian Ice Service (2006). Canadian Ice Service Digital Archive – Regional Charts: History, Accuracy, and Caveats. CIS Archive Documentation Series No. 1. → docs/normative/README.md
 

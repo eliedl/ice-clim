@@ -83,7 +83,7 @@ e124, e127, e129, e135  *(cross-ref: e088, e092, e100, e138)*
 **Absorbs:** the cross-era / inter-chart uncertainty concern formerly in DEC-010
 (deleted 2026-06-09 — its concern is encapsulated in the grid-resolution question).
 
-**Aggregated:** 2026-06-09
+**Aggregated:** 2026-06-09, updated 2026-07-20
 
 ### 2026-06-09  (skeleton — synthesis pending)
 - **What the corpus does** — TODO. (Grid precedents: Wilson 500 m [e129], Kinnard
@@ -96,6 +96,48 @@ e124, e127, e129, e135  *(cross-ref: e088, e092, e100, e138)*
   deferred pending her reply. → DEC-013
 - **Open questions** — TODO. (Does CIS recommend a single cell size or an
   era-stratified one? Relation to the per-era sensor-resolution table [e073].)
+
+### 2026-07-20  (CIS reply — Angela Cheng, pers. comm.)
+
+**What the corpus does — update.** The outreach this theme was blocked on has returned
+[e166–e171]. CIS **has never officially defined a standard spatial resolution** for the
+Digital Archive [e166]; the head of CIS climatologies prescribes no cell size and is
+herself actively studying whether the computational resolution should be era-stratified.
+Three CIS-internal grid datapoints now frame the space, none a precision claim: the legacy
+**NetCDF 0.25°** product for pre-2010 charts, chosen *deliberately coarse to prevent
+over-interpretation* [e168]; the **1 km** rasterization that reproduces the polygons
+faithfully but which CIS explicitly does **not** endorse as the archive's resolution
+[e167]; and the Dorval modelling group's **0.1°** working grid, for modelling needs only
+[e170]. Crucially, the ~50 m satellite imagery behind the charts is **not** the charts'
+effective resolution — the charts are analyst-interpreted products, not a raster of the
+imagery [e169]. (CISDA No.2, suspected to document the NetCDF grid, is unavailable and tied
+to that abandoned product [e171].)
+
+**Decision space — update.** The fork is unchanged (homogeneous vs era-stratified grid; the
+~500 m / ~250 m half-line-width floor [e045] as candidate lower bound), but the reply
+reframes it: there is **no authoritative number to defer to**, and polygon-reproduction
+fidelity is explicitly disqualified as evidence of effective resolution [e167]. The
+defensible lower bound therefore rests on the drafting-scale line-width argument
+(½ × 1 km at 1:4M for SGRDR, ½ × 500 m at 1:2M for SGRDA) [e045], not on grid-vs-polygon
+agreement.
+
+**Our position.**
+- **DEC-013 stays OPEN**, but no longer *blocked on CIS* — CIS confirms no prescribed
+  resolution exists. We set our own and document it as a modelling/analysis choice (as CIS
+  does for 0.1° and did for 0.25°), not as the archive's intrinsic precision.
+- **Working stance:** rasterize fine enough to preserve polygon detail for display
+  (25 m / 250 m products), but present statistics with the explicit caveat that the
+  **effective** resolution is coarser, product-type- and era-dependent, and not officially
+  quantified. The half-line-width floor (~250 m SGRDA / ~500 m SGRDR) [e045] is our
+  defensible lower bound for statistical interpretation.
+- Era-stratification remains a live option; CIS's own analysis is pending and Cheng offered
+  to share results [e166].
+
+**Open questions.**
+- The CIS era-stratification analysis, if/when shared → could convert DEC-013 from a
+  self-set choice to a CIS-aligned one.
+- Whether the half-line-width floor should itself be era-stratified (finer for the modern
+  1971–2020 sensors, coarser earlier) or held flat — our proposal to Cheng, awaiting reply.
 
 ---
 
@@ -206,7 +248,7 @@ e094, e095
 DEC-005 (form encoding), DEC-026 (orphan_ct volume) · DEC-033 (CIS_EC historical
 series authoritative for 2020)
 
-**Aggregated:** 2026-06-09
+**Aggregated:** 2026-06-09, updated 2026-07-20
 
 ### 2026-06-09
 
@@ -294,6 +336,50 @@ systematically biased toward larger classes by sensor resolution [e056–e059].
   mechanism distinct from the end-of-season historical production method [e116,
   e117]. Awaiting the CIS client-service reply (→ cis-004); bears on cross-era
   homogeneity of the SGRDR record and on DEC-033.
+
+### 2026-07-20  (CIS reply — Angela Cheng, pers. comm.)
+
+**What the corpus does — update.** Angela Cheng (CIS) resolves the two open data-quality
+threads and adds a first-party bias confirmation.
+- **Historical-chart corrections [e173].** The post-corrections behind the CIS East Coast
+  normals are **already present** in the delivered charts **up to 2020**; for **2021+**
+  their presence depends on download date — CIS only put the corrected versions on the FTP
+  in **summer 2026**. This resolves the e144 open question and **confirms the DEC-033
+  hypothesis** (CIS_EC 1968–2020 is the corrected/historical product line). It also surfaces
+  an ingestion action: our 2021–2026 tars, pulled 2026-05-07, predate the fix.
+- **Intra-chart quality is uniform within a product type [e174, e175].** CIS recommends
+  treating spatial quality as homogeneous inside a product type and **not** crediting
+  shipping lanes with higher quality — closing the navigation-zone strand (e074, e084) with
+  no shipping-intensity map needed. The distinction that matters is **between** product
+  types: weekly regional (SGRDR) vs daily (SGRDA) vs image analyses (SGRDI).
+- **Concentration overestimation confirmed [e176].** CIS confirms first-hand a **slight
+  systematic overestimation of concentration**, a direct consequence of the
+  navigation-safety-oriented charting philosophy — first-party corroboration of the Saucier
+  high-concentration-bias note (e009, T4).
+
+**Decision space — update.** Under *cross-era homogeneity treatment* (item 4), add the
+**product-type axis** as the primary quality-regime boundary — homogeneous within
+SGRDR / SGRDA / SGRDI, heterogeneous across them [e175]. New value-bias sub-item: whether
+to apply a **downward concentration-bias correction** for the coastal application [e176]
+(raised with Cheng; possibly addressed by [Cheng et al. 2020]).
+
+**Our position.**
+- **DEC-033 hypothesis upheld** — CIS_EC ≤2020 carries the corrections; the SGRDR record
+  ingested is the corrected product line for the climatology period. **cis-004 resolved.**
+- **Product-type = quality regime.** We adopt CIS's guidance: treat each chart type as its
+  own homogeneous quality regime; no spatial (shipping-lane) quality differentiation within
+  a chart [e174, e175].
+- **Concentration bias acknowledged, not yet corrected.** Recorded as a known systematic
+  bias [e176, e009]; a quantitative correction for the coastal vulnerability index is
+  deferred pending Cheng's recommendation / [Cheng et al. 2020].
+
+**Open questions.**
+- **Ingestion:** re-pull and re-ingest the 2021–2026 CIS_EC / SGRDREC tars to pick up the
+  summer-2026 corrections [e173]. (New → cis-004 follow-up.)
+- Quantitative concentration-bias correction for coastal use — awaiting Cheng and a read of
+  [Cheng et al. 2020] [e176].
+- e144 now resolved; retire it from the T3 open-questions list on the next aggregation
+  (superseded by e173).
 
 ---
 
