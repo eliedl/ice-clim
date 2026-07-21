@@ -898,3 +898,136 @@ def plot_delta_panels(
             method=reduction_note(metric), basemap=tile is not None)
     _save(fig, png_path, tight=False)   # keep margins so the suptitle stays centred
     plt.close(fig)
+
+
+# --- source portrait: baseline & candidate over their change ----------------
+
+# Fixed, symmetric map-block margins (figure fractions) and colourbar geometry. The
+# colourbars live in their own axes outside the block, so their width and gap are
+# decoupled from the maps' position — the hero panel stays centred whatever the gap.
+PORTRAIT_LEFT, PORTRAIT_RIGHT = 0.13, 0.87
+PORTRAIT_TOP, PORTRAIT_BOTTOM = 0.9, 0.05
+PORTRAIT_WSPACE = 0.12
+PORTRAIT_HSPACE = 0.2         # gap between row 1 and row 2 (fraction of average row height)
+PORTRAIT_CBAR_W = 0.014        # colourbar bar width (figure fraction)
+PORTRAIT_CBAR_H = 0.50         # colourbar height (figure fraction), centred on the block
+PORTRAIT_CBAR_GAP = 0.05      # symmetric gap between a colourbar and the map block
+
+
+def _style_colorbar_v(cbar, *, label: str, tick_values: list[float],
+                      tick_labels: list[str]) -> None:
+    """Dark-theme a *vertical* colourbar (ticks on the y axis) and apply tick formatting."""
+    cbar.set_ticks(tick_values)
+    cbar.set_ticklabels(tick_labels, fontsize=12)
+    cbar.set_label(label, color=DARK_FG, fontsize=13)
+    cbar.ax.yaxis.set_tick_params(color=DARK_LINE, labelcolor=DARK_FG)
+    cbar.outline.set_edgecolor(DARK_LINE)
+
+
+def _draw_map(ax, layers: list[RasterLayer], *, title: str, cmap: Colormap, norm: Normalize,
+              land, tile, extent):
+    """One map panel (no distribution), drawn back-to-front on the scale passed in."""
+    ax.set_facecolor(DARK_OCEAN)
+    im = _draw_layers(ax, [(l.values, l.bounds) for l in layers], cmap=cmap, norm=norm)
+    top = len(layers) + 1
+    _draw_basemap_land(ax, tile, zorder=top)
+    _frame_axes(ax, land, extent, zorder=top + 1, fill=tile is None)
+    _draw_basemap_labels(ax, tile, zorder=top + 2)
+    ax.set_title(title, fontsize=15, pad=18, color=DARK_FG)
+    _style_axes(ax)
+    ax.set_xticks([])   # portrait maps carry no easting/northing ticks — only the frame
+    ax.set_yticks([])
+    return im
+
+
+def plot_source_portrait(
+    baseline: MetricPanel,
+    candidate: MetricPanel,
+    delta: DeltaPanel,
+    *,
+    png_path: Path,
+    metric: MetricSpec,
+    region_display: str,
+    res_label: str,
+) -> None:
+    """One comparison's before / after / change portrait.
+
+    Baseline and candidate sit on the top row, sharing one sequential scale (a colour is the
+    same date/count in both eras, so the shift is legible); the delta spans the bottom row on
+    its own diverging scale. Two vertical colourbars flank the maps: sequential (values) at the
+    left, diverging (change) at the right — each spanning both rows.
+    """
+    style = PLOT_STYLES[metric.slug]
+    v_cmap, v_norm, v_ticks, v_labels = _metric_scale(
+        np.concatenate([baseline.values, candidate.values]), style)
+    d_cmap, d_norm, d_ticks, d_labels = _delta_scale(delta.values)
+
+    all_layers = [l for p in (baseline, candidate) for l in p.layers] + list(delta.layers)
+    extent = _union_extent([(l.values, l.bounds) for l in all_layers])
+    land = _land_polygons(extent)
+    tile = load_basemap(extent, land)   # one extent across panels -> fetched once
+
+    # Map block sits in fixed, symmetric margins; the colourbars live in their own axes
+    # outside it (below), so their width/gap never shifts the maps. The delta is the hero
+    # panel: the value maps share the top row, the delta spans a double-height bottom row.
+    xmin, ymin, xmax, ymax = extent
+    map_w_in = 6.5
+    fig_w_in = 2 * map_w_in + 3.0
+    # Figure height derived so the equal-aspect maps fill the (fixed) map block with no float:
+    # column width -> row-1 height -> stack of 3 row-1 heights (row 2 is double) -> usable band.
+    col_w_in = (PORTRAIT_RIGHT - PORTRAIT_LEFT) * fig_w_in / (2 + PORTRAIT_WSPACE)
+    # The hero spans both columns *and* the wspace between them (width 2·col + wspace), so it
+    # needs a matching height to fill that width at equal aspect — hence 2 + wspace, not 2.
+    hero_ratio = 2 + PORTRAIT_WSPACE
+    # stack height = row 1 + hero + the hspace gap (fraction of the average row height).
+    stack_h_in = ((1 + hero_ratio) * (1 + PORTRAIT_HSPACE / 2)
+                  * col_w_in * (ymax - ymin) / (xmax - xmin))
+    fig_h_in = stack_h_in / (PORTRAIT_TOP - PORTRAIT_BOTTOM)
+
+    fig = plt.figure(figsize=(fig_w_in, fig_h_in))
+    fig.patch.set_facecolor(DARK_OCEAN)
+    axd = fig.subplot_mosaic(
+        [["base", "cand"], ["delta", "delta"]],
+        gridspec_kw={"height_ratios": [1, hero_ratio], "wspace": PORTRAIT_WSPACE,
+                     "hspace": PORTRAIT_HSPACE,
+                     "left": PORTRAIT_LEFT, "right": PORTRAIT_RIGHT,
+                     "top": PORTRAIT_TOP, "bottom": PORTRAIT_BOTTOM},
+    )
+    ax_base, ax_cand, ax_delta = axd["base"], axd["cand"], axd["delta"]
+
+    v_im = _draw_map(ax_base, baseline.layers, cmap=v_cmap, norm=v_norm,
+                     title=f"Winters {baseline.period} — {baseline.source.slug}",
+                     land=land, tile=tile, extent=extent)
+    _draw_map(ax_cand, candidate.layers, cmap=v_cmap, norm=v_norm,
+              title=f"Winters {candidate.period} — {candidate.source.slug}",
+              land=land, tile=tile, extent=extent)
+    d_im = _draw_map(ax_delta, delta.layers, cmap=d_cmap, norm=d_norm,
+                     title=delta.title, land=land, tile=tile, extent=extent)
+
+    # Dedicated colourbar axes at mirrored x, each spanning PORTRAIT_CBAR_H of the height
+    # (centred): sequential (values) left, diverging (change) right. Gap is symmetric and
+    # independent of map position — tuning it never translates the hero panel.
+    y0 = 0.5 * (PORTRAIT_TOP + PORTRAIT_BOTTOM) - PORTRAIT_CBAR_H / 2
+    cax_v = fig.add_axes([PORTRAIT_LEFT - PORTRAIT_CBAR_GAP - PORTRAIT_CBAR_W, y0,
+                          PORTRAIT_CBAR_W, PORTRAIT_CBAR_H])
+    cax_d = fig.add_axes([PORTRAIT_RIGHT + PORTRAIT_CBAR_GAP, y0,
+                          PORTRAIT_CBAR_W, PORTRAIT_CBAR_H])
+
+    cbar_v = fig.colorbar(v_im, cax=cax_v, orientation="vertical", extend="both")
+    cbar_v.ax.yaxis.set_ticks_position("left")
+    cbar_v.ax.yaxis.set_label_position("left")
+    _style_colorbar_v(cbar_v, label=metric_label(metric),
+                      tick_values=v_ticks, tick_labels=v_labels)
+    cbar_d = fig.colorbar(d_im, cax=cax_d, orientation="vertical", extend="both")
+    _style_colorbar_v(cbar_d, label=f"Δ {metric_title(metric)} (days, candidate − baseline)",
+                      tick_values=d_ticks, tick_labels=d_labels)
+
+    fig.suptitle(f"{metric_title(metric)} — {region_display} region\n"
+                 f"winters {baseline.period} ({baseline.source.slug}) → "
+                 f"{candidate.period} ({candidate.source.slug})",
+                 fontsize=19, color=DARK_FG, y=0.99)
+    sources = sorted({baseline.source.display_label, candidate.source.display_label})
+    _footer(fig, source_label=" + ".join(sources), res_label=res_label,
+            method=reduction_note(metric), basemap=tile is not None)
+    _save(fig, png_path, tight=False)
+    plt.close(fig)

@@ -33,7 +33,9 @@ sys.path.insert(0, str(Path(__file__).parents[2]))
 from climatology.processing.metrics import METRICS
 from climatology.processing.reductions import MEDIAN_THEN_THRESHOLD, REDUCTIONS
 from climatology.processing.regions import REGION_SLUGS, resolve_region
-from climatology.services.plot import DeltaPanel, RasterLayer, plot_delta_panels
+from climatology.services.plot import (
+    DeltaPanel, MetricPanel, RasterLayer, plot_delta_panels, plot_source_portrait,
+)
 from climatology.services.sources import CHART_TABLES
 from climatology.utils.export import find_archived
 from climatology.scripts.sweep import DEFAULT_REGION
@@ -78,6 +80,12 @@ class Comparison:
     def title(self) -> str:
         return f"{self.candidate.label} − {self.baseline.label}"
 
+    @property
+    def slug(self) -> str:
+        """Filename tag for this comparison's portrait."""
+        return (f"{self.candidate.source}-{self.candidate.period}"
+                f"_vs_{self.baseline.source}-{self.baseline.period}")
+
 
 COMPARISONS = (
     Comparison(baseline=Era("1981-2010", "sgrdr"), candidate=Era("2011-2020", "sgrdr")),
@@ -85,30 +93,35 @@ COMPARISONS = (
 )
 
 
-def _delta_layer(region: str, metric: str, comp: Comparison,
-                 tier: str, reduction: str) -> RasterLayer:
-    """One tier's candidate − baseline raster, on the shared region+tier grid."""
-    base_npz, base_m = find_archived(region, metric, period_slug=comp.baseline.period,
-                                     source_slug=comp.baseline.source,
-                                     tier_level=tier, reduction_slug=reduction)
-    cand_npz, cand_m = find_archived(region, metric, period_slug=comp.candidate.period,
-                                     source_slug=comp.candidate.source,
-                                     tier_level=tier, reduction_slug=reduction)
-    base, cand = np.load(base_npz)["values"], np.load(cand_npz)["values"]
-    if base.shape != cand.shape:   # region+tier grid is source/period-invariant; guard the assumption
-        raise ValueError(
-            f"{metric} {tier}: baseline {base.shape} vs candidate {cand.shape} grids differ "
-            f"({comp.title}) — a direct subtraction assumes the shared grid.")
-    return RasterLayer(values=cand - base, bounds=tuple(cand_m["bounds"]),
-                       res_m=float(cand_m["grid_res_m"]))
+def _value_panel(region: str, metric: str, era: Era,
+                 tiers: list[str], reduction: str) -> MetricPanel:
+    """One era's absolute-value panel: every tier's archived raster, coarse first."""
+    layers = []
+    for tier in tiers:
+        npz, manifest = find_archived(region, metric, period_slug=era.period,
+                                      source_slug=era.source, tier_level=tier,
+                                      reduction_slug=reduction)
+        layers.append(RasterLayer(values=np.load(npz)["values"],
+                                  bounds=tuple(manifest["bounds"]),
+                                  res_m=float(manifest["grid_res_m"])))
+    return MetricPanel(period=era.period, source=CHART_TABLES[era.source],
+                       layers=layers, reduction=reduction)
 
 
-def _panel(region: str, metric: str, comp: Comparison,
-           tiers: list[str], reduction: str) -> DeltaPanel:
-    """One comparison's panel: every tier's delta, coarse first so the fine tier draws on top."""
-    return DeltaPanel(title=comp.title,
-                      layers=[_delta_layer(region, metric, comp, tier, reduction)
-                              for tier in tiers])
+def _delta_panel(base: MetricPanel, cand: MetricPanel, title: str) -> DeltaPanel:
+    """Candidate − baseline per tier, on the shared region+tier grid (direct subtraction)."""
+    layers = []
+    for b, c in zip(base.layers, cand.layers):
+        if b.values.shape != c.values.shape:   # region+tier grid is source/period-invariant; guard it
+            raise ValueError(
+                f"grids differ ({title}): baseline {b.values.shape} vs candidate "
+                f"{c.values.shape} — a direct subtraction assumes the shared grid.")
+        layers.append(RasterLayer(values=c.values - b.values, bounds=c.bounds, res_m=c.res_m))
+    return DeltaPanel(title=title, layers=layers)
+
+
+def _res_label(panel: MetricPanel | DeltaPanel) -> str:
+    return " / ".join(f"{int(round(layer.res_m))} m" for layer in panel.layers)
 
 
 def _source_label() -> str:
@@ -117,16 +130,36 @@ def _source_label() -> str:
     return " + ".join(sorted(CHART_TABLES[s].display_label for s in sources))
 
 
-def _render(region: str, metric: str, tiers: list[str], reduction: str) -> Path:
-    """Build and write one metric's change composite."""
-    panels = [_panel(region, metric, comp, tiers, reduction) for comp in COMPARISONS]
-    res_label = " / ".join(f"{int(round(layer.res_m))} m" for layer in panels[0].layers)
-    png = OUTPUT_DIR / f"{metric}_delta_{region}.png"
+def _render(region: str, metric: str, tiers: list[str], reduction: str) -> list[Path]:
+    """Write one metric's three products: a portrait per comparison, then the synthesis."""
     spec = replace(METRICS[metric], reduction=REDUCTIONS[reduction])
-    plot_delta_panels(panels, png_path=png, metric=spec,
-                      region_display=resolve_region(region).display,
-                      res_label=res_label, source_label=_source_label())
-    return png
+    region_display = resolve_region(region).display
+
+    # Absolute-value panels, loaded once and shared (the 1981-2010 baseline serves both).
+    panel_cache: dict[Era, MetricPanel] = {}
+
+    def value_panel(era: Era) -> MetricPanel:
+        if era not in panel_cache:
+            panel_cache[era] = _value_panel(region, metric, era, tiers, reduction)
+        return panel_cache[era]
+
+    written, deltas = [], []
+    for comp in COMPARISONS:
+        base, cand = value_panel(comp.baseline), value_panel(comp.candidate)
+        delta = _delta_panel(base, cand, comp.title)
+        deltas.append(delta)
+
+        portrait = OUTPUT_DIR / f"{metric}_portrait_{region}_{comp.slug}.png"
+        plot_source_portrait(base, cand, delta, png_path=portrait, metric=spec,
+                             region_display=region_display, res_label=_res_label(base))
+        written.append(portrait)
+
+    synthesis = OUTPUT_DIR / f"{metric}_delta_{region}.png"
+    plot_delta_panels(deltas, png_path=synthesis, metric=spec,
+                      region_display=region_display,
+                      res_label=_res_label(deltas[0]), source_label=_source_label())
+    written.append(synthesis)
+    return written
 
 
 def _parse_args() -> argparse.Namespace:
@@ -149,6 +182,6 @@ if __name__ == "__main__":
 
     written = []
     for metric in args.metrics or METRIC_SLUGS:
-        written.append(_render(args.region, metric, tiers, args.reduction))
+        written.extend(_render(args.region, metric, tiers, args.reduction))
 
-    log.info("=== %d change composite(s) written to %s ===", len(written), OUTPUT_DIR)
+    log.info("=== %d figure(s) written to %s ===", len(written), OUTPUT_DIR)
