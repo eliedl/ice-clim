@@ -785,3 +785,116 @@ def plot_metric_panels(
             basemap=tile is not None)
     _save(fig, png_path, tight=False)   # keep the margins so the suptitle stays centred
     plt.close(fig)
+
+
+# --- delta (period-vs-period change) panels --------------------------------
+
+# Diverging palette for signed-change maps, anchored symmetrically about zero so
+# the *sign* of a change reads as the colour's direction (cool = earlier/less,
+# neutral = no change, warm = later/more), never as magnitude alone. Absolute
+# per-era values use a sequential scale (_metric_scale); a difference must not.
+DELTA_PALETTE: list[tuple[float, str]] = [
+    (0.0, "#2166ac"), (0.25, "#67a9cf"), (0.5, "#f7f7f7"),
+    (0.75, "#ef8a62"), (1.0, "#b2182b"),
+]
+DELTA_FALLBACK_VABS = 1.0   # symmetric ± limit (days) when the delta is ~flat everywhere
+
+
+@dataclass(frozen=True)
+class DeltaPanel:
+    """One period-vs-period change (candidate − baseline), as one panel of a delta composite."""
+
+    title: str                    # e.g. "2011–2020 SGRDA − 1981–2010 SGRDR"
+    layers: list[RasterLayer]     # per-tier delta rasters, coarse first
+
+    @property
+    def values(self) -> np.ndarray:
+        """Every layer's cells, flattened (feeds the figure's shared diverging scale)."""
+        return np.concatenate([layer.values.ravel() for layer in self.layers])
+
+
+def _delta_scale(values: np.ndarray) -> tuple[Colormap, Normalize, list[float], list[str]]:
+    """Diverging colour scale symmetric about zero, with signed-day (±N) ticks."""
+    finite = values[np.isfinite(values)]
+    vabs = float(np.percentile(np.abs(finite), 99)) if finite.size else DELTA_FALLBACK_VABS
+    vabs = max(vabs, DELTA_FALLBACK_VABS)   # never collapse to a zero-width scale
+    cmap, norm = build_cmap(DELTA_PALETTE, vmin=-vabs, vmax=vabs)
+    tick_values = list(np.linspace(-vabs, vabs, 5))
+    return cmap, norm, tick_values, [f"{v:+.0f}" for v in tick_values]
+
+
+def plot_delta_panels(
+    panels: list[DeltaPanel],
+    *,
+    png_path: Path,
+    metric: MetricSpec,
+    region_display: str,
+    res_label: str,
+    source_label: str,
+    ncols: int = PANEL_NCOLS,
+) -> None:
+    """Render period-vs-period change maps sharing one diverging, zero-centred scale."""
+    if not panels:
+        raise ValueError("plot_delta_panels needs at least one panel.")
+
+    # One symmetric scale and one extent across panels: a colour and a location
+    # mean the same change in every comparison.
+    cmap, norm, tick_values, tick_labels = _delta_scale(
+        np.concatenate([p.values for p in panels]))
+    extent = _union_extent([(l.values, l.bounds) for p in panels for l in p.layers])
+    land = _land_polygons(extent)
+    tile = load_basemap(extent, land)   # one extent -> fetched once, drawn n times
+
+    # Each panel is a map column plus a narrow area-weighted change distribution to its
+    # right, sharing the map's diverging scale — the same paired layout as plot_metric_panels.
+    nrows = ceil(len(panels) / ncols)
+    xmin, ymin, xmax, ymax = extent
+    map_w_in = PANEL_WIDTH_IN / (1.0 + PANEL_HIST_WIDTH)
+    row_h_in = map_w_in * (ymax - ymin) / (xmax - xmin) + PANEL_DECORATION_IN
+    fig, axes = plt.subplots(
+        nrows, 2 * ncols, figsize=(PANEL_WIDTH_IN * ncols, row_h_in * nrows), squeeze=False,
+        gridspec_kw={"width_ratios": [1.0, PANEL_HIST_WIDTH] * ncols,
+                     "wspace": 0.32, "hspace": PANEL_HSPACE,
+                     "left": PANEL_LEFT, "right": PANEL_RIGHT,
+                     "top": PANEL_TOP, "bottom": PANEL_BOTTOM},
+    )
+    fig.patch.set_facecolor(DARK_OCEAN)
+
+    im = None
+    pairs: list[tuple] = []
+    for i, panel in enumerate(panels):
+        row, col = divmod(i, ncols)
+        ax, hax = axes[row, 2 * col], axes[row, 2 * col + 1]
+        pairs.append((ax, hax))
+
+        ax.set_facecolor(DARK_OCEAN)
+        im = _draw_layers(ax, [(l.values, l.bounds) for l in panel.layers],
+                          cmap=cmap, norm=norm)
+        top = len(panel.layers) + 1
+        _draw_basemap_land(ax, tile, zorder=top)
+        _frame_axes(ax, land, extent, zorder=top + 1, fill=tile is None)
+        _draw_basemap_labels(ax, tile, zorder=top + 2)
+        ax.set_title(panel.title, fontsize=11, pad=6, color=DARK_FG)
+        ax.tick_params(labelsize=7)
+        _style_axes(ax)
+
+        _draw_distribution(hax, panel.layers, cmap=cmap, norm=norm,
+                           tick_values=tick_values, tick_labels=tick_labels)
+    for spare in axes.ravel()[2 * len(panels):]:
+        spare.set_visible(False)
+
+    # aspect/pad pinned (not floated off the axes bbox) so the bar keeps the same length and
+    # the same gap above it whatever the panel-row count — matching plot_metric_panels' look.
+    cbar = fig.colorbar(im, ax=axes.ravel().tolist(), orientation="horizontal",
+                        fraction=0.04, pad=1.5 * PANEL_CBAR_PAD, aspect=30, extend="both")
+    _style_colorbar(cbar, label=f"Δ {metric_title(metric)} (days, candidate − baseline)",
+                    tick_values=tick_values, tick_labels=tick_labels)
+
+    fig.suptitle(f"{metric_title(metric)} — change between periods\n{region_display} region",
+                 fontsize=14, color=DARK_FG)
+    _match_map_heights(fig, pairs)   # after the colourbar has claimed its space
+    margin = _balance_margins(fig)
+    _footer(fig, source_label=source_label, res_label=res_label, x=margin,
+            method=reduction_note(metric), basemap=tile is not None)
+    _save(fig, png_path, tight=False)   # keep margins so the suptitle stays centred
+    plt.close(fig)
