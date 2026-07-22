@@ -44,7 +44,7 @@ from climatology.processing.regions import resolve_region  # noqa: E402
 from climatology.services.sources import CHART_TABLES  # noqa: E402
 from climatology.services.temporal import Period  # noqa: E402
 from climatology.utils import polygons  # noqa: E402
-from climatology.utils.export import archive_product  # noqa: E402
+from climatology.services.export import archive_product  # noqa: E402
 from climatology.tests import diff_map_regression_test as diff  # noqa: E402
 
 OUTPUT_DIR = Path(__file__).parent / "output"

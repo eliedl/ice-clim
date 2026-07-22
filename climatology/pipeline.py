@@ -12,22 +12,21 @@ from climatology.processing.reductions import MEDIAN_THEN_THRESHOLD, REDUCTIONS
 from climatology.processing.regions import RegionSpec, Tier, resolve_region
 from climatology.services.sources import CHART_TABLES, LAND_MASK_PATH, ChartTable
 from climatology.services.db import load_polygons
-from climatology.services.plot import metric_label, plot_metric
 from climatology.services.temporal import (
-    SEASON_ORIGIN,
     Period,
     assert_hd_aligned,
     attach_season_calendar,
 )
 from climatology.processing.conversion import ConversionStrategy
 from climatology.utils._types import ConvertedPolygons, DataGrid, RawPolygons
-from climatology.utils.export import (
+from climatology.services.export import (
+    WRITERS,
+    VarMeta,
+    Writer,
+    WriteJob,
     archive_product,
-    output_geotiff,
-    output_netcdf,
-    output_png,
-    write_geotiff,
-    write_netcdf,
+    default_outputs,
+    product_path,
 )
 
 log = logging.getLogger(__name__)
@@ -85,38 +84,19 @@ class TierProduct:
 
 # --- product naming + metadata helpers -------------------------------------
 
-def _tier_label(tier: Tier, *, multi: bool) -> str:
-    """Product-file label for one tier: ``"35m"`` legacy, ``"fine_100m"`` nested."""
-    res_tag = f"{int(round(tier.res_m))}m"
-    return f"{tier.level}_{res_tag}" if multi else res_tag
-
-
-def _composite_label(spec: RegionSpec, *, multi: bool) -> str:
-    """Product-file label for the composite map: ``"adaptive"`` or a res tag."""
-    return "adaptive" if multi else f"{int(round(spec.tiers[0].res_m))}m"
-
-
-def _method_tag(label: str, ctx: RunContext) -> str:
-    """Suffix non-default temporal-method products so MTT and TTM outputs coexist."""
+def _label(ctx: RunContext, group: list[TierProduct], *, composite: bool) -> str:
+    """Product-file label for a writer group: a resolution tag (with the tier level
+    for nested regions, or ``"adaptive"`` for a composite), suffixed with the
+    temporal method for non-default (TTM) products so MTT and TTM outputs coexist."""
+    multi = len(ctx.region.tiers) > 1
+    if composite:
+        base = "adaptive" if multi else f"{int(round(ctx.region.tiers[0].res_m))}m"
+    else:
+        tier = group[0].tier
+        res = f"{int(round(tier.res_m))}m"
+        base = f"{tier.level}_{res}" if multi else res
     slug = ctx.metric.reduction.slug
-    return label if slug == MEDIAN_THEN_THRESHOLD.slug else f"{label}_{slug}"
-
-
-def _geotiff_tags(manifest: dict, ctx: RunContext) -> dict:
-    """GeoTIFF metadata tags from a run manifest, plus date-metric decoding keys."""
-    tags = {**manifest, "display_label": metric_label(ctx.metric)}
-    if ctx.metric.slug.endswith("_date"):
-        tags["value_encoding"] = "day_of_season"
-        tags["season_origin"] = SEASON_ORIGIN.isoformat()
-    return tags
-
-
-def _netcdf_var_meta(ctx: RunContext) -> tuple[str, dict]:
-    """(units, extra_attrs) for a metric's netCDF variable; date metrics carry the day-of-season decoding keys."""
-    if ctx.metric.slug.endswith("_date"):
-        return "day_of_season", {"value_encoding": "day_of_season",
-                                 "season_origin": SEASON_ORIGIN.isoformat()}
-    return "days", {}
+    return base if slug == MEDIAN_THEN_THRESHOLD.slug else f"{base}_{slug}"
 
 
 def _build_manifest(ctx: RunContext, tier: Tier, *, n_rows: int) -> dict:
@@ -185,61 +165,47 @@ def _compute_tiers(fetch: FetchResult, ctx: RunContext) -> list[TierProduct]:
             for tier in ctx.region.tiers]
 
 
-def _emit_tier(product: TierProduct, ctx: RunContext, fetch: FetchResult,
-               *, geotiff: bool, netcdf: bool) -> None:
-    """Persist one tier product: archive raster (+ GeoTIFF / netCDF when requested)."""
-    tier = product.tier
-    multi = len(ctx.region.tiers) > 1
-    label = _method_tag(_tier_label(tier, multi=multi), ctx)
-    manifest = _build_manifest(ctx, tier, n_rows=fetch.n_rows)
-    tier_png = output_png(ctx.region.slug, ctx.metric.slug, period_slug=ctx.period.slug,
-                          source_slug=ctx.source.slug, label=label)
-    archive_product(product.values, tier_png, manifest=manifest)
-    if geotiff:
-        tier_tif = output_geotiff(ctx.region.slug, ctx.metric.slug, period_slug=ctx.period.slug,
-                                  source_slug=ctx.source.slug, label=label)
-        write_geotiff(product.values, tier.grid.transform,
-                      path=tier_tif, band_description=metric_label(ctx.metric),
-                      tags=_geotiff_tags(manifest, ctx))
-    if netcdf:
-        tier_nc = output_netcdf(ctx.region.slug, ctx.metric.slug, period_slug=ctx.period.slug,
-                                source_slug=ctx.source.slug, label=label)
-        units, extra = _netcdf_var_meta(ctx)
-        write_netcdf(product.values, tier.grid, path=tier_nc, var_name=ctx.metric.slug,
-                     long_name=metric_label(ctx.metric), units=units, extra_attrs=extra)
-
-
-def _emit_tiers(products: list[TierProduct], ctx: RunContext, fetch: FetchResult,
-                *, geotiff: bool, netcdf: bool) -> None:
-    """Persist every tier product (archive + GeoTIFF / netCDF)."""
+def _archive(products: list[TierProduct], ctx: RunContext, manifests: dict) -> None:
+    """Persist each tier's raster + manifest — always on, independent of the requested formats."""
     for product in products:
-        _emit_tier(product, ctx, fetch, geotiff=geotiff, netcdf=netcdf)
+        stem = product_path(ctx, label=_label(ctx, [product], composite=False), ext="npz")
+        archive_product(product.values, stem, manifests[product.tier.level])
 
 
-def _render_composite(products: list[TierProduct], ctx: RunContext) -> None:
-    """Render the composite multi-tier map (coarse first, fine last)."""
-    multi = len(ctx.region.tiers) > 1
-    composite_png = output_png(ctx.region.slug, ctx.metric.slug, period_slug=ctx.period.slug,
-                               source_slug=ctx.source.slug,
-                               label=_method_tag(_composite_label(ctx.region, multi=multi), ctx))
-    layers = [(p.values, p.tier.grid.bounds) for p in products]
-    plot_metric(layers, png_path=composite_png, ctx=ctx)
+def _emit(writer: Writer, products: list[TierProduct], ctx: RunContext,
+          meta: VarMeta, manifests: dict) -> None:
+    """Run one writer over the products at its declared granularity (per-tier or composite)."""
+    groups = [products] if writer.composite else [[p] for p in products]
+    for group in groups:
+        path = product_path(ctx, label=_label(ctx, group, composite=writer.composite),
+                            ext=writer.ext)
+        writer.serialize(WriteJob(path=path, products=group, ctx=ctx, meta=meta,
+                                  manifest=manifests[group[0].tier.level]))
 
 
 def _export(products: list[TierProduct], ctx: RunContext, fetch: FetchResult,
-            *, geotiff: bool, netcdf: bool) -> None:
-    """Write all products: per-tier archives (+ GeoTIFFs / netCDFs) and the composite map."""
-    _emit_tiers(products, ctx, fetch, geotiff=geotiff, netcdf=netcdf)
-    _render_composite(products, ctx)
+            *, outputs: list[str]) -> None:
+    """Archive every tier (always), then run each requested writer — product-agnostic."""
+    manifests = {p.tier.level: _build_manifest(ctx, p.tier, n_rows=fetch.n_rows)
+                 for p in products}
+    _archive(products, ctx, manifests)
+    meta = VarMeta.of(ctx)
+    for name in outputs:
+        _emit(WRITERS[name], products, ctx, meta, manifests)
 
 
 def run(metric_slug: str, region_slug: str, source_slug: str, period_slug: str,
         *, reduction_slug: str = MEDIAN_THEN_THRESHOLD.slug,
-        geotiff: bool = False, netcdf: bool = False) -> None:
-    """Produce the climatology for one (metric, region, source, period, reduction order)."""
+        outputs: list[str] | None = None) -> None:
+    """Produce the climatology for one (metric, region, source, period, reduction order).
+
+    ``outputs`` names the formats to write (see ``services.export.WRITERS``); when
+    None it defaults to the metric spec's ``default_outputs``.
+    """
     context = _resolve(metric_slug, region_slug, source_slug, period_slug, reduction_slug)
     fetch = _fetch(context)
     _validate(fetch, context)
 
     products = _compute_tiers(fetch, context)
-    _export(products, context, fetch, geotiff=geotiff, netcdf=netcdf)
+    _export(products, context, fetch,
+            outputs=list(outputs) if outputs else list(default_outputs(context.metric)))

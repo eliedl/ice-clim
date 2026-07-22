@@ -5,8 +5,11 @@ from __future__ import annotations
 import json
 import logging
 import subprocess
+from collections.abc import Callable
+from dataclasses import dataclass
 from datetime import datetime
 from pathlib import Path
+from typing import TYPE_CHECKING
 
 import netCDF4
 import numpy as np
@@ -14,7 +17,15 @@ import rasterio
 from rasterio.crs import CRS
 
 from climatology.processing.rasterize import GRID_CRS, Grid
+from climatology.services.plot import metric_label, plot_metric
+from climatology.services.temporal import SEASON_ORIGIN
 from climatology.utils._types import DataGrid
+
+if TYPE_CHECKING:
+    # Annotation-only — the writers duck-type these run value objects at runtime,
+    # so importing them here would only re-introduce the pipeline import cycle.
+    from climatology.pipeline import RunContext, TierProduct
+    from climatology.processing.metrics import MetricSpec
 
 log = logging.getLogger(__name__)
 
@@ -48,25 +59,14 @@ def _output_path(slug: str, metric_slug: str, *, period_slug: str,
             / f"{metric_slug}_{slug}_{period_slug}_{source_slug}_{label}.{ext}")
 
 
-def output_png(slug: str, metric_slug: str, *, period_slug: str, source_slug: str,
-               label: str) -> Path:
-    """PNG path for a product (see ``_output_path``)."""
-    return _output_path(slug, metric_slug, period_slug=period_slug,
-                        source_slug=source_slug, label=label, ext="png")
+def product_path(ctx: "RunContext", *, label: str, ext: str) -> Path:
+    """Output path for a product of this run, tagged ``label``, with extension ``ext``.
 
-
-def output_geotiff(slug: str, metric_slug: str, *, period_slug: str, source_slug: str,
-                   label: str) -> Path:
-    """GeoTIFF path for a product (see ``_output_path``)."""
-    return _output_path(slug, metric_slug, period_slug=period_slug,
-                        source_slug=source_slug, label=label, ext="tif")
-
-
-def output_netcdf(slug: str, metric_slug: str, *, period_slug: str, source_slug: str,
-                  label: str) -> Path:
-    """NetCDF path for a product (see ``_output_path``)."""
-    return _output_path(slug, metric_slug, period_slug=period_slug,
-                        source_slug=source_slug, label=label, ext="nc")
+    The single path builder for every writer (each supplies its own ``ext``) and
+    for the archive naming key — replacing the per-format ``output_*`` wrappers.
+    """
+    return _output_path(ctx.region.slug, ctx.metric.slug, period_slug=ctx.period.slug,
+                        source_slug=ctx.source.slug, label=label, ext=ext)
 
 
 def _git_state() -> dict:
@@ -82,13 +82,17 @@ def _git_state() -> dict:
         return {"git_sha": None, "git_dirty": None}
 
 
-def archive_product(values: DataGrid, png_path: Path, manifest: dict) -> Path:
-    """Persist the product raster + run manifest under ``archive/`` next to the PNG."""
+def archive_product(values: DataGrid, stem: Path, manifest: dict) -> Path:
+    """Persist the product raster + run manifest under ``<product-dir>/archive/``.
+
+    ``stem`` is any path in the product directory whose basename names the run
+    (its extension is ignored); the archive keys off ``.stem`` and ``.parent``.
+    """
     stamp = datetime.now().strftime("%Y%m%d-%H%M%S")
     git = _git_state()
-    arch_dir = png_path.parent / "archive"
+    arch_dir = stem.parent / "archive"
     arch_dir.mkdir(parents=True, exist_ok=True)
-    npz = arch_dir / f"{png_path.stem}_{stamp}_{git['git_sha'] or 'nogit'}.npz"
+    npz = arch_dir / f"{stem.stem}_{stamp}_{git['git_sha'] or 'nogit'}.npz"
     np.savez_compressed(npz, values=values)
     manifest = {**manifest, **git, "grid_crs": GRID_CRS, "created": stamp, "raster": npz.name}
     npz.with_suffix(".json").write_text(json.dumps(manifest, indent=2, default=str))
@@ -195,3 +199,87 @@ def write_netcdf(values: DataGrid, grid: Grid, *, path: Path, var_name: str,
 
     log.info("NetCDF saved to %s", path)
     return path
+
+
+# --- Writers: format registry over the serializers above -------------------
+
+@dataclass(frozen=True)
+class VarMeta:
+    """Metric-derived, format-agnostic output metadata — the single source of the
+    date-encoding rule (was duplicated across the GeoTIFF-tag / netCDF-attr helpers)."""
+
+    var_name: str
+    long_name: str
+    units: str
+    encoding: dict[str, str]        # {} or {value_encoding, season_origin} for date metrics
+
+    @classmethod
+    def of(cls, ctx: "RunContext") -> "VarMeta":
+        is_date = ctx.metric.slug.endswith("_date")
+        encoding = ({"value_encoding": "day_of_season",
+                     "season_origin": SEASON_ORIGIN.isoformat()} if is_date else {})
+        return cls(var_name=ctx.metric.slug, long_name=metric_label(ctx.metric),
+                   units="day_of_season" if is_date else "days", encoding=encoding)
+
+
+@dataclass(frozen=True)
+class WriteJob:
+    """The normalized payload every writer's ``serialize`` receives.
+
+    ``products`` is a single-tier list for per-tier writers and every tier for a
+    composite writer, so one serialize signature covers both granularities.
+    """
+
+    path: Path
+    products: list["TierProduct"]
+    ctx: "RunContext"
+    meta: VarMeta
+    manifest: dict
+
+
+def _serialize_png(job: WriteJob) -> None:
+    """Composite map over all tiers (coarse -> fine) via services.plot."""
+    layers = [(p.values, p.tier.grid.bounds) for p in job.products]
+    plot_metric(layers, png_path=job.path, ctx=job.ctx)
+
+
+def _serialize_geotiff(job: WriteJob) -> None:
+    """One float32 GeoTIFF for the job's tier; the run manifest travels as tags."""
+    p = job.products[0]
+    tags = {**job.manifest, "display_label": job.meta.long_name, **job.meta.encoding}
+    write_geotiff(p.values, p.tier.grid.transform, path=job.path,
+                  band_description=job.meta.long_name, tags=tags)
+
+
+def _serialize_netcdf(job: WriteJob) -> None:
+    """One CF/GDAL netCDF for the job's tier."""
+    p = job.products[0]
+    write_netcdf(p.values, p.tier.grid, path=job.path, var_name=job.meta.var_name,
+                 long_name=job.meta.long_name, units=job.meta.units,
+                 extra_attrs=job.meta.encoding)
+
+
+@dataclass(frozen=True)
+class Writer:
+    """A product output format: its extension, granularity, and serializer."""
+
+    slug: str
+    ext: str
+    composite: bool                 # False: one file per tier; True: one per region
+    serialize: Callable[[WriteJob], None]
+
+
+WRITERS: dict[str, Writer] = {w.slug: w for w in (
+    Writer("png", "png", composite=True, serialize=_serialize_png),
+    Writer("geotiff", "tif", composite=False, serialize=_serialize_geotiff),
+    Writer("netcdf", "nc", composite=False, serialize=_serialize_netcdf),
+)}
+
+
+def default_outputs(metric: "MetricSpec") -> tuple[str, ...]:
+    """Default output formats for a metric spec (climatological metrics render a PNG).
+
+    The writer-layer home of the default so ``MetricSpec`` stays free of emission
+    policy. RawMetricSpec will branch here (raw -> netcdf) when it lands.
+    """
+    return ("png",)

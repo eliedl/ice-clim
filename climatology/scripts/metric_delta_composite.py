@@ -37,7 +37,7 @@ from climatology.services.plot import (
     DeltaPanel, MetricPanel, RasterLayer, plot_delta_panels, plot_source_portrait,
 )
 from climatology.services.sources import CHART_TABLES
-from climatology.utils.export import find_archived
+from climatology.services.export import find_archived
 from climatology.scripts.sweep import DEFAULT_REGION
 
 logging.basicConfig(

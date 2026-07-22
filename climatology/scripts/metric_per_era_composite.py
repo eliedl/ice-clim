@@ -32,7 +32,7 @@ from climatology.processing.reductions import MEDIAN_THEN_THRESHOLD, REDUCTIONS
 from climatology.processing.regions import REGION_SLUGS, resolve_region
 from climatology.services.plot import MetricPanel, RasterLayer, plot_metric_panels
 from climatology.services.sources import CHART_TABLES, PERIOD_SOURCES
-from climatology.utils.export import OUTPUT_DIR, find_archived
+from climatology.services.export import OUTPUT_DIR, find_archived
 from climatology.scripts.sweep import DEFAULT_REGION
 
 logging.basicConfig(

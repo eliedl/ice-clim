@@ -45,7 +45,7 @@ from climatology.processing.reductions import MEDIAN_THEN_THRESHOLD, REDUCTIONS
 from climatology.processing.regions import resolve_region
 from climatology.services.plot import RasterLayer, _area_weights, _deposit
 from climatology.services.temporal import SEASON_ORIGIN
-from climatology.utils.export import find_archived
+from climatology.services.export import find_archived
 
 OUTPUT_DIR_PROBE = Path(__file__).parent / "output"
 

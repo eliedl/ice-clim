@@ -28,6 +28,7 @@ from climatology.pipeline import run
 from climatology.processing.metrics import METRICS
 from climatology.processing.reductions import REDUCTIONS
 from climatology.processing.regions import REGION_SLUGS
+from climatology.services.export import WRITERS
 from climatology.services.sources import CHART_TABLES
 
 logging.basicConfig(
@@ -57,12 +58,9 @@ def _parse_args() -> argparse.Namespace:
     p.add_argument("--reduction", choices=sorted(REDUCTIONS), default="mtt",
                    help="Reduction order: mtt = median-then-threshold "
                         "(default, DEC-027); ttm = threshold-then-median (DEC-049).")
-    p.add_argument("--geotiff", action="store_true",
-                   help="Also write one float32 GeoTIFF per tier (EPSG:32198, "
-                        "NaN nodata) alongside the PNG products.")
-    p.add_argument("--netcdf", action="store_true",
-                   help="Also write one CF/GDAL netCDF per tier (EPSG:32198, "
-                        "-9999.0 fill) alongside the PNG products.")
+    p.add_argument("--output", nargs="+", choices=sorted(WRITERS), default=None, metavar="FMT",
+                   help="Output format(s) to write, e.g. --output png netcdf. Default: the "
+                        f"metric's default (png for climatology). Choices: {', '.join(sorted(WRITERS))}.")
     return p.parse_args()
 
 
@@ -70,6 +68,6 @@ if __name__ == "__main__":
     args = _parse_args()
     try:
         run(args.metric, args.region, args.source, args.period,
-            reduction_slug=args.reduction, geotiff=args.geotiff, netcdf=args.netcdf)
+            reduction_slug=args.reduction, outputs=args.output)
     except ValueError as e:
         sys.exit(f"ERROR: {e}")
