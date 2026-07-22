@@ -60,6 +60,9 @@ def _parse_args() -> argparse.Namespace:
     p.add_argument("--geotiff", action="store_true",
                    help="Also write one float32 GeoTIFF per tier (EPSG:32198, "
                         "NaN nodata) alongside the PNG products.")
+    p.add_argument("--netcdf", action="store_true",
+                   help="Also write one CF/GDAL netCDF per tier (EPSG:32198, "
+                        "-9999.0 fill) alongside the PNG products.")
     return p.parse_args()
 
 
@@ -67,6 +70,6 @@ if __name__ == "__main__":
     args = _parse_args()
     try:
         run(args.metric, args.region, args.source, args.period,
-            reduction_slug=args.reduction, geotiff=args.geotiff)
+            reduction_slug=args.reduction, geotiff=args.geotiff, netcdf=args.netcdf)
     except ValueError as e:
         sys.exit(f"ERROR: {e}")

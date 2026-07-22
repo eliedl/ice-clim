@@ -24,8 +24,10 @@ from climatology.utils._types import ConvertedPolygons, DataGrid, RawPolygons
 from climatology.utils.export import (
     archive_product,
     output_geotiff,
+    output_netcdf,
     output_png,
     write_geotiff,
+    write_netcdf,
 )
 
 log = logging.getLogger(__name__)
@@ -109,6 +111,14 @@ def _geotiff_tags(manifest: dict, ctx: RunContext) -> dict:
     return tags
 
 
+def _netcdf_var_meta(ctx: RunContext) -> tuple[str, dict]:
+    """(units, extra_attrs) for a metric's netCDF variable; date metrics carry the day-of-season decoding keys."""
+    if ctx.metric.slug.endswith("_date"):
+        return "day_of_season", {"value_encoding": "day_of_season",
+                                 "season_origin": SEASON_ORIGIN.isoformat()}
+    return "days", {}
+
+
 def _build_manifest(ctx: RunContext, tier: Tier, *, n_rows: int) -> dict:
     """Self-describing run manifest persisted alongside each tier product."""
     clim_start, clim_end = ctx.period.window
@@ -176,8 +186,8 @@ def _compute_tiers(fetch: FetchResult, ctx: RunContext) -> list[TierProduct]:
 
 
 def _emit_tier(product: TierProduct, ctx: RunContext, fetch: FetchResult,
-               *, geotiff: bool) -> None:
-    """Persist one tier product: archive raster (+ GeoTIFF when requested)."""
+               *, geotiff: bool, netcdf: bool) -> None:
+    """Persist one tier product: archive raster (+ GeoTIFF / netCDF when requested)."""
     tier = product.tier
     multi = len(ctx.region.tiers) > 1
     label = _method_tag(_tier_label(tier, multi=multi), ctx)
@@ -191,13 +201,19 @@ def _emit_tier(product: TierProduct, ctx: RunContext, fetch: FetchResult,
         write_geotiff(product.values, tier.grid.transform,
                       path=tier_tif, band_description=metric_label(ctx.metric),
                       tags=_geotiff_tags(manifest, ctx))
+    if netcdf:
+        tier_nc = output_netcdf(ctx.region.slug, ctx.metric.slug, period_slug=ctx.period.slug,
+                                source_slug=ctx.source.slug, label=label)
+        units, extra = _netcdf_var_meta(ctx)
+        write_netcdf(product.values, tier.grid, path=tier_nc, var_name=ctx.metric.slug,
+                     long_name=metric_label(ctx.metric), units=units, extra_attrs=extra)
 
 
 def _emit_tiers(products: list[TierProduct], ctx: RunContext, fetch: FetchResult,
-                *, geotiff: bool) -> None:
-    """Persist every tier product (archive + GeoTIFF)."""
+                *, geotiff: bool, netcdf: bool) -> None:
+    """Persist every tier product (archive + GeoTIFF / netCDF)."""
     for product in products:
-        _emit_tier(product, ctx, fetch, geotiff=geotiff)
+        _emit_tier(product, ctx, fetch, geotiff=geotiff, netcdf=netcdf)
 
 
 def _render_composite(products: list[TierProduct], ctx: RunContext) -> None:
@@ -211,18 +227,19 @@ def _render_composite(products: list[TierProduct], ctx: RunContext) -> None:
 
 
 def _export(products: list[TierProduct], ctx: RunContext, fetch: FetchResult,
-            *, geotiff: bool) -> None:
-    """Write all products: per-tier archives (+ GeoTIFFs) and the composite map."""
-    _emit_tiers(products, ctx, fetch, geotiff=geotiff)
+            *, geotiff: bool, netcdf: bool) -> None:
+    """Write all products: per-tier archives (+ GeoTIFFs / netCDFs) and the composite map."""
+    _emit_tiers(products, ctx, fetch, geotiff=geotiff, netcdf=netcdf)
     _render_composite(products, ctx)
 
 
 def run(metric_slug: str, region_slug: str, source_slug: str, period_slug: str,
-        *, reduction_slug: str = MEDIAN_THEN_THRESHOLD.slug, geotiff: bool = False) -> None:
+        *, reduction_slug: str = MEDIAN_THEN_THRESHOLD.slug,
+        geotiff: bool = False, netcdf: bool = False) -> None:
     """Produce the climatology for one (metric, region, source, period, reduction order)."""
     context = _resolve(metric_slug, region_slug, source_slug, period_slug, reduction_slug)
     fetch = _fetch(context)
     _validate(fetch, context)
 
     products = _compute_tiers(fetch, context)
-    _export(products, context, fetch, geotiff=geotiff)
+    _export(products, context, fetch, geotiff=geotiff, netcdf=netcdf)

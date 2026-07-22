@@ -55,5 +55,5 @@ PERIOD_SOURCES: dict[str, str] = {
     "1971-2000": "sgrdr",
     "1981-2010": "sgrdr",
     "1991-2020": "sgrdr",
-    "2011-2020": "sgrda",
+    "2011-2020": "sgrdr",
 }

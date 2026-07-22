@@ -8,16 +8,20 @@ import subprocess
 from datetime import datetime
 from pathlib import Path
 
+import netCDF4
 import numpy as np
 import rasterio
 from rasterio.crs import CRS
 
-from climatology.processing.rasterize import GRID_CRS
+from climatology.processing.rasterize import GRID_CRS, Grid
 from climatology.utils._types import DataGrid
 
 log = logging.getLogger(__name__)
 
 OUTPUT_DIR = Path(__file__).parents[1] / "output"
+
+# Data-variable nodata sentinel in netCDF products (matches the WW3 product).
+NETCDF_FILL = -9999.0
 
 
 def log_distribution(values: DataGrid) -> None:
@@ -56,6 +60,13 @@ def output_geotiff(slug: str, metric_slug: str, *, period_slug: str, source_slug
     """GeoTIFF path for a product (see ``_output_path``)."""
     return _output_path(slug, metric_slug, period_slug=period_slug,
                         source_slug=source_slug, label=label, ext="tif")
+
+
+def output_netcdf(slug: str, metric_slug: str, *, period_slug: str, source_slug: str,
+                  label: str) -> Path:
+    """NetCDF path for a product (see ``_output_path``)."""
+    return _output_path(slug, metric_slug, period_slug=period_slug,
+                        source_slug=source_slug, label=label, ext="nc")
 
 
 def _git_state() -> dict:
@@ -137,4 +148,50 @@ def write_geotiff(values: DataGrid, transform, *, path: Path,
         dst.set_band_description(1, band_description)
         dst.update_tags(**{k: str(v) for k, v in tags.items()})
     log.info("GeoTIFF saved to %s", path)
+    return path
+
+
+def write_netcdf(values: DataGrid, grid: Grid, *, path: Path, var_name: str,
+                 long_name: str, units: str, extra_attrs: dict | None = None) -> Path:
+    """Write a single-band ``(H, W)`` product raster to a CF / GDAL-style netCDF.
+
+    Reproduces the WW3 product structure so the raster aligns cell-for-cell in
+    QGIS / xarray: float64 ``x`` / ``y`` projection-coordinate variables at cell
+    centres, a scalar ``spatial_ref`` grid-mapping variable carrying the
+    EPSG:32198 WKT + GeoTransform, and the data variable tagged
+    ``grid_mapping="spatial_ref"``. NaN cells are written as the -9999.0 fill.
+    ``extra_attrs`` (stringified) carries any value-decoding keys, e.g.
+    ``value_encoding`` / ``season_origin`` for date metrics.
+    """
+    path.parent.mkdir(parents=True, exist_ok=True)
+    t = grid.transform  # affine: t.a=+dx, t.e=-dy, t.c=xmin, t.f=ymax
+    x = t.c + (np.arange(grid.width) + 0.5) * t.a    # cell-centre eastings
+    y = t.f + (np.arange(grid.height) + 0.5) * t.e   # cell-centre northings (descending)
+    geotransform = f"{t.c} {t.a} {t.b} {t.f} {t.d} {t.e}"
+
+    with netCDF4.Dataset(path, "w", format="NETCDF4") as ds:
+        ds.createDimension("y", grid.height)
+        ds.createDimension("x", grid.width)
+
+        xv = ds.createVariable("x", "f8", ("x",))
+        xv.axis, xv.units = "X", "metre"
+        xv.long_name, xv.standard_name = "x coordinate of projection", "projection_x_coordinate"
+        xv[:] = x
+        yv = ds.createVariable("y", "f8", ("y",))
+        yv.axis, yv.units = "Y", "metre"
+        yv.long_name, yv.standard_name = "y coordinate of projection", "projection_y_coordinate"
+        yv[:] = y
+
+        sr = ds.createVariable("spatial_ref", "i4")
+        sr.crs_wkt = CRS.from_epsg(GRID_CRS).to_wkt()
+        sr.GeoTransform = geotransform
+
+        var = ds.createVariable(var_name, "f4", ("y", "x"), fill_value=NETCDF_FILL,
+                                zlib=True, complevel=4)
+        var.long_name, var.units, var.grid_mapping = long_name, units, "spatial_ref"
+        for k, v in (extra_attrs or {}).items():
+            setattr(var, k, str(v))
+        var[:] = np.where(np.isnan(values), NETCDF_FILL, values).astype("float32")
+
+    log.info("NetCDF saved to %s", path)
     return path

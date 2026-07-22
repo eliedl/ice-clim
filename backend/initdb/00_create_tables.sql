@@ -54,11 +54,20 @@ CREATE INDEX IF NOT EXISTS sgrdr_geom_idx   ON sgrdr USING GIST (geometry);
 --   REFRESH MATERIALIZED VIEW sgrda_32198;
 --   REFRESH MATERIALIZED VIEW sgrdr_32198;
 -- 32198 is hardcoded here (== climatology GRID_CRS); if GRID_CRS changes, DROP and recreate these views.
+--
+-- The two view definitions are NOT identical: sgrda_32198 re-validates after the reprojection,
+-- sgrdr_32198 does not. Base geometries are valid in 4326 (ingestion ST_MakeValid, pipeline.py:load),
+-- but ST_Transform to 32198 reintroduces a self-intersection in ~115 GULF open-water (POLY_TYPE='W',
+-- CT='00') polygons of the 2007-08 winter — one per daily chart. ST_MakeValid resolves each to a
+-- valid MultiPolygon; without it ST_Intersection in the metric fetch raises a GEOS TopologyException
+-- on any basin-wide (golfe) run. sgrdr has no such case, so its view stays a bare ST_Transform. Adding
+-- ST_MakeValid to sgrdr would be a no-op guard against a case its data does not contain; revisit only
+-- if a future sgrdr ingestion develops the same reprojection artifact.
 CREATE MATERIALIZED VIEW IF NOT EXISTS sgrda_32198 AS
 SELECT region,
        "CT","CA","CB","CC","CN","SA","SB","SC","CD","FA","FB","FC",
        "T1",
-       ST_Transform(geometry, 32198) AS geom
+       ST_MakeValid(ST_Transform(geometry, 32198)) AS geom
 FROM sgrda
 WHERE "POLY_TYPE" IN ('I', 'W')
 WITH NO DATA;
