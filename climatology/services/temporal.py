@@ -66,25 +66,29 @@ def winter_season(obs_date: pd.Series) -> pd.Series:
 
 
 def attach_season_calendar(df: RawPolygons) -> RawPolygons:
-    """Attach season / day_of_season columns, drop non-admissible month-days (WMO rule), and order rows by day_of_season (temporal single source, DEC-027)."""
+    """Attach season / day_of_season columns, drop 02-29 (no ordinal), and order rows by day_of_season (temporal single source, DEC-027).
+
+    The WMO data-availability filter is *not* applied here — it protects the
+    cross-season median on the climatological path only (``filter_admissible_days``),
+    while the raw per-season product keeps every observed day.
+    """
     df = df.copy()
     df["month_day"] = pd.to_datetime(df["obs_date"]).dt.strftime("%m-%d")
     df["season"] = winter_season(df["obs_date"])
-    # Filter before mapping day_of_season: the ordinal is only defined on
-    # admissible days (02-29 has no ordinal — see the SEASON_ORIGIN invariant).
-    df = df[df["month_day"].isin(admissible_days_of_season(df))]
+    # 02-29 has no ordinal (the winter reference year is non-leap — see the
+    # SEASON_ORIGIN invariant); drop it before mapping day_of_season.
+    df = df[df["month_day"] != "02-29"]
     df = df.assign(day_of_season=df["month_day"].map(day_of_season))
     return df.sort_values("day_of_season").drop(columns=["month_day"])
 
 
-def admissible_days_of_season(df: RawPolygons, *, coverage: float = 0.8) -> list[str]:
-    """Calendar days passing the WMO data-availability rule (expects the season-calendar columns)."""
-    df = df[df["month_day"] != "02-29"]
+def filter_admissible_days(df: RawPolygons, *, coverage: float = 0.8) -> RawPolygons:
+    """Keep only days meeting the WMO data-availability rule (>= ``coverage`` of seasons); expects the season-calendar columns (DEC-025/027)."""
     n_seasons = df["season"].nunique()
     min_seasons = int(np.ceil(coverage * n_seasons))
-    coverage_per_date = df.groupby("month_day")["season"].nunique()
-    admissible = coverage_per_date[coverage_per_date >= min_seasons].index.tolist()
-    return sorted(admissible, key=day_of_season)
+    coverage_per_day = df.groupby("day_of_season")["season"].nunique()
+    admissible = coverage_per_day[coverage_per_day >= min_seasons].index
+    return df[df["day_of_season"].isin(admissible)]
 
 
 # --- Climatology window and HD validation ----------------------------------

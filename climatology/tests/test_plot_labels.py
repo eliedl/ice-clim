@@ -11,7 +11,7 @@ from dataclasses import replace
 
 import pytest
 
-from climatology.processing.metrics import METRICS
+from climatology.processing.metrics import METRICS, ClimatologicalMetricSpec
 from climatology.processing.reductions import REDUCTIONS
 from climatology.services.sources import CHART_TABLES
 from climatology.services.plot import (
@@ -23,7 +23,10 @@ from climatology.services.plot import (
     threshold_label,
 )
 
-SPECS = [(slug, red) for slug in METRICS for red in REDUCTIONS]
+# Plot labels are a climatological concern; raw metrics carry no reduction / plot style.
+CLIMATOLOGICAL_METRICS = {slug: m for slug, m in METRICS.items()
+                          if isinstance(m, ClimatologicalMetricSpec)}
+SPECS = [(slug, red) for slug in CLIMATOLOGICAL_METRICS for red in REDUCTIONS]
 
 
 def _spec(slug: str, reduction: str):
@@ -31,7 +34,7 @@ def _spec(slug: str, reduction: str):
 
 
 def test_plot_styles_cover_every_metric():
-    assert set(PLOT_STYLES) == set(METRICS)
+    assert set(PLOT_STYLES) == set(CLIMATOLOGICAL_METRICS)
 
 
 def test_reduction_notes_cover_every_reduction():
@@ -50,7 +53,7 @@ def test_titles_are_unique():
     assert len(titles) == len(set(titles))
 
 
-@pytest.mark.parametrize("slug", sorted(METRICS))
+@pytest.mark.parametrize("slug", sorted(CLIMATOLOGICAL_METRICS))
 def test_title_states_the_value_type(slug: str):
     """Count metrics say what the number is ('duration' / 'lag'); date metrics are named for the event itself, so a literal 'date' would be redundant (title reformat, e8b5cce)."""
     title = PLOT_STYLES[slug].title.lower()
@@ -79,19 +82,19 @@ def test_mtt_and_ttm_labels_differ(slug: str, reduction: str):
     assert len(labels) == len(REDUCTIONS)
 
 
-@pytest.mark.parametrize("slug", sorted(METRICS))
+@pytest.mark.parametrize("slug", sorted(CLIMATOLOGICAL_METRICS))
 def test_mtt_labels_name_the_median_series(slug: str):
     """Under MTT the number is a crossing of the cross-season *median* series — say so."""
     assert "median" in metric_label(_spec(slug, "mtt")).lower()
 
 
-@pytest.mark.parametrize("slug", sorted(METRICS))
+@pytest.mark.parametrize("slug", sorted(CLIMATOLOGICAL_METRICS))
 def test_ttm_labels_are_a_median_of_per_season_values(slug: str):
     """Under TTM the number really is a median across seasons."""
     assert metric_label(_spec(slug, "ttm")).lower().startswith("median")
 
 
-@pytest.mark.parametrize("slug", sorted(METRICS))
+@pytest.mark.parametrize("slug", sorted(CLIMATOLOGICAL_METRICS))
 def test_label_agrees_with_the_kernel_threshold(slug: str):
     """A label must not claim a crossing the kernel does not compute (the drift that bit twice)."""
     spec = _spec(slug, "mtt")

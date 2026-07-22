@@ -3,11 +3,17 @@
 from __future__ import annotations
 
 import logging
-from dataclasses import dataclass, replace
+from dataclasses import dataclass
+from functools import singledispatch
 
 import numpy as np
 
-from climatology.processing.metrics import METRICS, MetricSpec
+from climatology.processing.metrics import (
+    METRICS,
+    ClimatologicalMetricSpec,
+    MetricSpec,
+    RawMetricSpec,
+)
 from climatology.processing.reductions import MEDIAN_THEN_THRESHOLD, REDUCTIONS
 from climatology.processing.regions import RegionSpec, Tier, resolve_region
 from climatology.services.sources import CHART_TABLES, LAND_MASK_PATH, ChartTable
@@ -27,6 +33,7 @@ from climatology.services.export import (
     archive_product,
     default_outputs,
     product_path,
+    write_raw_netcdf,
 )
 
 log = logging.getLogger(__name__)
@@ -119,11 +126,11 @@ def _build_manifest(ctx: RunContext, tier: Tier, *, n_rows: int) -> dict:
 def _resolve(metric_slug: str, region_slug: str, source_slug: str,
              period_slug: str, reduction_slug: str) -> RunContext:
     """Resolve slugs to metric/source/region/period objects (the run's identity)."""
-    metric = replace(METRICS[metric_slug], reduction=REDUCTIONS[reduction_slug])
+    metric = METRICS[metric_slug].with_reduction(REDUCTIONS[reduction_slug])
     ctx = RunContext(metric=metric, source=CHART_TABLES[source_slug],
                      region=resolve_region(region_slug), period=Period(period_slug))
     log.info("Region: %s (slug=%s) | Metric: %s | Reduction: %s | Source: %s | Winters: %s | %d tier(s)",
-             ctx.region.display, ctx.region.slug, ctx.metric.slug, ctx.metric.reduction.slug,
+             ctx.region.display, ctx.region.slug, ctx.metric.slug, ctx.metric.reduction_slug,
              ctx.source.slug, ctx.period.slug, len(ctx.region.tiers))
     return ctx
 
@@ -194,18 +201,54 @@ def _export(products: list[TierProduct], ctx: RunContext, fetch: FetchResult,
         _emit(WRITERS[name], products, ctx, meta, manifests)
 
 
+@singledispatch
+def _check_outputs(metric: MetricSpec, outputs: list[str]) -> None:
+    """Resolve-time guard that a metric's requested output formats are admissible (climatological: any registered writer, already constrained by the CLI)."""
+
+
+@_check_outputs.register
+def _(metric: RawMetricSpec, outputs: list[str]) -> None:
+    bad = [o for o in outputs if o != "netcdf"]
+    if bad:
+        raise ValueError(f"Raw metric '{metric.slug}' emits netCDF only; drop {bad} "
+                         "(the raw hypercube has no PNG/GeoTIFF form).")
+
+
+@singledispatch
+def _produce(metric: MetricSpec, fetch: FetchResult, ctx: RunContext,
+             outputs: list[str]) -> None:
+    """Compute and emit a run's products — the one dispatch seam between the metric variants."""
+    raise TypeError(f"No producer for metric spec {type(metric).__name__}")
+
+
+@_produce.register
+def _(metric: ClimatologicalMetricSpec, fetch: FetchResult, ctx: RunContext,
+      outputs: list[str]) -> None:
+    _export(_compute_tiers(fetch, ctx), ctx, fetch, outputs=outputs)
+
+
+@_produce.register
+def _(metric: RawMetricSpec, fetch: FetchResult, ctx: RunContext,
+      outputs: list[str]) -> None:
+    if len(ctx.region.tiers) != 1:
+        raise ValueError(f"Raw hypercube needs a single-grid region; '{ctx.region.slug}' "
+                         f"has {len(ctx.region.tiers)} tiers.")
+    df = fetch.prepare(metric.conversion)
+    write_raw_netcdf(metric.compute(df, ctx.region.tiers[0]), ctx)
+
+
 def run(metric_slug: str, region_slug: str, source_slug: str, period_slug: str,
         *, reduction_slug: str = MEDIAN_THEN_THRESHOLD.slug,
         outputs: list[str] | None = None) -> None:
-    """Produce the climatology for one (metric, region, source, period, reduction order).
+    """Produce the products for one (metric, region, source, period, reduction order).
 
     ``outputs`` names the formats to write (see ``services.export.WRITERS``); when
-    None it defaults to the metric spec's ``default_outputs``.
+    None it defaults to the metric spec's ``default_outputs`` (climatological PNG,
+    raw netCDF). The producer is dispatched on the metric spec's variant.
     """
     context = _resolve(metric_slug, region_slug, source_slug, period_slug, reduction_slug)
+    resolved = list(outputs) if outputs else list(default_outputs(context.metric))
+    _check_outputs(context.metric, resolved)
     fetch = _fetch(context)
     _validate(fetch, context)
-
-    products = _compute_tiers(fetch, context)
-    _export(products, context, fetch,
-            outputs=list(outputs) if outputs else list(default_outputs(context.metric)))
+    _produce(context.metric, fetch, context, resolved)

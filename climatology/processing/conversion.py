@@ -170,4 +170,6 @@ CT_CONVERSION            = ConversionStrategy(lambda df: df.assign(ct=df["ct_cod
 LANDFAST_CONVERSION      = ConversionStrategy(lambda df: df.assign(ct=(df["fa_code"] == "08").astype(float)))
 DEVELOPED_ICE_CONVERSION = ConversionStrategy(egg_code_units, value_cols=("ct", "mean_thk"))
 VOLUME_CONVERSION        = ConversionStrategy(egg_code_units, value_cols=("volume_per_area",))
+# Raw hypercube: all three egg-code quantities burned side by side, one per netCDF variable.
+RAW_EGG_CONVERSION       = ConversionStrategy(egg_code_units, value_cols=("ct", "mean_thk", "volume_per_area"))
 

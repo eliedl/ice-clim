@@ -128,14 +128,24 @@ def test_breakup_ignores_pre_ice_open_water():
 
 
 def test_feb29_rows_dropped_by_season_calendar():
-    """Real leap-day charts (e.g. 2012-02-29) must be dropped by admissibility, not crash the day_of_season mapping (leap-safe invariant)."""
+    """Real leap-day charts (e.g. 2012-02-29) must be dropped by the season calendar, not crash the day_of_season mapping (leap-safe invariant)."""
     left = box(0, 0, 2, 4)
     rows = [{"obs_date": d, "ct_code": "92", "geometry": left}
             for d in ("2012-01-01", "2012-01-08", "2012-02-29", "2013-01-01", "2013-01-08")]
     metric = METRICS["season_duration"]
     prepared = FetchResult(pd.DataFrame(rows)).prepare(metric.conversion)
     assert set(prepared["day_of_season"]) == {day_of_season("01-01"), day_of_season("01-08")}, \
-        "02-29 must be excluded; admissible days must survive"
+        "02-29 must be excluded (no ordinal); the other days survive the calendar"
+
+
+def test_filter_admissible_days_drops_under_covered_days():
+    """The WMO rule keeps a day only if it is charted in >= 80% of seasons (DEC-025/027)."""
+    from climatology.services.temporal import attach_season_calendar, filter_admissible_days
+    rows = [{"obs_date": f"{yr}-01-01"} for yr in range(2011, 2016)]  # 01-01 in 5/5 seasons
+    rows += [{"obs_date": f"{yr}-01-08"} for yr in (2011, 2012)]      # 01-08 in 2/5 (< 80%)
+    kept = filter_admissible_days(attach_season_calendar(pd.DataFrame(rows)))
+    assert set(kept["day_of_season"]) == {day_of_season("01-01")}, \
+        "well-covered day survives; the under-covered day is dropped"
 
 
 def _ttm(metric):
