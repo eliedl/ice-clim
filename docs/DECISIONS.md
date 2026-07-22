@@ -521,6 +521,14 @@ This log records all scientific decisions, assumptions, and edge-case choices id
 - **Implementation refs**: `climatology/processing/reductions.py` — `ThresholdDate.mode = "first_below"`; `climatology/processing/metrics.py` — `breakup_date`, `melt_lag`; `climatology/tests/test_metrics.py` — `test_breakup_first_below` (clearing day + the never-clears→NaN case), `test_breakup_ignores_pre_ice_open_water` (pre-freeze-up open water must not register as a clearing day); `backend/probes/028_cis_event_normals_reproduction/` (scorecard, diff maps, README Outcome).
 - **Literature cross-ref**: published CIS 1991–2020 EC ice-climate normals (`~/data/CIS/1991-2020_climatology_shapefiles/EC/`) as ground truth — the definitions are **inferred from the products**, not from CIS documentation (clim-001 outreach open). Relates to DEC-025 (the 4/10 threshold this crossing applies), DEC-027 (median-then-threshold order), DEC-035 (upper-middle median — the other convention probe 010 inferred the same way), DEC-041 / probe 015 (the ±7 d isochron fringe that bounds the residual), DEC-049 (the lag metrics' TTM folding, unaffected by the endpoint choice).
 
+## DEC-051 — Computation Landmask: `fifup==NULL` Pure Landmask (EPSG:32198, Unclipped), Project-Wide
+
+- **Context**: The prior landmask (DEC-034) was `freeze.shp`'s `freeze=='0'` polygon — the CIS "never reached freeze-up in the 1991–2020 normals" class, which masks **all never-freezing water**, not just land, and removes the eastern/Atlantic-facing Gulf (Cabot Strait + approaches, ~112 000 km²). It was also clipped to the SGRDAWIS28 extent, which does not reach the **upper estuary** — so the clip dropped landmask coverage there, a region relevant to coastal vulnerability.
+- **Choice made**: Replace `LAND_MASK_PATH` project-wide with `climatology_landmask_32198.geojson` — a **pure land/background** mask built from the 83 `fifup==NULL` features of `fast_ice/fifup.shp` (union → one valid feature, reprojected to EPSG:32198), **unclipped**. 
+- **Rationale / validation**: Probe 032 diffs `storm_exposure_duration` (golfe / sgrda / 2011–2020) under both masks on a shared grid: **100 % exact-zero where both define a cell, 0 over-masked, 111 989 cells restored** — the swap is purely additive (alters nothing existing, only restores never-freezing sea). Retaining that sea is correct for exposure/extent metrics.
+- **Validation status**: **APPROVED (user-directed)** — mask adopted project-wide; additive behaviour validated (probe 032).
+- **Implementation refs**: `climatology/services/sources.py:LAND_MASK_PATH`; `~/data/masks/cis_landmasks/climatology_landmask_32198.geojson` (+ folder README lineage); `backend/probes/032_fifup_landmask_storm_exposure/`. Relates to DEC-034 (freeze-0 origin, superseded as default), DEC-028 (SGRDAWIS28 extent), DEC-040 (32198 grid CRS).
+
 ---
 
 
