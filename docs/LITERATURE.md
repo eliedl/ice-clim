@@ -83,7 +83,7 @@ e124, e127, e129, e135  *(cross-ref: e088, e092, e100, e138)*
 **Absorbs:** the cross-era / inter-chart uncertainty concern formerly in DEC-010
 (deleted 2026-06-09 — its concern is encapsulated in the grid-resolution question).
 
-**Aggregated:** 2026-06-09, updated 2026-07-20
+**Aggregated:** 2026-06-09, updated 2026-07-20, updated 2026-08-17
 
 ### 2026-06-09  (skeleton — synthesis pending)
 - **What the corpus does** — TODO. (Grid precedents: Wilson 500 m [e129], Kinnard
@@ -138,6 +138,45 @@ agreement.
   self-set choice to a CIS-aligned one.
 - Whether the half-line-width floor should itself be era-stratified (finer for the modern
   1971–2020 sensors, coarser earlier) or held flat — our proposal to Cheng, awaiting reply.
+
+### 2026-08-17  (CIS reply — Angela Cheng, pers. comm.)
+
+**What the corpus does — update.** Cheng answers the 250 m proposal put to her on 2026-07-20.
+She qualifies **250 m as a *reasonable rasterization* cell size**, but attaches an explicit
+reservation: it **does not represent the effective resolution of the data**, and she **does not
+believe the polygon boundaries are known to ±250 m** [e180]. She names three compounding
+determinants of effective resolution — the **observations used**, the **analysts'
+interpretation**, and the **cartographic generalization** performed when the charts are
+produced — of which the third is new to this theme; the first two were already on record
+[e169, e167]. The effective resolution may therefore be **coarser than 250 m**.
+
+**Decision space — update.** The fork (homogeneous vs era-stratified) is unchanged, but the
+250 m endorsement is now explicitly **conditional on what the number is claimed to be**. Two
+uses of a cell size, previously conflated, must be kept separate:
+1. **Rasterization cell size** — a computational/display choice; 250 m is endorsed here.
+2. **Boundary accuracy / effective resolution** — an epistemic claim about the data; 250 m is
+   explicitly *rejected* here.
+Cartographic generalization enters as a third degradation factor to account for in any future
+attempt to bound (2) quantitatively.
+
+**Our position.**
+- **DEC-013 stays OPEN**, but the working stance of 2026-07-20 is **narrowed, not overturned**:
+  250 m remains our rasterization cell size, now with first-party CIS endorsement *as a
+  rasterization choice* [e180].
+- **The half-line-width floor is demoted from an accuracy claim to a drafting-scale heuristic.**
+  Our 2026-07-20 phrasing — "~250 m SGRDA / ~500 m SGRDR is our defensible lower bound for
+  statistical interpretation" [e045] — must not be read as boundary accuracy: CIS's head of
+  climatologies explicitly declines the ±250 m reading. Reports must state the rasterization
+  cell size and, separately, that the **effective resolution is coarser, unquantified, and
+  product- and era-dependent**.
+- No number should be published as "the resolution of the CIS charts" — only as our
+  rasterization choice.
+
+**Open questions.**
+- Can the cartographic-generalization contribution [e180] be bounded at all — e.g. from
+  drafting scale and minimum mapped-polygon size — or is it irreducibly unquantified?
+- The 2026-07-20 question (era-stratified vs flat floor) is **not** answered by this reply; it
+  remains with CIS's own pending analysis [e166].
 
 ---
 
@@ -248,7 +287,7 @@ e094, e095
 DEC-005 (form encoding), DEC-026 (orphan_ct volume) · DEC-033 (CIS_EC historical
 series authoritative for 2020)
 
-**Aggregated:** 2026-06-09, updated 2026-07-20
+**Aggregated:** 2026-06-09, updated 2026-07-20, updated 2026-08-17
 
 ### 2026-06-09
 
@@ -380,6 +419,49 @@ to apply a **downward concentration-bias correction** for the coastal applicatio
   [Cheng et al. 2020] [e176].
 - e144 now resolved; retire it from the T3 open-questions list on the next aggregation
   (superseded by e173).
+
+### 2026-08-17  (CIS reply — Angela Cheng, pers. comm.)
+
+**What the corpus does — update.** Cheng closes the bias-correction question left open on
+2026-07-20 and updates the historical-chart timeline.
+- **Trend-suitability verdict [e184].** Adrienne Tivy and Angela Cheng studied CIS data
+  quality from a climatological standpoint, **including the concentration-overestimation
+  bias**, and concluded that the **CIS Archive remains suitable for long-term trend
+  analysis** — the biases introduced by chart production are not large enough to
+  substantially alter the climatological trends they examined. This is the first-party
+  counterpart to the bias note itself [e176, e009]: the bias is real, and it is *not*
+  trend-disqualifying.
+- **Historical charts — timeline [e181].** Public release of the corrected historical charts
+  is expected **by April 2027**; Cheng will send the files directly if the correction work
+  finishes sooner. Sharpens e172 (previously "not before early 2027, low priority") and adds
+  a direct-delivery path ahead of public release.
+
+**Decision space — update.** The 2026-07-20 sub-item "whether to apply a downward
+concentration-bias correction" splits by **use**, not by magnitude:
+1. *Trend / climatological-change use* — CIS's own study says no correction is needed [e184].
+2. *Absolute-value use* (a coastal vulnerability index consuming concentration levels rather
+   than their trend) — untouched by [e184]; still open, still pointing at [Cheng et al. 2020].
+
+**Our position.**
+- **No concentration-bias correction for trend products.** We adopt the Tivy/Cheng conclusion
+  [e184] as the standing justification for using the archive as-is wherever the quantity of
+  interest is a trend or an inter-period difference. This **resolves** the 2026-07-20 open
+  question in the no-correction direction for that class of product.
+- **Absolute-value use remains uncorrected but flagged**, not resolved — the bias is
+  documented [e176, e009] and a quantitative handle still awaits [Cheng et al. 2020].
+- **Corrected-chart provenance confirms the volume basis ≤2020.** With the ≤2020 delivery
+  established as the corrected historical product line [e173, DEC-033], the implemented volume
+  metric rests on corrected charts throughout the climatology period.
+- **Historical-chart release tracked, not blocking** — nothing in the current pipeline waits on
+  April 2027 [e181]; the direct-delivery offer is worth following up.
+
+**Open questions.**
+- Quantitative concentration-bias correction **for absolute-value coastal use** — narrowed from
+  the 2026-07-20 formulation, still awaiting [Cheng et al. 2020] [e176].
+- Follow up with Cheng on the pre-release delivery of the corrected historical charts [e181].
+- Whether the Tivy/Cheng result [e184] is published (and therefore citable in a report) or
+  exists only as pers. comm. — needs a citation before it can carry a published argument.
+  **[NEEDS REVIEW]**
 
 ---
 

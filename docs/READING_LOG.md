@@ -33,7 +33,7 @@ pointers, leaving this log untouched.
 
 ---
 
-<!-- next-id: e178 -->
+<!-- next-id: e187 -->
 
 ## 2026-06-01
 
@@ -284,6 +284,23 @@ across T1 (grid resolution) and T3 (cross-era homogeneity).
 - e176 · [Cheng pers. comm. 2026] "Produced for navigation" means the charts and the WMO egg code characterize the ice properties most relevant to **marine navigation** (ship-oriented ice-type classification), not local-community applications; CIS's **slight systematic overestimation of concentration** follows from this conservative, safety-first approach. First-party CIS confirmation of the Saucier high-concentration-bias note. → e009 #bias #concentration #data-quality
 - e177 · [Cheng pers. comm. 2026] Cheng **could not locate the Crocker Ballicater reports** in the CIS archives; as the most useful substitutes she points to **[Tivy et al. 2011]** (already in corpus, e002) and **[Cheng et al. 2020]** — accuracy and inter-analyst agreement of visually estimated SIC in CIS charts using single-pol RADARSAT-2 (added to Watchlist). Partial outcome for cis-006(d). → e128 → cis-006 #reference #data-quality
 
+## 2026-08-17
+
+Two CIS replies logged as pers. comm.: **CIS client service** (2026-07-29) on the fast-ice
+form code, and **Angela Cheng** (2026-07-27) on rasterization resolution, historical-chart
+availability, archive suitability for trend analysis, and the plausibility of the coastal
+climatology results.
+
+- e178 · [CIS Client Service pers. comm. 2026] **Fast-ice code (08) — assignment criteria.** CIS assigns the form-of-ice code `08` to ice that is **immobile and anchored to the shoreline or to the bottom**, and has been so **for several days**. The criterion is persistence + immobility as judged by the analyst — not a geometric, extent, or thickness criterion. #data-standard #landfast #encoding
+- e179 · [CIS Client Service pers. comm. 2026] **Two formation pathways for fast ice**, per CIS: (1) the ice forms progressively along the shoreline; (2) drifting floes are driven into pre-existing fast ice by compression and weld onto it. In pathway (1), while the ice is still forming, the associated stage of development is **grey ice (`4`)**, later becoming **thin first-year ice (`7`)**. Gives an expected SA/SB/SC signature for in-situ-formed fast ice. → e178 #landfast #encoding #lifecycle
+- e180 · [Cheng pers. comm. 2026b] **250 m rasterization judged "reasonable" — but explicitly not the effective resolution.** Cheng qualifies 250 m as a reasonable rasterization cell size while reserving that it does **not** represent the effective resolution of the data: effective spatial resolution also depends on the observations used, on the analysts' interpretation, and on the **cartographic generalization** applied when the charts are produced, and could therefore be coarser than 250 m. She **does not believe the polygon boundaries are known to ±250 m.** Names cartographic generalization as a third degradation factor alongside observation resolution and analyst interpretation. → e167 → e169 → e045 → DEC-013 #resolution #grid-construction
+- e181 · [Cheng pers. comm. 2026b] **Historical charts — publication expected by April 2027**; if she completes the correction work sooner she will send the files directly. Firms up the e172 timeline and opens a direct-delivery path ahead of public release. → e172 → e173 #data-product #data-quality
+- e182 · [Cheng pers. comm. 2026b] **Scope remark: the analyses should be sound "as long as it stays limited to CT for SGRDR after 2020."** First-party framing of what the archive most confidently supports — total concentration. Recorded as stated; note it is not qualified by product line or period. → e055 → e176 #data-quality #scope
+- e183 · [Cheng pers. comm. 2026b] **RADARSAT polarization progression: single → dual → compact**, each successively more precise, **notably during break-up and freeze-up**. Shoulder seasons are therefore increasingly well resolved through the record. Cuts both ways: better modern phenology, but a **monotonic capability improvement co-located in season with the phenology metrics** — a candidate trend-artifact mechanism acting specifically on freeze-up / break-up dates. → e041 → e123 → DEC-025 #cross-era-normalization #data-quality #resolution
+- e184 · [Cheng pers. comm. 2026b] **Trend-suitability verdict.** Adrienne Tivy and Angela Cheng studied CIS data quality from a climatological standpoint, including the concentration-overestimation bias, and concluded that the **CIS Archive remains suitable for long-term trend analysis**: the biases introduced by chart production were not large enough to substantially alter the climatological trends they examined. First-party basis for using the archive as-is for trends, without a bias correction. → e002 → e176 → e009 #data-quality #bias #trend
+- e185 · [Cheng pers. comm. 2026b] **Coastal results judged plausible.** On the coastal climatology results shown to her, Cheng considers it « tout à fait possible que ce que [j']observe soit réel » — no first-party reason to suspect an archive artifact behind the signal. #finding #coastal
+- e186 · [Cheng pers. comm. 2026b] **Two comparanda offered** for the coastal signal: **[Patterson 2021]** on landfast-ice breakout phenology at the northern floe edge of Admiralty Inlet, Nunavut, and **[Wang et al. 2025]** on the thermodynamic control of Northern Labrador Sea ice trends and variability. Both added to the Watchlist. → e185 #reference #landfast #forcing
+
 ---
 
 ## Watchlist (potentially relevant, not yet read)
@@ -337,6 +354,34 @@ Leads surfaced during reading but not yet sourced/read. Promote to a dated entry
   from [Swart et al. 2019]'s comparison against CanESM5, or from a dedicated CanESM2/CanCM4
   paper not yet located. Lower priority than Crawford. → e154
 
+- **[Patterson 2021]** — Patterson, C. (2021). *A statistical analysis of landfast sea ice
+  breakout events at the northern floe edge of Admiralty Inlet, Nunavut.* MSc thesis,
+  Department of Geography, Carleton University, Ottawa, Ontario.
+  <https://doi.org/10.22215/etd/2022-14864> · <https://hdl.handle.net/20.500.14718/42288>
+  *(Citation verified 2026-08-17 from the thesis title page; DOI carries the 2022 deposit
+  year, title page reads © 2021.)* Recommended by Cheng (e186) as a comparandum for the
+  coastal landfast signal. Builds a **breakout-event climatology 2000–2020** and reports
+  first spring events now occurring **46 days earlier** with **6–7 more events per year**
+  than two decades ago; point-biserial correlations against **ERA5** meteorological
+  variables are weak (|r| = 0.06–0.12) yet significant for wind, rainfall and snowfall; a
+  logistic-regression prediction model beats climatology but has low skill. Read for: the
+  landfast-phenology metric construction, the event-based (rather than date-based)
+  climatology framing, and the forcing-correlation methodology. **High priority.**
+  → e185 → e186 → e178
+
+- **[Wang et al. 2025]** — Wang, M.N., Richaud, B. & Oliver, E.C.J. (2025). The Role of
+  Thermodynamics on Northern Labrador Sea Ice Trends and Variability. *Atmosphere-Ocean*,
+  1–16. <https://doi.org/10.1080/07055900.2025.2497245> (published online 3 May 2025;
+  volume/issue not yet assigned as of retrieval). *(Citation verified 2026-08-17 from the
+  publisher PDF.)* Recommended by Cheng (e186). **Uses CIS ice charts** to evaluate trends
+  and variability of sea-ice area, concentration, thickness and **volume** over the Labrador
+  Shelf, **1979–2021**, partitioning the seasonal cycle into growth (Dec–Jan) and peak
+  (Feb–Apr) phases; concludes that a large part of the variability is driven by air-temperature
+  anomalies and that the long-term volume/thickness trends are driven by local thermodynamics.
+  Read for: a directly adjacent-basin CIS-chart volume climatology (methodological precedent
+  for our volume metric) and the thermodynamic-attribution framing. **High priority.**
+  → e185 → e186
+
 - **Sobie et al. 2024** — Multivariate Canadian Downscaled Climate Scenarios for CMIP6
   (CanDCS-M6). *Geoscience Data Journal*. <https://doi.org/10.1002/gdj3.257>. Read if the
   downscaling *method* (not the T/P data) becomes relevant — e.g. as a template for
@@ -384,6 +429,10 @@ Leads surfaced during reading but not yet sourced/read. Promote to a dated entry
 [MSC Beaufort 2023]: ECCC (2023). Meteorological Service of Canada (MSC) Beaufort Wind and Wave Reanalysis. [data product] → docs/normative/README.md
 
 [Cheng pers. comm. 2026]: Cheng, A. (Canadian Ice Service, head of climatologies). Personal communication to É. Dumas, email reply 2026-07-14. Re: effective resolution and data quality of the CIS Digital Archive for coastal climatologies.
+
+[Cheng pers. comm. 2026b]: Cheng, A. (Canadian Ice Service, head of climatologies). Personal communication to É. Dumas, email reply 2026-07-27. Re: rasterization grid resolution, historical-chart availability and corrections, suitability of the archive for long-term trend analysis, and plausibility of the coastal climatology results.
+
+[CIS Client Service pers. comm. 2026]: Canadian Ice Service — Client Services. Personal communication to É. Dumas, email reply 2026-07-29. Re: assignment criteria and formation pathways for the fast-ice form code (08).
 
 [CIS Archive No.1 2006]: Canadian Ice Service (2006). Canadian Ice Service Digital Archive – Regional Charts: History, Accuracy, and Caveats. CIS Archive Documentation Series No. 1. → docs/normative/README.md
 
