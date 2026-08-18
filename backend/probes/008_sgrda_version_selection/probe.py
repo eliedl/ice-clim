@@ -10,7 +10,7 @@ reproduces the metrics that justified the selection rule already implemented in
   2. A timestamped-suffix file is used only as a fallback when no clean file
      exists for that date.
 
-Two diagnostics, per source (SGRDA GULF+WIS28, SGRDR EC):
+Three diagnostics, per source (SGRDA GULF+WIS28, SGRDR EC):
 
   A. Suffix vs clean identity — for each (date, rev) with both a clean file and
      one or more timestamped-suffix files, compare feature counts. Suffix saves
@@ -19,15 +19,23 @@ Two diagnostics, per source (SGRDA GULF+WIS28, SGRDR EC):
      compare consecutive revisions (a->b, b->c) on feature count and bounding
      box. Higher revisions are expected to be corrections within an identical
      bbox (never spatial amendments), confirming c > b > a is a correction rank.
+  C. Suffix revision vs best clean revision — rule 1 ranks revisions only among
+     clean files and rule 2 lets any clean file win, so a date whose highest
+     revision belongs to a timestamped save has that revision discarded. This
+     diagnostic counts how often that happens and reports each case, bounding
+     what the rule gives up.
 
 Also lists suffix-only dates (no clean file) — the fallback exceptions.
 
 Reads charts exactly as the ingestion does (extract archive, read the ``*_pl_*``
 polygon shapefile with geopandas). Feature count is ``len(gdf)``; bbox is
 ``gdf.total_bounds`` in the chart's native CRS — same-date files share a CRS, so
-bounds compare directly without reprojection. Reuses the directory + filename
-grammar from ``backend.ingestion.sources`` so the probe and the ingestion stay
-on one definition of "what files exist".
+bounds compare directly without reprojection. The directories and clean-filename
+grammar are reused from ``backend.ingestion.sources`` so the probe and the
+ingestion stay on one definition of "what files exist"; the timestamped-suffix
+grammar lives *here* only, since the ingestion no longer matches those files —
+it skips everything that is not a clean archive and reaches the one suffix-only
+date through an enumerated fallback (DEC-030).
 """
 
 from __future__ import annotations
@@ -57,6 +65,19 @@ _OUTLIER_DELTA = 50    # |feature-count delta| flagged for individual inspection
 
 _metrics_cache: dict[str, tuple[int, tuple]] = {}
 
+# Timestamped production saves (``..._pl_b_YYYYMMDDHHMMSS.tar``). Probe-local: the ingestion
+# does not match these — it skips any file its clean patterns reject.
+_SGRDA_SUFFIX_RE = re.compile(
+    r"^cis_SGRDA(?P<region>GULF|WIS28)_(?P<date>\d{8})(T(?P<hour>\d{2})(?P<minute>\d{2})Z)?"
+    r"_pl_(?P<rev>[abc])_(?P<ts>\d{14})\.tar$",
+    re.IGNORECASE,
+)
+_SGRDR_SUFFIX_RE = re.compile(
+    r"^cis_SGRDR(?P<region>EC)_(?P<date>\d{8})(T(?P<hour>\d{2})(?P<minute>\d{2})Z)?"
+    r"_pl_(?P<rev>[abc])_(?P<ts>\d{14})\.tar$",
+    re.IGNORECASE,
+)
+
 
 def _extract_pl_shp(path: Path, tmpdir: str) -> Path:
     """Extract a .tar or .zip archive and return its polygon (``*_pl_*``) shapefile."""
@@ -84,12 +105,13 @@ def chart_metrics(path: Path) -> tuple[int, tuple]:
     return _metrics_cache[key]
 
 
-def enumerate_candidates(source):
+def enumerate_candidates(source, suffix_res):
     """(region, date) -> {'clean': {rev: [Path]}, 'suffix': {rev: [Path]}}.
 
-    Uses the source's own clean/suffix regexes and directories, so the probe
-    enumerates the same universe of files the ingestion discovers — but keeps
-    *all* candidates rather than selecting one.
+    Uses the source's own directories and clean regexes plus the probe's suffix
+    regexes, so the probe sees the same universe of files the ingestion walks —
+    but keeps *all* candidates, including the saves the ingestion skips, rather
+    than selecting one.
     """
     cand = defaultdict(lambda: {"clean": defaultdict(list), "suffix": defaultdict(list)})
     for directory in source.directories:
@@ -104,7 +126,7 @@ def enumerate_candidates(source):
                         cand[(region, m.group("date"))]["clean"][m.group("rev").lower()].append(path)
                         break
                 else:
-                    for rx in source.suffix_res:
+                    for rx in suffix_res:
                         m = rx.match(path.name)
                         if m:
                             region = source.region_label_map[m.group("region").upper()]
@@ -143,8 +165,34 @@ def pattern_census(source):
     return primary, saves
 
 
-def analyze(source, label) -> list[str]:
-    cand = enumerate_candidates(source)
+def suffix_revision_conflicts(cand) -> tuple[Counter, list[tuple]]:
+    """Best suffix revision vs best clean revision, per date with both.
+
+    Returns the lower/equal/higher census and, for each 'higher' case, the two
+    files' feature counts and whether their bboxes agree — the dates where the
+    selection rule discards the archive's highest revision.
+    """
+    census: Counter = Counter()
+    higher: list[tuple] = []
+    for (region, date), g in cand.items():
+        if not g["clean"] or not g["suffix"]:
+            continue
+        best_clean = max(g["clean"], key=lambda r: _REV_ORDER.get(r, -1))
+        best_sfx = max(g["suffix"], key=lambda r: _REV_ORDER.get(r, -1))
+        c_rank = _REV_ORDER.get(best_clean, -1)
+        s_rank = _REV_ORDER.get(best_sfx, -1)
+        census["higher" if s_rank > c_rank else "equal" if s_rank == c_rank else "lower"] += 1
+        if s_rank > c_rank:
+            clean_n, clean_bb = chart_metrics(g["clean"][best_clean][0])
+            sfx_path = g["suffix"][best_sfx][0]
+            sfx_n, sfx_bb = chart_metrics(sfx_path)
+            higher.append((region, date, best_clean, clean_n,
+                           best_sfx, sfx_n, clean_bb == sfx_bb, sfx_path.name))
+    return census, sorted(higher)
+
+
+def analyze(source, label, suffix_res) -> list[str]:
+    cand = enumerate_candidates(source, suffix_res)
     n_clean = sum(len(p) for g in cand.values() for p in g["clean"].values())
     n_suffix = sum(len(p) for g in cand.values() for p in g["suffix"].values())
 
@@ -199,6 +247,9 @@ def analyze(source, label) -> list[str]:
         except Exception:
             b_errors += 1
 
+    # --- Probe C: best suffix revision vs best clean revision ---
+    c_census, c_higher = suffix_revision_conflicts(cand)
+
     suffix_only = sorted(
         (region, date, sorted(g["suffix"].keys()))
         for (region, date), g in cand.items()
@@ -240,6 +291,19 @@ def analyze(source, label) -> list[str]:
             lines.append(f"      {region} {date} pl_{lo}->pl_{hi}: {lbb} -> {hbb}")
     lines += [
         "",
+        "  Probe C — best suffix revision vs best clean revision (dates having both):",
+        f"    dates={sum(c_census.values()):,}  suffix_lower={c_census['lower']:,}"
+        f"  suffix_equal={c_census['equal']:,}  suffix_higher={c_census['higher']:,}",
+    ]
+    if c_higher:
+        lines.append("    HIGHER cases (rule discards the archive's top revision):")
+        for region, date, crev, cn, srev, sn, same_bb, name in c_higher:
+            lines.append(
+                f"      {region} {date}: clean pl_{crev} n={cn} (ingested)"
+                f"  vs suffix pl_{srev} n={sn} same_bbox={same_bb} ({name})"
+            )
+    lines += [
+        "",
         f"  Suffix-only dates (no clean file — fallback exceptions): {len(suffix_only)}",
     ]
     for region, date, revs in suffix_only:
@@ -262,9 +326,11 @@ def main():
         "",
     ]
     body: list[str] = []
-    for source, label in [(SGRDA_SOURCE, "SGRDA (GULF + WIS28)"),
-                          (SGRDR_SOURCE, "SGRDR (EC)")]:
-        body += analyze(source, label)
+    for source, label, suffix_res in [
+        (SGRDA_SOURCE, "SGRDA (GULF + WIS28)", [_SGRDA_SUFFIX_RE]),
+        (SGRDR_SOURCE, "SGRDR (EC)", [_SGRDR_SUFFIX_RE]),
+    ]:
+        body += analyze(source, label, suffix_res)
 
     report = "\n".join(header + body)
     out.write_text(report)

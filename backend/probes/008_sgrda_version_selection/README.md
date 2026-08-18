@@ -15,10 +15,14 @@ spatial amendments — so a later revision is always the more correct one to kee
 
 ## Method
 
-Reuses the directory list and filename grammar from
+Reuses the directory list and **clean** filename grammar from
 [`backend/ingestion/sources.py`](../../ingestion/sources.py) (`SGRDA_SOURCE`,
-`SGRDR_SOURCE`) so the probe enumerates the same universe of files the ingestion
-discovers, but keeps **all** candidates per `(region, date)` instead of selecting one.
+`SGRDR_SOURCE`) so the probe walks the same universe of files the ingestion does, but
+keeps **all** candidates per `(region, date)` instead of selecting one. The
+timestamped-suffix regexes are **probe-local** (2026-08-18): the ingestion no longer
+matches those files — it skips anything its clean patterns reject — so this probe is the
+only place that still parses the suffix grammar, and the only thing that can re-derive
+the fallback list.
 Each chart is read the way ingestion reads it (extract archive → `*_pl_*` polygon
 shapefile → geopandas). Metrics: `len(gdf)` (feature count) and `gdf.total_bounds`
 (bbox, native CRS — same-date files share a CRS, so bounds compare directly).
@@ -28,8 +32,12 @@ shapefile → geopandas). Metrics: `len(gdf)` (feature count) and `gdf.total_bou
 - **Probe B — clean revision comparison:** for each date with ≥2 clean revisions, compare
   consecutive revisions (a→b, b→c) on feature count and bbox. Expect identical bbox and
   small count deltas (corrections, not amendments).
+- **Probe C — best suffix revision vs best clean revision:** rule 1 ranks revisions only
+  among clean files and rule 2 lets any clean file win, so a date whose highest revision
+  belongs to a timestamped save has that revision discarded. Counts lower/equal/higher and
+  reports every `higher` case — bounding what the rule gives up.
 - **Suffix-only dates:** `(region, date)` with suffix files but no clean file — the
-  fallback exceptions.
+  fallback exceptions, and the check on the hardcoded `_SGRDA_SUFFIX_FALLBACKS` list.
 - **Filename pattern census:** normalize each filename (collapse the obs-date and any
   14-digit production-save timestamp to placeholders) and count distinct patterns, split
   into primary archives (no suffix — selection candidates) vs production saves (excluded);
@@ -51,8 +59,9 @@ the multi-candidate dates (single-candidate dates are skipped).
 ## Expected outcome
 
 Drives **DEC-030**. Confirms if: Probe A counts match (suffix = redundant), Probe B shows
-0 bbox changes with small count deltas (corrections), and the suffix-only set is the small
-known exception list.
+0 bbox changes with small count deltas (corrections), Probe C shows suffix revisions never
+outranking the clean file by a scientifically material margin, and the suffix-only set is
+the small known exception list.
 
 ## Outcome (2026-06-09, committed run — confirms the 2026-05-12/13 ad-hoc findings)
 
@@ -77,3 +86,27 @@ known exception list.
 SGRDA GULF/WIS28 and SGRDREC, all regions and years; implemented in `ChartSource.discover`.
 (WIS28 was initially invisible to the probe *and* the ingestion due to a `wis28`→`WIS28`
 directory-path bug in `sources.py`, surfaced here and fixed 2026-06-09.)
+
+## Outcome (2026-08-18, committed run — adds Probe C)
+
+Probes A and B re-derive the 2026-06-09 figures unchanged (SGRDA 478/484 match; 185
+comparisons, 0 bbox changes; SGRDREC 4/5 and 9 comparisons, 0 bbox changes), so only the
+new diagnostic is reported here.
+
+- **Probe C (suffix rev vs clean rev):** SGRDA 129 dates have both — **127 equal, 1 lower,
+  1 higher**. SGRDREC 5 dates, all equal. The single `higher` case is
+  **`gulf 20180219`**: clean `pl_a` (210 features, ingested) vs suffix `pl_b` (209
+  features), identical bbox, identical CT value set. This is the one date in the archive
+  where the rule discards the highest-revision file present.
+- **Reading of that case.** The 2026-06-09 run noted that `GULF_20180219` *gained* a clean
+  file since the 2026-05-13 audit — i.e. CIS's published product for that date is `pl_a`,
+  and `pl_b` exists locally only as an in-progress save (stamped `20180219174225`, 17:42Z,
+  *before* the chart's own 18:00Z valid time). Preferring the published `pl_a` is therefore
+  correct, not a defect; the cost is one ice polygon on 1 of 3 442 SGRDA dates (0.03%).
+- **Suffix-only dates:** still exactly one (`gulf 20190319`, pl_a) — matching the
+  `_SGRDA_SUFFIX_FALLBACKS` literal in `sources.py`. SGRDREC none.
+
+**Conclusion:** DEC-030 stands as written; the counterexample is now on the record rather
+than latent. Re-run this probe after any archive re-transfer — it is what validates the
+hardcoded fallback list and would surface a second `higher` case if CIS's delivery habits
+change.
