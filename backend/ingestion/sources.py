@@ -1,7 +1,9 @@
 import logging
 import re
+from collections.abc import Iterator
 from dataclasses import dataclass
 from datetime import datetime, timezone
+from itertools import product
 from pathlib import Path
 
 log = logging.getLogger(__name__)
@@ -101,16 +103,19 @@ class ChartSource:
     file_globs: tuple[str, ...] = ("*.tar",)
     suffix_fallbacks: tuple[_ChartFile, ...] = ()
 
+    def _clean_charts(self) -> Iterator[_ChartFile]:
+        """Every clean archive under the source's directories; timestamped production saves match nothing and are skipped."""
+        for directory, glob_pat in product(self.directories, self.file_globs):
+            for path in directory.glob(glob_pat):
+                chart = self._match_clean(path)
+                if chart is not None:
+                    yield chart
+
     def discover(self) -> list[tuple[Path, datetime, str]]:
         best: dict[tuple[str, str], _ChartFile] = {}
-        for directory in self.directories:
-            for glob_pat in self.file_globs:
-                for path in directory.glob(glob_pat):
-                    chart = self._match_clean(path)
-                    if chart is None:
-                        continue  # timestamped production saves match nothing and are skipped
-                    if chart.key not in best or chart.rev > best[chart.key].rev:
-                        best[chart.key] = chart
+        for chart in self._clean_charts():
+            if chart.key not in best or chart.rev > best[chart.key].rev:
+                best[chart.key] = chart
 
         for fallback in self.suffix_fallbacks:
             if fallback.key in best:
