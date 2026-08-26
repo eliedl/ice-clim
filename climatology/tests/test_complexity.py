@@ -55,8 +55,47 @@ def _cyclomatic_by_line(source: str) -> dict[int, int]:
     return by_line
 
 
+# Receivers are bound by the call, not supplied by the caller — they are not interface size.
+RECEIVER_ARGS = {"self", "cls"}
+
+
+def _param_names(node: ast.AST) -> set[str]:
+    """Caller-supplied parameter names of a function."""
+    args = node.args
+    return {a.arg for a in args.posonlyargs + args.args + args.kwonlyargs} - RECEIVER_ARGS
+
+
+def _arity(node: ast.AST) -> int:
+    """Interface size: caller-supplied parameters, ``*args``/``**kwargs`` included."""
+    return len(_param_names(node)) + bool(node.args.vararg) + bool(node.args.kwarg)
+
+
+def _bare_name_arguments(node: ast.AST) -> list[ast.Name]:
+    """Every bare-name argument handed to a call inside the body, nested scopes included."""
+    passed = []
+    for call in (n for n in ast.walk(node) if isinstance(n, ast.Call)):
+        passed += [a for a in call.args if isinstance(a, ast.Name)]
+        passed += [k.value for k in call.keywords if isinstance(k.value, ast.Name)]
+    return passed
+
+
+def _tramp_params(node: ast.AST) -> int:
+    """Count parameters whose every use is forwarding them onward — Fowler's data tramps."""
+    names = _param_names(node)
+    forwarded = [n for n in _bare_name_arguments(node) if n.id in names]
+    # A name reaching the body any other way is genuinely used here, not merely passing through.
+    forwarded_ids = {id(n) for n in forwarded}
+    used = {n.id for n in ast.walk(node)
+            if isinstance(n, ast.Name) and id(n) not in forwarded_ids}
+    return len({n.id for n in forwarded} - used)
+
+
 def measure_tree(root: Path) -> dict[str, dict]:
-    """Measure both complexities for every production function under root, keyed by path::qualname."""
+    """Measure control-flow complexity and interface coupling for every production function under root, keyed by path::qualname.
+
+    ``arity``/``tramp`` are measured but not gated: they are the interface axis probe 025
+    plots, invisible to the cyclomatic/cognitive limits enforced below.
+    """
     measures = {}
     for package in PACKAGES:
         if not (root / package).exists():
@@ -72,6 +111,8 @@ def measure_tree(root: Path) -> dict[str, dict]:
                     "line": node.lineno,
                     "cyclomatic": cyclomatic.get(node.lineno, 1),
                     "cognitive": get_cognitive_complexity(node),
+                    "arity": _arity(node),
+                    "tramp": _tramp_params(node),
                 }
     return measures
 

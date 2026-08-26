@@ -7,13 +7,20 @@ invariant: total LOC shrank ~28 % while features grew. A test cannot gate a traj
 monitors the global trend. Re-run at the end of a refactor campaign or feature batch
 and read the curves.
 
-Measurement is single-sourced: per-function cyclomatic (radon) and cognitive
-complexities come from the gate's own `measure_tree`, applied to a `git archive`
-snapshot of every commit since the campaign origin. LOC is non-blank lines over the
-same file set.
+Measurement is single-sourced: per-function cyclomatic (radon), cognitive, arity and
+tramp-parameter counts come from the gate's own `measure_tree`, applied to a `git
+archive` snapshot of every commit since the campaign origin. LOC is non-blank lines over
+the same file set.
+
+Two orthogonal axes are plotted, because a refactor moves one or the other, rarely both:
+  - **control flow** (panels 1-2) — decision points; moved by extract-method,
+    consolidation, declarative rewrites.
+  - **interface coupling** (panel 4) — how much data each signature carries; moved by
+    narrowing signatures and removing data tramps. Invisible to cyclomatic/cognitive,
+    which count branches and see a parameter removal as a no-op.
 
 Interpretation guide (see README):
-  - totals (panel 1) and LOC (panel 3) are the honest signals;
+  - totals (panel 1), LOC (panel 3) and interface totals (panel 4) are the honest signals;
   - mean-per-function (CSV only) is misleading under refactors that delete trivial
     helpers — the denominator shrinks faster than the numerator (Goodhart);
   - the worst-function line (panel 2) is the standing-debt indicator; flat = untouched.
@@ -87,18 +94,23 @@ def _measure_commit(sha: str) -> dict:
         n = len(measures)
         cc = [m["cyclomatic"] for m in measures.values()]
         cog = [m["cognitive"] for m in measures.values()]
+        arity = [m["arity"] for m in measures.values()]
+        tramp = [m["tramp"] for m in measures.values()]
         return {
             "loc": _loc(root), "n_func": n,
             "cc_total": sum(cc), "cc_mean": round(sum(cc) / n, 2) if n else 0,
             "cc_max": max(cc, default=0),
             "cog_total": sum(cog), "cog_mean": round(sum(cog) / n, 2) if n else 0,
             "cog_max": max(cog, default=0),
+            "arity_total": sum(arity), "arity_mean": round(sum(arity) / n, 2) if n else 0,
+            "arity_max": max(arity, default=0),
+            "tramp_total": sum(tramp),
         }
 
 
 def _plot(rows: list[dict], png_path: Path) -> None:
     dates = [datetime.strptime(r["date"], "%Y-%m-%d %H:%M") for r in rows]
-    fig, axes = plt.subplots(3, 1, figsize=(11, 10), sharex=True)
+    fig, axes = plt.subplots(4, 1, figsize=(11, 13), sharex=True)
 
     axes[0].plot(dates, [r["cc_total"] for r in rows], "o-", color="tab:blue", ms=3,
                  label="total cyclomatic")
@@ -120,9 +132,16 @@ def _plot(rows: list[dict], png_path: Path) -> None:
     twin.plot(dates, [r["n_func"] for r in rows], "s-", color="tab:purple", ms=3)
     twin.set_ylabel("# functions", color="tab:purple")
 
+    axes[3].plot(dates, [r["arity_total"] for r in rows], "o-", color="tab:orange", ms=3,
+                 label="total parameters")
+    axes[3].plot(dates, [r["tramp_total"] for r in rows], "s-", color="tab:brown", ms=3,
+                 label="data tramps (params only forwarded on)")
+    axes[3].set_ylabel("interface coupling")
+    axes[3].legend()
+
     for ax in axes:
         ax.grid(alpha=0.3)
-    axes[2].xaxis.set_major_formatter(mdates.DateFormatter("%b %d"))
+    axes[3].xaxis.set_major_formatter(mdates.DateFormatter("%b %d"))
     fig.suptitle(f"ice-clim complexity trajectory — {' + '.join(PACKAGES)} (tests excluded)")
     fig.tight_layout()
     fig.savefig(png_path, dpi=130)
@@ -141,7 +160,9 @@ def main() -> None:
         rows.append(row)
         print(f"{sha} {date} LOC={row['loc']:5d} funcs={row['n_func']:3d} "
               f"CC total={row['cc_total']:3d} max={row['cc_max']:2d} | "
-              f"COG total={row['cog_total']:3d} max={row['cog_max']:2d}")
+              f"COG total={row['cog_total']:3d} max={row['cog_max']:2d} | "
+              f"PARAMS total={row['arity_total']:3d} max={row['arity_max']:2d} "
+              f"tramp={row['tramp_total']:3d}")
 
     OUTPUT_DIR.mkdir(exist_ok=True)
     stamp = datetime.now().strftime("%Y-%m-%d_%H%M%S")
@@ -158,7 +179,10 @@ def main() -> None:
           f"LOC {first['loc']} -> {last['loc']} ({100 * (last['loc'] / first['loc'] - 1):+.1f}%)  "
           f"COG total {first['cog_total']} -> {last['cog_total']} "
           f"({100 * (last['cog_total'] / first['cog_total'] - 1):+.1f}%)  "
-          f"worst {first['cog_max']} -> {last['cog_max']}")
+          f"worst {first['cog_max']} -> {last['cog_max']}\n"
+          f"{' ' * 19}"
+          f"PARAMS {first['arity_total']} -> {last['arity_total']}  "
+          f"tramps {first['tramp_total']} -> {last['tramp_total']}")
     print(f"saved: {csv_path}\nsaved: {png_path}")
 
 
