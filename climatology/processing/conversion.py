@@ -106,16 +106,25 @@ def parse_form_size(code: str | float | None) -> float | None:
         raise KeyError(f"Unrecognised SIGRID-3 form-of-ice code: {code!r}") from e
 
 
+# Non-value columns of a prepared frame; every other column is a burned value.
+KEY_COLS: tuple[str, ...] = ("geometry", "season", "day_of_season")
+
+
+def value_columns(df: ConvertedPolygons) -> list[str]:
+    """The burned value columns of a prepared frame, in kernel-threshold order."""
+    return [c for c in df.columns if c not in KEY_COLS]
+
+
 @dataclass(frozen=True)
 class ConversionStrategy:
-    """Strategy: prepare a metric's raw <field>_code columns into the value column(s) its kernel consumes.
+    """Strategy: turn a metric's raw <field>_code columns into the value column(s) its kernel consumes."""
 
-    ``value_cols`` declares which prepared columns the reduction burns, in the
-    same order as the kernel's per-variable thresholds.
-    """
+    compute: Callable[[RawPolygons], pd.DataFrame]
+    value_cols: tuple[str, ...] = ("ct",)  # ordered to match the kernel's thresholds
 
-    prepare: Callable[[RawPolygons], ConvertedPolygons]
-    value_cols: tuple[str, ...] = ("ct",)
+    def prepare(self, df: RawPolygons) -> ConvertedPolygons:
+        """Value columns computed, then projected to ``KEY_COLS + value_cols`` — the projection ``value_columns`` inverts."""
+        return self.compute(df)[[*KEY_COLS, *self.value_cols]]
 
 
 def _present_col(s: pd.Series) -> np.ndarray:

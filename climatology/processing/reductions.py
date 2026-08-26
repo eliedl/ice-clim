@@ -8,6 +8,7 @@ from dataclasses import dataclass
 
 import numpy as np
 
+from climatology.processing.conversion import value_columns
 from climatology.processing.rasterize import burn_value_stack
 from climatology.processing.regions import Tier
 from climatology.utils._types import (
@@ -126,9 +127,10 @@ def _aligned_season_groups(day_df: DateConvertedPolygons, seasons: list,
     return [present.get(s, empty) for s in seasons]
 
 
-def _stream_day_stacks(df: ConvertedPolygons, *, tier: Tier,
-                       value_cols: tuple[str, ...]) -> Iterator[tuple[int, VarWetStack]]:
+def _stream_day_stacks(df: ConvertedPolygons, *, tier: Tier) -> Iterator[tuple[int, VarWetStack]]:
     """Yield ``(day-of-season, (n_seasons, n_vars, n_wet) burned value stack)`` per admissible day, ascending; fixed season axis."""
+    # Derived once here: the dropna and the per-group selection must burn the same columns.
+    value_cols = tuple(value_columns(df))
     df = df.dropna(subset=list(value_cols))
     seasons = sorted(df["season"].unique())
     for ordinal, day_df in df.groupby("day_of_season"):
@@ -136,10 +138,9 @@ def _stream_day_stacks(df: ConvertedPolygons, *, tier: Tier,
                                         tier.grid, wet=tier.wet_mask)
 
 
-def _stream_median_slices(df: ConvertedPolygons, *, tier: Tier,
-                          value_cols: tuple[str, ...]) -> Iterator[tuple[int, VarWetVector]]:
+def _stream_median_slices(df: ConvertedPolygons, *, tier: Tier) -> Iterator[tuple[int, VarWetVector]]:
     """Yield ``(day-of-season, (n_vars, n_wet) cross-season median slice)`` per admissible day: the day stack compressed before the kernel (DEC-027)."""
-    for ordinal, stack in _stream_day_stacks(df, tier=tier, value_cols=value_cols):
+    for ordinal, stack in _stream_day_stacks(df, tier=tier):
         yield ordinal, _nanmedian_high(stack)
 
 
@@ -156,11 +157,9 @@ class MedianThenThreshold:
 
     slug = "mtt"
 
-    def __call__(self, kernel: Kernel, df: ConvertedPolygons, tier: Tier,
-                 *, value_cols: tuple[str, ...] = ("ct",)) -> DataGrid:
+    def __call__(self, kernel: Kernel, df: ConvertedPolygons, tier: Tier) -> DataGrid:
         # Kernels fold over compact wet-cell vectors; scatter to (H, W) once, here.
-        result = kernel.reduce(lambda: _stream_median_slices(df, tier=tier,
-                                                             value_cols=value_cols))
+        result = kernel.reduce(lambda: _stream_median_slices(df, tier=tier))
         return _scatter_to_grid(result, tier)
 
 
@@ -176,10 +175,8 @@ class ThresholdThenMedian:
     slug = "ttm"
     min_season_coverage: float = MPO_MIN_SEASON_COVERAGE
 
-    def __call__(self, kernel: Kernel, df: ConvertedPolygons, tier: Tier,
-                 *, value_cols: tuple[str, ...] = ("ct",)) -> DataGrid:
-        per_season: WetStack = kernel.reduce(lambda: _stream_day_stacks(df, tier=tier,
-                                                                        value_cols=value_cols))
+    def __call__(self, kernel: Kernel, df: ConvertedPolygons, tier: Tier) -> DataGrid:
+        per_season: WetStack = kernel.reduce(lambda: _stream_day_stacks(df, tier=tier))
         n_valid = np.sum(~np.isnan(per_season), axis=0)
         keep: BoolVector = n_valid >= np.ceil(self.min_season_coverage * per_season.shape[0])
         # median only where the MPO season-coverage rule passes — which doubles as

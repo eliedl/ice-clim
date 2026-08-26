@@ -39,9 +39,8 @@ VarWetStack = Float[np.ndarray, "n_seasons n_vars n_wet"]  # TTM slice (per-seas
 
 # polygon frames (schema is doc-only; all pandas DataFrames)
 RawPolygons           = pd.DataFrame   # fetch output: geometry + obs_date + <field>_code columns (+ season calendar)
-ConvertedPolygons     = pd.DataFrame   # RawPolygons + the kernel value column (ct / volume_per_area)
+ConvertedPolygons     = pd.DataFrame   # KEY_COLS + the kernel's value columns, in threshold order
 DateConvertedPolygons = pd.DataFrame   # polygons for a given day_of_season across seasons
-SeasonConvertedPolygons = pd.DataFrame   # polygons for a given season across day_of_seasons
 
 # spatial extent
 GridBounds = tuple[float, float, float, float]   # (xmin, ymin, xmax, ymax) in grid-CRS units

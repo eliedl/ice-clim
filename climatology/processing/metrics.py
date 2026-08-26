@@ -27,6 +27,7 @@ from climatology.processing.conversion import (
     RAW_EGG_CONVERSION,
     STAGE_OF_DEVELOPMENT_THICKNESS,
     ConversionStrategy,
+    value_columns,
 )
 from climatology.services.temporal import filter_admissible_days
 from climatology.utils._types import ConvertedPolygons, DataGrid
@@ -101,8 +102,7 @@ class ClimatologicalMetricSpec(_MetricSpecBase):
 
         The WMO admissible-day filter is applied here — on the climatological path
         only, where it protects the cross-season median (DEC-025/027)."""
-        return self.reduction(self.kernel, filter_admissible_days(df), tier,
-                              value_cols=self.conversion.value_cols)
+        return self.reduction(self.kernel, filter_admissible_days(df), tier)
 
 
 @dataclass(frozen=True)
@@ -136,14 +136,13 @@ class RawMetricSpec(_MetricSpecBase):
 
     def compute(self, df: ConvertedPolygons, tier: Tier) -> RawProduct:
         """Build the lazy per-season day-stack stream + season extents (no admissible filter — the raw product keeps every observed day)."""
-        value_cols = self.conversion.value_cols
-        df = df.dropna(subset=list(value_cols))  # align seasons/extents with the stream's own dropna
+        df = df.dropna(subset=value_columns(df))  # align seasons/extents with the stream's own dropna
         seasons = sorted(int(s) for s in df["season"].unique())
         extents = {int(s): (int(g.min()), int(g.max()))
                    for s, g in df.groupby("season")["day_of_season"]}
         return RawProduct(tier=tier, seasons=seasons, season_extents=extents,
                           n_days=int(df["day_of_season"].nunique()),
-                          stream=lambda: _stream_day_stacks(df, tier=tier, value_cols=value_cols))
+                          stream=lambda: _stream_day_stacks(df, tier=tier))
 
 
 # The metric-spec sum type: existing annotations keep the ``MetricSpec`` name.
