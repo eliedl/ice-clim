@@ -25,8 +25,9 @@ edge that runs *up* the declared layer order is a concern leak, named with file 
 ## Hypothesis
 
 **H:** The declared concern boundaries hold — structural dependencies flow downward
-(drivers → orchestration → services → processing → utils) — and any violation is a small,
-enumerable list of specific edges rather than a diffuse tangle.
+(`scripts` → `clim-core` → `processing` → `services` → `utils`, see *Declared layer order*
+below) — and any violation is a small, enumerable list of specific edges rather than a diffuse
+tangle.
 
 **Secondary:** graphify's degree-based "god nodes" and probe 025's cognitive-complexity
 ranking identify the *same* debt. (Expected to fail — see Outcome.)
@@ -67,10 +68,11 @@ Then load `graphify-out/graph.json` — a networkx node-link document — and co
 1. **Layer violations** — the actionable list. `LAYER_RANK` in `probe.py` encodes the
    declared order; an edge whose target sits at a *lower* rank than its source is printed
    with relation, confidence, and both endpoints.
-2. **Cross-concern matrix** — all structural edges between differing concerns, legal ones
-   included, to show the shape of coupling.
-3. **Doc / code connectivity** — `file_type` crosstab, testing whether the markdown
-   corpus (DECISIONS/LITERATURE/probe READMEs) joins the code graph.
+2. **Illegal edges by concern pair** — the same leaks rolled up, to show which boundary is
+   worst. Legal cross-concern edges are deliberately *not* reported: they are the intended
+   downward flow, and counting them buried the handful of leaks that are the actual finding.
+3. **Graph composition** — node `file_type`s and edge relations, the standing check that the
+   docstring nodes really were filtered out before clustering.
 4. **Degree vs cognitive complexity** — the two hub rankings side by side, with the
    complexity side single-sourced from the probe-025 / test-gate `measure_tree` so the
    probe and the gate cannot diverge.
@@ -128,37 +130,56 @@ Positions in `graph.html` carry no information: the layout is an unseeded ForceA
 (200 iterations, then physics off), so it differs on every page load, and community color has
 no attractive term in the physics. Read topology from `graph.json`, not from the picture.
 
-## Outcome (2026-08-31, commit `1bf5c0f`, `output/2026-08-31_134557.txt`)
+## Declared layer order
 
-**Corpus:** 19 files → 461 nodes · 947 edges · 403 structural · 25 communities.
-**Extraction quality: 96 % `EXTRACTED`, 4 % `INFERRED`, 0 % `AMBIGUOUS`** — the leak list
+`LAYER_RANK` encodes **`scripts` > `clim-core` > `processing` > `services` > `utils`**: batch
+drivers on top, then the orchestrator, then domain algorithms, then I/O, with domain-agnostic
+helpers at the bottom depending on nothing. This is the traditional layered reading —
+`processing/` *calls down into* `services/` for its DB and file access — as opposed to the
+hexagonal reading, in which `services/` would be adapters depending upward on the domain. The
+choice is load-bearing: it decides whether the 18 `services → processing` edges are the
+architecture working or the architecture leaking, and the two orders disagree on 21 of the 26
+violations below. Recorded here because it is a declaration, not a measurement.
+
+## Outcome (2026-08-31, commit `1bf5c0f`, `output/2026-08-31_152331.txt`)
+
+**Corpus:** 19 files → 269 nodes · 755 edges · 403 structural · 9 communities (post-filter).
+**Extraction quality: 95 % `EXTRACTED`, 5 % `INFERRED`, 0 % `AMBIGUOUS`** — the leak list
 below is parsed fact, not heuristic.
 
-The narrowed scope changed the corpus by a factor of three (1551 → 461 nodes) but **left
-every architectural conclusion identical** — same 11 violating edges, same 4 leaks, same
-0/12 hub disagreement. The `backend/` fan-in was noise in the coupling matrix, not signal.
+### H partly rejected — 26 violating edges, and one systematic direction
 
-### H confirmed — 11 violating edges, resolving to 4 named leaks
+The hypothesis expected leaks to be "a small, enumerable list of specific edges rather than a
+diffuse tangle". Three of the four concern pairs are exactly that. The fourth is not a list of
+accidents but **one systematic direction**, and it is 69 % of all violations:
 
-| # | Leak | Verdict |
-|---|---|---|
-| 1 | `processing/metrics.py` → `services/temporal.py::filter_admissible_days` | **Misfiled module, not a leak.** `services/temporal.py` contains *no I/O whatsoever* — `day_of_season`, `winter_season`, `attach_season_calendar`, `filter_admissible_days` are pure pandas/numpy season-calendar algorithms. It is a **domain module sitting in the I/O package**. The graph flags the import because the file is in the wrong place. → move `temporal.py` to `climatology/processing/`. |
-| 2 | `utils/polygons.py` → `services/sources.py::LAND_MASK_PATH`, then `gpd.read_file(...)` at `polygons.py:39` | **Real leak.** A "domain-agnostic helper" reaching into a services-owned path constant and doing file I/O. The sharpest of the four. |
-| 3 | `utils/{polygons,basemap}.py` → `processing/rasterize.py::GRID_CRS` | **Real but trivial.** A CRS constant is domain-agnostic; it is in the wrong package, not used wrongly. → move `GRID_CRS` down to `utils/`. |
-| 4 | `services/{plot,export}.py` → `pipeline.py::{RunContext, TierProduct}` | **Accept by design.** `RunContext` is the pure-dataclass context object the convention prescribes; importing it is what makes downstream signatures narrow. Worth noting only because it makes `pipeline.py` a bidirectional hub (degree 56). |
+| # | Leaking pair | Edges | Verdict |
+|---|---|---|---|
+| 1 | `services → processing` | **18** | **The finding.** `plot.py` and `export.py` import the domain's *types* — `Grid`, `Tier`, `ThresholdDate`, `ThresholdDateDelta`, `RawMetricSpec`, `RawProduct`, plus the `metrics`/`reductions`/`regions`/`rasterize` modules. Under the declared order the I/O layer must not reach up into the domain. This is not a handful of slips to tidy: it is how the plotting and NetCDF writers are built, so closing it means **dependency inversion** — the presentation contract defined in `processing/` (or reduced to primitives) and `services/` depending only on that. A real design decision, not a cleanup. |
+| 2 | `services → clim-core` | 5 | `plot.py` / `export.py` importing `RunContext` and `TierProduct` from `pipeline.py`. Same shape as #1, one layer further up: the I/O layer reaching into the orchestrator's context object. Defensible — `RunContext` is the pure-dataclass context the convention prescribes, and importing it is what keeps downstream signatures narrow — but it does make `pipeline.py` a bidirectional hub (degree 46). |
+| 3 | `utils → processing` | 2 | `utils/{polygons,basemap}.py` → `processing/rasterize.py::GRID_CRS`. **Real but trivial**: a CRS constant is domain-agnostic and simply sits too high. → move `GRID_CRS` down to `utils/`. |
+| 4 | `utils → services` | 1 | `utils/polygons.py` → `services/sources.py::LAND_MASK_PATH`, then `gpd.read_file(...)` at `polygons.py:39`. **The sharpest leak**: a domain-agnostic helper doing file I/O through a services-owned path. `utils/` is the bottom layer and should depend on nothing. |
 
-Everything else flows downward as declared. The coupling matrix is now dominated by
-`clim-core → services` (33), `drivers → services` (32, i.e. `scripts/`), `clim-core →
-processing` (19) and `services → processing` (18) — the orchestrator and the batch drivers
-consuming the production packages, exactly the intended direction.
+Nothing else runs upward; the remaining 377 structural edges flow downward as declared.
+
+### A leak the declared order no longer reports
+
+`processing/metrics.py` imports `filter_admissible_days` from `services/temporal.py` (3 edges).
+Under this layer order that is legal — domain calling down into services — so it is absent from
+the report above. It is still worth acting on, and the evidence is independent of any ranking:
+`services/temporal.py` contains **no I/O whatsoever**. `day_of_season`, `winter_season`,
+`attach_season_calendar`, `filter_admissible_days` are pure pandas/numpy season-calendar
+algorithms. It is a **domain module misfiled in the I/O package** → move it to
+`climatology/processing/`. Recorded here because the probe cannot see it: a layer check
+validates *direction*, never whether a file is in the package its contents belong to.
 
 ### Secondary hypothesis rejected — degree and complexity are disjoint
 
 **0 of 12** symbols overlap between the two top-12 rankings, and the gap is not marginal:
-degree runs 20–60 edges across the board while the *entire* cognitive ranking now fits in
-3–9, the whole package sitting under the gate's limit of 10. Degree is dominated by shared
-semantic types and plotting modules (`plot.py` 60, `pipeline.py` 47, `export.py` 41,
-`Tier` 31); the cognitive ranking is led by `utils/basemap.py::fetch_style_png` (9), which
+degree runs 19–59 edges across the board while the *entire* cognitive ranking now fits in
+3–9, the whole package sitting under the gate's limit of 10. Degree is dominated by the
+plotting modules and shared semantic types (`plot.py` 59, `pipeline.py` 46, `export.py` 40,
+`Tier` 30); the cognitive ranking is led by `utils/basemap.py::fetch_style_png` (9), which
 does not appear in the degree list at all.
 
 This is not a defect in either measure — it is a **finding about what "god node" means here**.
@@ -167,6 +188,12 @@ High degree on `Tier` / `RunContext` / `Grid` is the *intended* outcome of the p
 looks identical to a god object under a pure degree metric. **Do not read graphify's god-node
 list as a debt ranking on this codebase.** The two probes measure orthogonal debts — 033 is
 *where does coupling cross a boundary*, 025 is *which function is tangled*.
+
+Read alongside the leak table, though, the degree list stops being decorative: `plot.py`,
+`export.py` and the domain types they import are the same objects on both sides of the
+`services → processing` finding. High degree on a *type* means modules coupled through data
+rather than calls — which is where tramp data accumulates, and so a ranked candidate list for
+the arity/tramp axis probe 025 gained in `6b73d97` (`Tier` first, then `RunContext`).
 
 The disjointness held under the whole-repo run too, where the comparison had a sharper test
 available. `ChartSource.discover` (`backend/ingestion/`, now out of scope) was the standing
@@ -209,6 +236,9 @@ two probes as orthogonal rather than redundant.
 ## Status
 
 **complete** 2026-08-31 — first run at `1bf5c0f`, scoped to `climatology/` minus `tests/`.
-Hypothesis confirmed (11 edges → 4 named leaks, 3 actionable); secondary hypothesis rejected
-(degree ⊥ complexity, 0/12 overlap). Re-run after a refactor campaign or when adding a
-package, alongside probe 025.
+Hypothesis **partly rejected**: 26 violating edges over 4 concern pairs, but 18 of them are one
+systematic direction (`services → processing`) rather than a list of accidents — a dependency
+-inversion decision, not a cleanup (**[NEEDS REVIEW]**). Two small real leaks in `utils/`
+(`GRID_CRS`, `LAND_MASK_PATH`) are cheap to close. Secondary hypothesis rejected (degree ⊥
+complexity, 0/12 overlap). Re-run after a refactor campaign or when adding a package,
+alongside probe 025.

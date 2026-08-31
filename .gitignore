@@ -15,3 +15,5 @@ __pycache__/
 *.xml
 .pytest_cache
 *.nc
+*.html
+graphify-out/
