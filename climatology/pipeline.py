@@ -18,11 +18,7 @@ from climatology.processing.reductions import MEDIAN_THEN_THRESHOLD, REDUCTIONS
 from climatology.processing.regions import RegionSpec, Tier, resolve_region
 from climatology.services.sources import CHART_TABLES, LAND_MASK_PATH, ChartTable
 from climatology.services.db import load_polygons
-from climatology.services.temporal import (
-    Period,
-    assert_hd_aligned,
-    attach_season_calendar,
-)
+from climatology.services.temporal import Period, attach_season_calendar
 from climatology.processing.conversion import ConversionStrategy
 from climatology.utils._types import ConvertedPolygons, DataGrid, RawPolygons
 from climatology.services.export import (
@@ -149,12 +145,6 @@ def _fetch(ctx: RunContext) -> FetchResult:
     return fetch
 
 
-def _validate(fetch: FetchResult, ctx: RunContext) -> None:
-    """HD-cadence guard for weekly sources (raises ``ValueError`` on misalignment)."""
-    if ctx.source.cadence == "hd_weekly":
-        assert_hd_aligned(fetch.df, source_slug=ctx.source.slug)
-
-
 def _compute_raster(metric: MetricSpec, df: ConvertedPolygons, tier: Tier) -> DataGrid:
     """Run a metric's kernel on prepared rows and mask it to the tier's wet domain."""
     values = metric.compute(df, tier)
@@ -250,5 +240,4 @@ def run(metric_slug: str, region_slug: str, source_slug: str, period_slug: str,
     resolved = list(outputs) if outputs else list(default_outputs(context.metric))
     _check_outputs(context.metric, resolved)
     fetch = _fetch(context)
-    _validate(fetch, context)
     _produce(context.metric, fetch, context, resolved)

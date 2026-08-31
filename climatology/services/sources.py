@@ -1,7 +1,7 @@
 """Chart-table descriptors for the climatology pipeline.
 
-Table -> metrics concerns only: which DB table to read, its temporal cadence,
-and display strings. Deliberately independent from the ingestion ChartSource
+Table -> metrics concerns only: which DB table to read, how many days one of its
+charts stands for, and display strings. Deliberately independent from the ingestion ChartSource
 (backend/ingestion/sources.py), which owns the archive -> table concerns
 (discovery, filename grammar, revision selection, field whitelists). The
 coupling surface between the two pipelines is the database contract itself
@@ -15,7 +15,6 @@ from __future__ import annotations
 
 from dataclasses import dataclass, replace
 from pathlib import Path
-from typing import Literal
 
 LANDMASK_DIR = Path("/home/eliedl/data/masks/cis_landmasks")
 LAND_MASK_PATH = LANDMASK_DIR / "climatology_landmask_32198.geojson"
@@ -24,7 +23,6 @@ LAND_MASK_PATH = LANDMASK_DIR / "climatology_landmask_32198.geojson"
 @dataclass(frozen=True)
 class ChartTable:
     table: str
-    cadence: Literal["daily", "hd_weekly"]
     display_label: str        # plot footer source attribution
     obs_unit: str             # unit of the season-duration count, after step_days scaling
     step_days: int            # days one chart stands for; scales step counts to days
@@ -36,12 +34,12 @@ class ChartTable:
 # which is what makes durations comparable across sources.
 _TABLES: dict[str, ChartTable] = {
     "sgrda": ChartTable(
-        table="sgrda_32198", cadence="daily",
+        table="sgrda_32198",
         display_label="CIS SIGRID3 daily charts (SGRDA)",
         obs_unit="days", step_days=1,
     ),
     "sgrdr": ChartTable(
-        table="sgrdr_32198", cadence="hd_weekly",
+        table="sgrdr_32198",
         display_label="CIS SIGRID3 weekly historical charts (SGRDR)",
         obs_unit="days", step_days=7,
     ),
