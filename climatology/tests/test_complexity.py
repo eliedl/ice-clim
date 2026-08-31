@@ -1,4 +1,4 @@
-"""Complexity gate — fails when a function exceeds the guardrail or known debt grows."""
+"""Complexity gate — fails when a function exceeds the guardrail."""
 import ast
 import sys
 from pathlib import Path
@@ -12,13 +12,6 @@ EXCLUDE_PARTS = {"tests", "__pycache__"}
 
 CYCLOMATIC_LIMIT = 10
 COGNITIVE_LIMIT = 10
-
-# Ratchet ledger: functions exceeding the limits before the gate existed.
-# Entries may only shrink; once within limits, the entry must be removed.
-KNOWN_DEBT = {
-    "backend/ingestion/sources.py::ChartSource.discover": {"cyclomatic": 18, "cognitive": 64},
-}
-
 
 def _function_nodes(tree: ast.Module) -> list[tuple[str, ast.AST]]:
     """Yield (qualified_name, node) for every function/method, including nested ones."""
@@ -133,40 +126,16 @@ def _describe(key: str, measure: dict) -> str:
 
 
 def test_functions_within_complexity_limits():
-    """No function outside the debt ledger may exceed the complexity limits."""
+    """No function may exceed the complexity limits."""
     offenders = [
         _describe(key, measure)
         for key, measure in measure_repo().items()
-        if key not in KNOWN_DEBT and _over_limit(measure)
+        if _over_limit(measure)
     ]
     assert not offenders, (
         "Functions exceed the complexity guardrail — extract-method before merging:\n"
         + "\n".join(offenders)
     )
-
-
-def test_known_debt_only_shrinks():
-    """Ledger entries may not grow, go stale, or linger once within limits."""
-    measures = measure_repo()
-    problems = []
-    for key, recorded in KNOWN_DEBT.items():
-        measure = measures.get(key)
-        if measure is None:
-            problems.append(f"  {key}: no longer exists — remove its KNOWN_DEBT entry")
-        elif (measure["cyclomatic"] > recorded["cyclomatic"]
-              or measure["cognitive"] > recorded["cognitive"]):
-            problems.append(
-                f"  {key}: grew beyond its recorded debt "
-                f"(cyclomatic {measure['cyclomatic']} vs {recorded['cyclomatic']}, "
-                f"cognitive {measure['cognitive']} vs {recorded['cognitive']})")
-        elif not _over_limit(measure):
-            problems.append(f"  {key}: now within limits — remove its KNOWN_DEBT entry")
-        elif (measure["cyclomatic"] < recorded["cyclomatic"]
-              or measure["cognitive"] < recorded["cognitive"]):
-            problems.append(
-                f"  {key}: improved — ratchet the entry down to "
-                f"cyclomatic={measure['cyclomatic']}, cognitive={measure['cognitive']}")
-    assert not problems, "KNOWN_DEBT ledger out of date:\n" + "\n".join(problems)
 
 
 if __name__ == "__main__":
