@@ -51,33 +51,33 @@ def test_minganie_tiers():
     if not _regions_inputs_present():
         print("    (skip: input layers absent)")
         return
-    from climatology.processing.regions import resolve_region
-    _assert_adaptive(resolve_region("minganie"), "Minganie")
+    from climatology.processing.regions import RegionSpec
+    _assert_adaptive(RegionSpec.build("minganie"), "Minganie")
 
 
 def test_manicouagan_tiers():
     if not _regions_inputs_present():
         print("    (skip: input layers absent)")
         return
-    from climatology.processing.regions import REGION_SLUGS, resolve_region
-    assert "manicouagan" in REGION_SLUGS, "manicouagan must be CLI-selectable"
-    _assert_adaptive(resolve_region("manicouagan"), "Manicouagan")
+    from climatology.processing.regions import REGIONS, RegionSpec
+    assert "manicouagan" in REGIONS, "manicouagan must be CLI-selectable"
+    _assert_adaptive(RegionSpec.build("manicouagan"), "Manicouagan")
 
 
 def test_sept_rivieres_tiers():
     if not _regions_inputs_present():
         print("    (skip: input layers absent)")
         return
-    from climatology.processing.regions import REGION_SLUGS, resolve_region
-    assert "sept-rivieres" in REGION_SLUGS, "sept-rivieres must be CLI-selectable"
-    _assert_adaptive(resolve_region("sept-rivieres"), "Sept-Rivières")
+    from climatology.processing.regions import REGIONS, RegionSpec
+    assert "sept-rivieres" in REGIONS, "sept-rivieres must be CLI-selectable"
+    _assert_adaptive(RegionSpec.build("sept-rivieres"), "Sept-Rivières")
 
 
 def test_legacy_region_single_tier():
     """Legacy region is one 'full' 35 m tier."""
-    from climatology.processing.regions import resolve_region
+    from climatology.processing.regions import RegionSpec
     try:
-        spec = resolve_region("sept-iles")
+        spec = RegionSpec.build("sept-iles")
     except FileNotFoundError:
         print("    (skip: legacy square bbox absent)")
         return

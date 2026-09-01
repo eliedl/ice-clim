@@ -15,7 +15,7 @@ from climatology.processing.metrics import (
     RawMetricSpec,
 )
 from climatology.processing.reductions import MEDIAN_THEN_THRESHOLD, REDUCTIONS
-from climatology.processing.regions import RegionSpec, Tier, resolve_region
+from climatology.processing.regions import RegionSpec, Tier
 from climatology.services.sources import CHART_TABLES, ChartTable
 from climatology.services.db import load_polygons
 from climatology.services.temporal import Period, attach_season_calendar
@@ -125,7 +125,7 @@ def _resolve(metric_slug: str, region_slug: str, source_slug: str,
     """Resolve slugs to metric/source/region/period objects (the run's identity)."""
     metric = METRICS[metric_slug].with_reduction(REDUCTIONS[reduction_slug])
     ctx = RunContext(metric=metric, source=CHART_TABLES[source_slug],
-                     region=resolve_region(region_slug), period=Period(period_slug))
+                     region=RegionSpec.build(region_slug), period=Period(period_slug))
     log.info("Region: %s (slug=%s) | Metric: %s | Reduction: %s | Source: %s | Winters: %s | %d tier(s)",
              ctx.region.display, ctx.region.slug, ctx.metric.slug, ctx.metric.reduction_slug,
              ctx.source.slug, ctx.period.slug, len(ctx.region.tiers))

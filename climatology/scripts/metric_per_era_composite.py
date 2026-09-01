@@ -29,7 +29,7 @@ sys.path.insert(0, str(Path(__file__).parents[2]))
 
 from climatology.processing.metrics import METRICS
 from climatology.processing.reductions import MEDIAN_THEN_THRESHOLD, REDUCTIONS
-from climatology.processing.regions import REGION_SLUGS, resolve_region
+from climatology.processing.regions import REGIONS, RegionSpec
 from climatology.services.plot import MetricPanel, RasterLayer, plot_metric_panels
 from climatology.services.sources import CHART_TABLES, PERIOD_SOURCES
 from climatology.services.export import OUTPUT_DIR, find_archived
@@ -77,7 +77,7 @@ def _render(region: str, metric: str, tiers: list[str], reduction: str) -> Path 
     spec = replace(METRICS[metric], reduction=REDUCTIONS[reduction])
     try:
         plot_metric_panels(panels, png_path=png, metric=spec,
-                           region_display=resolve_region(region).display,
+                           region_display=RegionSpec.build(region).display,
                            res_label=res_label)
     except ValueError as e:      # mixed observation units across the eras' sources
         log.warning("Skipped %s: %s", metric, e)
@@ -87,7 +87,7 @@ def _render(region: str, metric: str, tiers: list[str], reduction: str) -> Path 
 
 def _parse_args() -> argparse.Namespace:
     p = argparse.ArgumentParser(description=__doc__.splitlines()[0])
-    p.add_argument("--region", choices=REGION_SLUGS, default=DEFAULT_REGION,
+    p.add_argument("--region", choices=REGIONS, default=DEFAULT_REGION,
                    help=f"Region slug (default: {DEFAULT_REGION}).")
     p.add_argument("--metric", action="append", choices=sorted(METRICS),
                    metavar="SLUG", dest="metrics",
@@ -101,7 +101,7 @@ def _parse_args() -> argparse.Namespace:
 
 if __name__ == "__main__":
     args = _parse_args()
-    tiers = [tier.level for tier in resolve_region(args.region).tiers]
+    tiers = [tier.level for tier in RegionSpec.build(args.region).tiers]
 
     written, skipped = [], []
     for metric in args.metrics or sorted(METRICS):

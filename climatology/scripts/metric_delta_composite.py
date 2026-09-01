@@ -32,7 +32,7 @@ sys.path.insert(0, str(Path(__file__).parents[2]))
 
 from climatology.processing.metrics import METRICS
 from climatology.processing.reductions import MEDIAN_THEN_THRESHOLD, REDUCTIONS
-from climatology.processing.regions import REGION_SLUGS, resolve_region
+from climatology.processing.regions import REGIONS, RegionSpec
 from climatology.services.plot import (
     DeltaPanel, MetricPanel, RasterLayer, plot_delta_panels, plot_source_portrait,
 )
@@ -133,7 +133,7 @@ def _source_label() -> str:
 def _render(region: str, metric: str, tiers: list[str], reduction: str) -> list[Path]:
     """Write one metric's three products: a portrait per comparison, then the synthesis."""
     spec = replace(METRICS[metric], reduction=REDUCTIONS[reduction])
-    region_display = resolve_region(region).display
+    region_display = RegionSpec.build(region).display
 
     # Absolute-value panels, loaded once and shared (the 1981-2010 baseline serves both).
     panel_cache: dict[Era, MetricPanel] = {}
@@ -164,7 +164,7 @@ def _render(region: str, metric: str, tiers: list[str], reduction: str) -> list[
 
 def _parse_args() -> argparse.Namespace:
     p = argparse.ArgumentParser(description=__doc__.splitlines()[0])
-    p.add_argument("--region", choices=REGION_SLUGS, default=DEFAULT_REGION,
+    p.add_argument("--region", choices=REGIONS, default=DEFAULT_REGION,
                    help=f"Region slug (default: {DEFAULT_REGION}).")
     p.add_argument("--metric", action="append", choices=sorted(METRIC_SLUGS),
                    metavar="SLUG", dest="metrics",
@@ -178,7 +178,7 @@ def _parse_args() -> argparse.Namespace:
 
 if __name__ == "__main__":
     args = _parse_args()
-    tiers = [tier.level for tier in resolve_region(args.region).tiers]
+    tiers = [tier.level for tier in RegionSpec.build(args.region).tiers]
 
     written = []
     for metric in args.metrics or METRIC_SLUGS:

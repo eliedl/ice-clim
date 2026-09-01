@@ -1,4 +1,4 @@
-"""Region definitions: each slug resolves to a ``RegionSpec`` of ``Tier``s, each deriving a wet analysis domain (``domain − landmask``) for its fetch and mask; the grid spans the wet domain (adaptive tiers) or the full bbox (full tier, for grid comparability)."""
+"""Region definitions: each slug resolves through the ``REGIONS`` table to a ``RegionSpec`` of ``Tier``s, each deriving a wet analysis domain (``domain − landmask``) for its fetch and mask; the grid spans the wet domain (adaptive tiers) or the full bbox (full tier, for grid comparability)."""
 
 from __future__ import annotations
 
@@ -18,29 +18,31 @@ from climatology.utils._types import GRID_RES, Grid
 
 log = logging.getLogger(__name__)
 
-# slug -> display label (adaptive + legacy + full-gulf).
-REGION_DISPLAY = {
-    "gaspe":                 "Gaspé",
-    "iles-de-la-madeleine":  "Îles-de-la-Madeleine",
-    "mingan":                "Mingan",
-    "rimouski":              "Rimouski",
-    "sept-iles":             "Sept-Îles",
-    "minganie":              "Minganie",
-    "manicouagan":           "Manicouagan",
-    "sept-rivieres":         "Sept-Rivières",
-    "golfe":                 "Golfe du Saint-Laurent",
-}
 
-# Adaptive regions -> MRC feature fid (the stable key; MRC names duplicate).
-ADAPTIVE_MRC_FID = {
-    "minganie":      71,
-    "manicouagan":   32,
-    "sept-rivieres": 70,
-}
+@dataclass(frozen=True)
+class RegionDef:
+    """Declarative region row: display name, tier plan, and polygon source."""
 
-ADAPTIVE_COARSE_RES = 1000.0
-ADAPTIVE_FINE_RES = 100.0
-GOLFE_RES = 1000.0   # full-gulf product grid (1 km)
+    display: str
+    tiers: tuple[tuple[str, float], ...]   # (level, res_m), coarse -> fine
+    mrc_fid: int | None = None             # MRC feature id; None -> bbox envelope
+
+
+ADAPTIVE_TIERS = (("coarse", 1000.0), ("fine", 100.0))
+GOLFE_TIERS    = (("full", 1000.0),)             # full-gulf product grid (1 km)
+BBOX_TIERS     = (("full", float(GRID_RES)),)    # legacy single-tier regions
+
+REGIONS: dict[str, RegionDef] = {
+    "gaspe":                 RegionDef("Gaspé",                  BBOX_TIERS),
+    "iles-de-la-madeleine":  RegionDef("Îles-de-la-Madeleine",   BBOX_TIERS),
+    "mingan":                RegionDef("Mingan",                 BBOX_TIERS),
+    "rimouski":              RegionDef("Rimouski",               BBOX_TIERS),
+    "sept-iles":             RegionDef("Sept-Îles",              BBOX_TIERS),
+    "minganie":              RegionDef("Minganie",               ADAPTIVE_TIERS, mrc_fid=71),
+    "manicouagan":           RegionDef("Manicouagan",            ADAPTIVE_TIERS, mrc_fid=32),
+    "sept-rivieres":         RegionDef("Sept-Rivières",          ADAPTIVE_TIERS, mrc_fid=70),
+    "golfe":                 RegionDef("Golfe du Saint-Laurent", GOLFE_TIERS),
+}
 
 
 @dataclass(frozen=True)
@@ -97,23 +99,9 @@ class RegionSpec:
 
     @classmethod
     def build(cls, slug: str) -> "RegionSpec":
-        """Assemble a region from its slug: display lookup + tier configuration."""
-        display = REGION_DISPLAY.get(slug, slug.replace("-", " ").title())
-        if slug in ADAPTIVE_MRC_FID:
-            region = _mrc_polygon(ADAPTIVE_MRC_FID[slug])
-            tiers = [Tier("coarse", ADAPTIVE_COARSE_RES, region),
-                     Tier("fine", ADAPTIVE_FINE_RES, region)]
-        elif slug == "golfe":
-            tiers = [Tier("full", GOLFE_RES, _bbox_envelope(slug))]
-        else:
-            tiers = [Tier("full", float(GRID_RES), _bbox_envelope(slug))]
-        return cls(slug, display, tiers)
-
-
-# Regions selectable on the CLI.
-REGION_SLUGS = sorted(REGION_DISPLAY)
-
-
-def resolve_region(slug: str) -> RegionSpec:
-    """Return the ``RegionSpec`` for a region slug."""
-    return RegionSpec.build(slug)
+        """Assemble a region from its slug: one table lookup, one polygon read, one Tier per planned level."""
+        defn = REGIONS[slug]   # unknown slug -> KeyError; argparse choices gate the CLI
+        polygon = (_mrc_polygon(defn.mrc_fid) if defn.mrc_fid is not None
+                   else _bbox_envelope(slug))
+        return cls(slug, defn.display,
+                   [Tier(level, res_m, polygon) for level, res_m in defn.tiers])

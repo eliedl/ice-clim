@@ -27,7 +27,7 @@ sys.path.insert(0, str(Path(__file__).parents[1]))
 from climatology.pipeline import run
 from climatology.processing.metrics import METRICS
 from climatology.processing.reductions import REDUCTIONS
-from climatology.processing.regions import REGION_SLUGS
+from climatology.processing.regions import REGIONS
 from climatology.services.export import WRITERS
 from climatology.services.sources import CHART_TABLES
 
@@ -48,8 +48,8 @@ def _parse_args() -> argparse.Namespace:
     p = argparse.ArgumentParser(description="Region-scale climatology by metric.")
     p.add_argument("metric", choices=sorted(METRICS),
                    help=f"Metric slug. Available: {', '.join(sorted(METRICS))}.")
-    p.add_argument("region", choices=REGION_SLUGS,
-                   help=f"Region slug. Available: {', '.join(REGION_SLUGS)}.")
+    p.add_argument("region", choices=REGIONS,
+                   help=f"Region slug. Available: {', '.join(REGIONS)}.")
     p.add_argument("--source", choices=sorted(CHART_TABLES), default="sgrda",
                    help="Chart table (default: sgrda).")
     p.add_argument("--period", type=_parse_period, default="2011-2020",

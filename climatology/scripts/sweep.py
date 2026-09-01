@@ -27,7 +27,7 @@ sys.path.insert(0, str(Path(__file__).parents[2]))
 
 from climatology.pipeline import run
 from climatology.processing.metrics import METRICS
-from climatology.processing.regions import REGION_SLUGS
+from climatology.processing.regions import REGIONS
 from climatology.services.sources import PERIOD_SOURCES
 
 logging.basicConfig(
@@ -57,7 +57,7 @@ class RunOutcome:
 
 def _parse_args() -> argparse.Namespace:
     p = argparse.ArgumentParser(description=__doc__.splitlines()[0])
-    p.add_argument("--region", choices=REGION_SLUGS, default=DEFAULT_REGION,
+    p.add_argument("--region", choices=REGIONS, default=DEFAULT_REGION,
                    help=f"Region slug (default: {DEFAULT_REGION}).")
     p.add_argument("--period", action="append", choices=sorted(PERIOD_SOURCES),
                    metavar="YYYY-YYYY", dest="periods",
