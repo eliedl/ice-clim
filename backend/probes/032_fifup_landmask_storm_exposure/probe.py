@@ -61,8 +61,8 @@ NEW_MASK = MASK_DIR / "climatology_landmask_32198.geojson"                  # fi
 
 def _set_mask(path: Path) -> None:
     """Point the landmask loader at ``path`` (both call sites read the module global)."""
-    polygons.LAND_MASK_PATH = path
-    pipeline.LAND_MASK_PATH = path  # manifest 'land_mask' provenance only
+    polygons.LAND_MASK = path
+    pipeline.LAND_MASK = path  # manifest 'land_mask' provenance only
 
 
 def _archive(values, ctx, tier, *, n_rows: int, label: str) -> Path:

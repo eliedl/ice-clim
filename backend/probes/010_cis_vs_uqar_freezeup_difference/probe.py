@@ -62,7 +62,7 @@ from climatology.processing.pipeline import (
     region_paths,
 )
 from climatology.services.sources import CHART_TABLES
-from climatology.utils.polygons import LAND_MASK_PATH
+from climatology.utils.polygons import LAND_MASK
 from climatology.processing.conversion import CONCENTRATION_FRACTION
 
 load_dotenv(PROJECT_ROOT / ".env")
@@ -101,7 +101,7 @@ def compute_ours(transform, h, w, *, recompute: bool,
     metric = FreezeUpDateMetric()
     bbox_path, _, _ = region_paths(REGION, metric.slug,
                                    period_slug=PERIOD_SLUG, source_slug=SOURCE.slug)
-    land_mask = build_land_mask(LAND_MASK_PATH, transform, h, w)
+    land_mask = build_land_mask(LAND_MASK, transform, h, w)
     df = load_polygons(metric, bbox_path, table=SOURCE.table,
                        climatology_start_date=CLIM_START, climatology_end_date=CLIM_END)
     if df.empty:

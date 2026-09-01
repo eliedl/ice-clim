@@ -21,7 +21,7 @@ from climatology.services.db import load_polygons
 from climatology.services.temporal import Period, attach_season_calendar
 from climatology.processing.conversion import ConversionStrategy
 from climatology.utils._types import ConvertedPolygons, DataGrid, RawPolygons
-from climatology.utils.polygons import LAND_MASK_PATH
+from climatology.utils.polygons import LAND_MASK
 from climatology.services.export import (
     WRITERS,
     VarMeta,
@@ -113,7 +113,7 @@ def _build_manifest(ctx: RunContext, tier: Tier, *, n_rows: int) -> dict:
         "period": ctx.period.slug, "climatology_start": clim_start,
         "climatology_end": clim_end, "tier": tier.level, "grid_res_m": tier.res_m,
         "bounds": [float(b) for b in grid.bounds],
-        "grid_shape": [grid.height, grid.width], "land_mask": str(LAND_MASK_PATH),
+        "grid_shape": [grid.height, grid.width], "land_mask": str(LAND_MASK),
         "n_rows": n_rows,
     }
 

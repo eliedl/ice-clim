@@ -43,7 +43,7 @@ from climatology.processing.regions import (  # noqa: E402
     _coastline_buffer,
     _minganie_polygon,
 )
-from climatology.utils.polygons import LAND_MASK_PATH  # noqa: E402
+from climatology.utils.polygons import LAND_MASK  # noqa: E402
 
 OUTPUT_DIR = Path(__file__).parent / "output"
 
@@ -62,7 +62,7 @@ def main() -> None:
     region = make_valid(_minganie_polygon(crs))
     buffer = make_valid(_coastline_buffer(crs))
     refine = make_valid(region.intersection(buffer))
-    land_gdf = gpd.read_file(LAND_MASK_PATH).to_crs(epsg=crs)
+    land_gdf = gpd.read_file(LAND_MASK).to_crs(epsg=crs)
     land_gdf["geometry"] = land_gdf.geometry.apply(make_valid)
     land = make_valid(land_gdf.union_all())
     water = make_valid(refine.difference(land))

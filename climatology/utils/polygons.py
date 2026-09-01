@@ -9,17 +9,12 @@ from shapely.geometry.base import BaseGeometry
 
 from climatology.utils._types import GRID_CRS
 
-# Source layers (all EPSG:32198).
-BBOX_ROOT = Path("/home/eliedl/data/masks/climatology_bbox")
-MRC_GPKG = Path(
-    "/home/eliedl/data/masks/MRC_municipalites_bbox/"
-    "DonneesOuvertesQc_MRC_2025_32198_p.gpkg"
-)
-COASTLINE_BUFFER = Path(
-    "/home/eliedl/data/masks/coastline_buffer_ldgizc/Buffer10km.shp"
-)
-LANDMASK_DIR = Path("/home/eliedl/data/masks/cis_landmasks")
-LAND_MASK_PATH = LANDMASK_DIR / "climatology_landmask_32198.geojson"
+# Source polygons (all EPSG:32198).
+MASKS_DIR        = Path("/home/eliedl/data/masks")
+BBOX_ROOT        = MASKS_DIR / "climatology_bbox"
+MRC_GPKG         = MASKS_DIR / "MRC_municipalites_bbox/DonneesOuvertesQc_MRC_2025_32198_p.gpkg"
+COASTLINE_BUFFER = MASKS_DIR / "coastline_buffer_ldgizc/Buffer10km.shp"
+LAND_MASK        = MASKS_DIR / "cis_landmasks/climatology_landmask_32198.geojson"
 
 
 def _mrc_polygon(fid: int) -> BaseGeometry:
@@ -37,7 +32,7 @@ def _coastline_buffer() -> BaseGeometry:
 
 def _landmask() -> BaseGeometry:
     """CIS computation landmask (DEC-034) — single valid feature, EPSG:32198."""
-    return gpd.read_file(LAND_MASK_PATH).geometry.iloc[0]
+    return gpd.read_file(LAND_MASK).geometry.iloc[0]
 
 
 def _bbox_envelope(region_name: str) -> BaseGeometry:
