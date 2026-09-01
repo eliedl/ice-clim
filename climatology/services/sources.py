@@ -16,9 +16,6 @@ from __future__ import annotations
 from dataclasses import dataclass, replace
 from pathlib import Path
 
-LANDMASK_DIR = Path("/home/eliedl/data/masks/cis_landmasks")
-LAND_MASK_PATH = LANDMASK_DIR / "climatology_landmask_32198.geojson"
-
 
 @dataclass(frozen=True)
 class ChartTable:

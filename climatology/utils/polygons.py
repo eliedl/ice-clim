@@ -8,7 +8,6 @@ import geopandas as gpd
 from shapely.geometry.base import BaseGeometry
 
 from climatology.processing.rasterize import GRID_CRS
-from climatology.services.sources import LAND_MASK_PATH
 
 # Source layers (all EPSG:32198).
 BBOX_ROOT = Path("/home/eliedl/data/masks/climatology_bbox")
@@ -19,6 +18,8 @@ MRC_GPKG = Path(
 COASTLINE_BUFFER = Path(
     "/home/eliedl/data/masks/coastline_buffer_ldgizc/Buffer10km.shp"
 )
+LANDMASK_DIR = Path("/home/eliedl/data/masks/cis_landmasks")
+LAND_MASK_PATH = LANDMASK_DIR / "climatology_landmask_32198.geojson"
 
 
 def _mrc_polygon(fid: int) -> BaseGeometry:
