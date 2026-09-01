@@ -14,7 +14,6 @@ sgrdr currently holds ec only).
 from __future__ import annotations
 
 from dataclasses import dataclass, replace
-from pathlib import Path
 
 
 @dataclass(frozen=True)

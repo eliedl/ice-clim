@@ -16,11 +16,12 @@ from climatology.processing.metrics import (
 )
 from climatology.processing.reductions import MEDIAN_THEN_THRESHOLD, REDUCTIONS
 from climatology.processing.regions import RegionSpec, Tier, resolve_region
-from climatology.services.sources import CHART_TABLES, LAND_MASK_PATH, ChartTable
+from climatology.services.sources import CHART_TABLES, ChartTable
 from climatology.services.db import load_polygons
 from climatology.services.temporal import Period, attach_season_calendar
 from climatology.processing.conversion import ConversionStrategy
 from climatology.utils._types import ConvertedPolygons, DataGrid, RawPolygons
+from climatology.utils.polygons import LAND_MASK_PATH
 from climatology.services.export import (
     WRITERS,
     VarMeta,

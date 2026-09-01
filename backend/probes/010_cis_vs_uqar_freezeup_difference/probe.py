@@ -61,7 +61,8 @@ from climatology.processing.pipeline import (
     load_polygons,
     region_paths,
 )
-from climatology.services.sources import CHART_TABLES, LAND_MASK_PATH
+from climatology.services.sources import CHART_TABLES
+from climatology.utils.polygons import LAND_MASK_PATH
 from climatology.processing.conversion import CONCENTRATION_FRACTION
 
 load_dotenv(PROJECT_ROOT / ".env")

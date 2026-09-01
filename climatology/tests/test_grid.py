@@ -30,8 +30,7 @@ def test_build_grid_cell_count_math():
 # --- Region geometry (reads real layers, no DB) ---------------------------
 
 def _regions_inputs_present() -> bool:
-    from climatology.utils.polygons import COASTLINE_BUFFER, MRC_GPKG
-    from climatology.services.sources import LAND_MASK_PATH
+    from climatology.utils.polygons import COASTLINE_BUFFER, LAND_MASK_PATH, MRC_GPKG
     return MRC_GPKG.exists() and COASTLINE_BUFFER.exists() and LAND_MASK_PATH.exists()
 
 
