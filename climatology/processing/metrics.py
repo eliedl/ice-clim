@@ -8,7 +8,6 @@ from dataclasses import dataclass, replace
 
 import numpy as np
 
-from climatology.processing.rasterize import GRID_CRS
 from climatology.processing.reductions import (
     MEDIAN_THEN_THRESHOLD,
     Kernel,
@@ -30,7 +29,7 @@ from climatology.processing.conversion import (
     value_columns,
 )
 from climatology.services.temporal import filter_admissible_days
-from climatology.utils._types import ConvertedPolygons, DataGrid
+from climatology.utils._types import GRID_CRS, ConvertedPolygons, DataGrid
 
 
 class _MetricSpecBase:

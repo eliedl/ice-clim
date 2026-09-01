@@ -21,7 +21,6 @@ from matplotlib.ticker import FuncFormatter, LogLocator, NullFormatter
 from matplotlib.transforms import Bbox
 from shapely.geometry import box
 
-from climatology.processing.rasterize import GRID_CRS
 from climatology.processing.reductions import (
     MEDIAN_THEN_THRESHOLD,
     MPO_MIN_SEASON_COVERAGE,
@@ -29,7 +28,7 @@ from climatology.processing.reductions import (
     ThresholdDateDelta,
 )
 from climatology.services.temporal import SEASON_ORIGIN
-from climatology.utils._types import DataGrid, GridBounds
+from climatology.utils._types import GRID_CRS, DataGrid, GridBounds
 from climatology.utils.arithmetics import percentile_range
 from climatology.utils.basemap import BasemapTile, load_basemap
 

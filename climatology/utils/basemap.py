@@ -20,8 +20,7 @@ from rasterio.enums import Resampling
 from rasterio.features import rasterize
 from pyproj import Transformer
 
-from climatology.processing.rasterize import GRID_CRS
-from climatology.utils._types import GridBounds
+from climatology.utils._types import GRID_CRS, GridBounds
 
 log = logging.getLogger(__name__)
 

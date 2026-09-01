@@ -48,7 +48,7 @@ import shapely  # noqa: E402
 from sqlalchemy import text  # noqa: E402
 
 from climatology.pipeline import _resolve  # noqa: E402
-from climatology.processing.rasterize import GRID_CRS  # noqa: E402
+from climatology.utils._types import GRID_CRS  # noqa: E402
 from climatology.services.db import get_engine  # noqa: E402
 from climatology.services.temporal import attach_season_calendar  # noqa: E402
 

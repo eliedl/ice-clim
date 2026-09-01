@@ -13,7 +13,8 @@ from shapely.geometry.base import BaseGeometry
 from climatology.utils.polygons import (
     _bbox_envelope, _coastline_buffer, _landmask, _mrc_polygon,
 )
-from climatology.processing.rasterize import GRID_RES, Grid, build_grid, burn_mask
+from climatology.processing.rasterize import build_grid, burn_mask
+from climatology.utils._types import GRID_RES, Grid
 
 log = logging.getLogger(__name__)
 

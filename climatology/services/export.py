@@ -18,10 +18,9 @@ import rasterio
 from rasterio.crs import CRS
 
 from climatology.processing.metrics import RawMetricSpec
-from climatology.processing.rasterize import GRID_CRS, Grid
 from climatology.services.plot import metric_label, plot_metric
 from climatology.services.temporal import SEASON_ORIGIN
-from climatology.utils._types import DataGrid
+from climatology.utils._types import GRID_CRS, DataGrid, Grid
 
 if TYPE_CHECKING:
     # Annotation-only — the writers duck-type these run value objects at runtime,

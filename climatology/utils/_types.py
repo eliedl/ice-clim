@@ -1,4 +1,4 @@
-"""Shared type aliases for the climatology pipeline (array shapes are doc-only).
+"""Shared types and grid constants for the climatology pipeline (array shapes are doc-only).
 
 The dtype (``Float`` / ``Bool``) is real; the dimension strings
 (``"H W"``, ...) are documentation. They are **not** runtime-enforced — that
@@ -18,6 +18,9 @@ Single-use shapes are deliberately annotated inline rather than aliased here
 (e.g. ``_nanmedian_high``'s ``Float["n_seasons *rest"] -> Float["*rest"]``):
 the collapse relationship only reads clearly at the signature itself.
 """
+from typing import NamedTuple
+
+from affine import Affine
 from jaxtyping import Bool, Float
 import numpy as np
 import pandas as pd
@@ -44,3 +47,16 @@ DateConvertedPolygons = pd.DataFrame   # polygons for a given day_of_season acro
 
 # spatial extent
 GridBounds = tuple[float, float, float, float]   # (xmin, ymin, xmax, ymax) in grid-CRS units
+
+# Canonical analysis CRS
+GRID_CRS = 32198  # NAD83 / Québec Lambert
+GRID_RES = 35     # default grid resolution (m); legacy single-tier regions
+
+
+class Grid(NamedTuple):
+    """Raster geometry for a tier — the four outputs of ``build_grid``."""
+
+    transform: Affine
+    height: int
+    width: int
+    bounds: GridBounds

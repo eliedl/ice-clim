@@ -2,30 +2,15 @@
 from __future__ import annotations
 
 import logging
-from typing import NamedTuple
 
 import numpy as np
-from affine import Affine
 from jaxtyping import Float, Int
 from rasterio.features import rasterize as rio_rasterize
 from rasterio.transform import from_bounds
 
-from climatology.utils._types import BoolGrid, GridBounds, VarWetStack
+from climatology.utils._types import BoolGrid, Grid, VarWetStack
 
 log = logging.getLogger(__name__)
-
-# Canonical analysis CRS 
-GRID_CRS = 32198  # NAD83 / Québec Lambert
-GRID_RES = 35     # default grid resolution (m); legacy single-tier regions
-
-
-class Grid(NamedTuple):
-    """Raster geometry for a tier — the four outputs of ``build_grid``."""
-
-    transform: Affine
-    height: int
-    width: int
-    bounds: GridBounds
 
 
 def burn_mask(geoms, grid: Grid) -> BoolGrid:
