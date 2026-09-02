@@ -33,15 +33,42 @@ GOLFE_TIERS    = (("full", 1000.0),)             # full-gulf product grid (1 km)
 BBOX_TIERS     = (("full", float(GRID_RES)),)    # legacy single-tier regions
 
 REGIONS: dict[str, RegionDef] = {
+    # legacy bbox-envelope regions
     "gaspe":                 RegionDef("Gaspé",                  BBOX_TIERS),
     "iles-de-la-madeleine":  RegionDef("Îles-de-la-Madeleine",   BBOX_TIERS),
     "mingan":                RegionDef("Mingan",                 BBOX_TIERS),
     "rimouski":              RegionDef("Rimouski",               BBOX_TIERS),
     "sept-iles":             RegionDef("Sept-Îles",              BBOX_TIERS),
-    "minganie":              RegionDef("Minganie",               ADAPTIVE_TIERS, mrc_fid=71),
-    "manicouagan":           RegionDef("Manicouagan",            ADAPTIVE_TIERS, mrc_fid=32),
-    "sept-rivieres":         RegionDef("Sept-Rivières",          ADAPTIVE_TIERS, mrc_fid=70),
     "golfe":                 RegionDef("Golfe du Saint-Laurent", GOLFE_TIERS),
+
+    # MRC regions, ordered along the coast: Baie-des-Chaleurs -> Gaspé -> Îles ->
+    # north shore (E->W) -> south shore estuary (E->W) -> Québec
+    "avignon":                    RegionDef("Avignon",                    ADAPTIVE_TIERS, mrc_fid=54),
+    "bonaventure":                RegionDef("Bonaventure",                ADAPTIVE_TIERS, mrc_fid=56),
+    "rocher-perce":               RegionDef("Le Rocher-Percé",            ADAPTIVE_TIERS, mrc_fid=69),
+    "cote-de-gaspe":              RegionDef("La Côte-de-Gaspé",           ADAPTIVE_TIERS, mrc_fid=13),
+    "haute-gaspesie":             RegionDef("La Haute-Gaspésie",          ADAPTIVE_TIERS, mrc_fid=81),
+    "iles-de-la-madeleine-mrc":   RegionDef("Communauté maritime des Îles-de-la-Madeleine", ADAPTIVE_TIERS, mrc_fid=66),
+    "golfe-du-saint-laurent-mrc": RegionDef("Le Golfe-du-Saint-Laurent",  ADAPTIVE_TIERS, mrc_fid=72),
+    "minganie":                   RegionDef("Minganie",                   ADAPTIVE_TIERS, mrc_fid=71),
+    "sept-rivieres":              RegionDef("Sept-Rivières",              ADAPTIVE_TIERS, mrc_fid=70),
+    "manicouagan":                RegionDef("Manicouagan",                ADAPTIVE_TIERS, mrc_fid=32),
+    "haute-cote-nord":            RegionDef("La Haute-Côte-Nord",         ADAPTIVE_TIERS, mrc_fid=62),
+    "matanie":                    RegionDef("La Matanie",                 ADAPTIVE_TIERS, mrc_fid=21),
+    "mitis":                      RegionDef("La Mitis",                   ADAPTIVE_TIERS, mrc_fid=98),
+    "rimouski-neigette":          RegionDef("Rimouski-Neigette",          ADAPTIVE_TIERS, mrc_fid=103),
+    "basques":                    RegionDef("Les Basques",                ADAPTIVE_TIERS, mrc_fid=104),
+    "riviere-du-loup":            RegionDef("Rivière-du-Loup",            ADAPTIVE_TIERS, mrc_fid=106),
+    "kamouraska":                 RegionDef("Kamouraska",                 ADAPTIVE_TIERS, mrc_fid=92),
+    "islet":                      RegionDef("L'Islet",                    ADAPTIVE_TIERS, mrc_fid=90),
+    "montmagny":                  RegionDef("Montmagny",                  ADAPTIVE_TIERS, mrc_fid=55),
+    "bellechasse":                RegionDef("Bellechasse",                ADAPTIVE_TIERS, mrc_fid=38),
+    "levis":                      RegionDef("Lévis",                      ADAPTIVE_TIERS, mrc_fid=37),
+    "quebec":                     RegionDef("Québec",                     ADAPTIVE_TIERS, mrc_fid=41),
+    "ile-orleans":                RegionDef("L'Île-d'Orléans",            ADAPTIVE_TIERS, mrc_fid=36),
+    "cote-de-beaupre":            RegionDef("La Côte-de-Beaupré",         ADAPTIVE_TIERS, mrc_fid=7),
+    "charlevoix-est":             RegionDef("Charlevoix-Est",             ADAPTIVE_TIERS, mrc_fid=91),
+    "charlevoix":                 RegionDef("Charlevoix",                 ADAPTIVE_TIERS, mrc_fid=89),
 }
 
 
