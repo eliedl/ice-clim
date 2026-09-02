@@ -30,19 +30,9 @@ class RegionDef:
 
 ADAPTIVE_TIERS = (("coarse", 1000.0), ("fine", 100.0))
 GOLFE_TIERS    = (("full", 1000.0),)             # full-gulf product grid (1 km)
-BBOX_TIERS     = (("full", float(GRID_RES)),)    # legacy single-tier regions
 
 REGIONS: dict[str, RegionDef] = {
-    # legacy bbox-envelope regions
-    "gaspe":                 RegionDef("Gaspé",                  BBOX_TIERS),
-    "iles-de-la-madeleine":  RegionDef("Îles-de-la-Madeleine",   BBOX_TIERS),
-    "mingan":                RegionDef("Mingan",                 BBOX_TIERS),
-    "rimouski":              RegionDef("Rimouski",               BBOX_TIERS),
-    "sept-iles":             RegionDef("Sept-Îles",              BBOX_TIERS),
-    "golfe":                 RegionDef("Golfe du Saint-Laurent", GOLFE_TIERS),
-
-    # MRC regions, ordered along the coast: Baie-des-Chaleurs -> Gaspé -> Îles ->
-    # north shore (E->W) -> south shore estuary (E->W) -> Québec
+    "golfe":                      RegionDef("Golfe du Saint-Laurent", GOLFE_TIERS),
     "avignon":                    RegionDef("Avignon",                    ADAPTIVE_TIERS, mrc_fid=54),
     "bonaventure":                RegionDef("Bonaventure",                ADAPTIVE_TIERS, mrc_fid=56),
     "rocher-perce":               RegionDef("Le Rocher-Percé",            ADAPTIVE_TIERS, mrc_fid=69),

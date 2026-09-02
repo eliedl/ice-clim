@@ -7,7 +7,7 @@ recorded and the sweep continues; the exit status reflects whether any failed.
 
 Usage:
     python climatology/scripts/sweep.py [--region manicouagan] [--period 1991-2020 ...]
-                            [--metric freeze_up_date ...] [--geotiff] [--netcdf] [--dry-run]
+                            [--metric freeze_up_date ...] [--output png netcdf] [--dry-run]
 """
 
 from __future__ import annotations
@@ -28,6 +28,7 @@ sys.path.insert(0, str(Path(__file__).parents[2]))
 from climatology.pipeline import run
 from climatology.processing.metrics import METRICS
 from climatology.processing.regions import REGIONS
+from climatology.services.export import WRITERS
 from climatology.services.sources import PERIOD_SOURCES
 
 logging.basicConfig(
@@ -65,10 +66,10 @@ def _parse_args() -> argparse.Namespace:
     p.add_argument("--metric", action="append", choices=sorted(METRICS),
                    metavar="SLUG", dest="metrics",
                    help="Restrict to these metrics (repeatable; default: all).")
-    p.add_argument("--geotiff", action="store_true",
-                   help="Also write one float32 GeoTIFF per tier.")
-    p.add_argument("--netcdf", action="store_true",
-                   help="Also write one NetCDF per tier.")
+    p.add_argument("--output", nargs="+", choices=sorted(WRITERS), default=None,
+                   metavar="FMT", dest="outputs",
+                   help="Output format(s) to write, e.g. --output png netcdf. Default: the "
+                        f"metric's default (png for climatology). Choices: {', '.join(sorted(WRITERS))}.")
     p.add_argument("--dry-run", action="store_true",
                    help="List the runs that would execute, then exit.")
     return p.parse_args()
@@ -81,7 +82,7 @@ def _plan(metrics: list[str], periods: list[str]) -> list[tuple[str, str, str]]:
 
 
 def _execute(plan: list[tuple[str, str, str]], region: str,
-             *, geotiff: bool, netcdf: bool) -> list[RunOutcome]:
+             *, outputs: list[str] | None) -> list[RunOutcome]:
     """Run every planned climatology, surviving individual failures."""
     outcomes: list[RunOutcome] = []
     for i, (metric, period, source) in enumerate(plan, start=1):
@@ -89,7 +90,7 @@ def _execute(plan: list[tuple[str, str, str]], region: str,
                  i, len(plan), region, metric, period, source)
         started = time.perf_counter()
         try:
-            run(metric, region, source, period, geotiff=geotiff, netcdf=netcdf)
+            run(metric, region, source, period, outputs=outputs)
             error = None
         except Exception as e:  # keep the sweep alive; the summary reports the failure
             log.error("FAILED %s %s (%s): %s", metric, period, source, e)
@@ -126,6 +127,6 @@ if __name__ == "__main__":
             print(f"{args.region}  {metric}  {period}  {source}")
         sys.exit(0)
 
-    outcomes = _execute(plan, args.region, geotiff=args.geotiff, netcdf=args.netcdf)
+    outcomes = _execute(plan, args.region, outputs=args.outputs)
     _report(outcomes)
     sys.exit(1 if any(not o.ok for o in outcomes) else 0)

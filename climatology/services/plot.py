@@ -140,13 +140,6 @@ class PlotStyle:
     format_ticks: Callable[[list[float]], list[str]]
 
 
-# ``title`` names the metric (reduction-independent, suffixed by value type: a "date" or a
-# "duration"); ``label`` is the precise computed quantity on the colourbar. MTT label wording
-# says what the number *is*: a crossing of the cross-season median series. TTM label wording
-# is the domain phrasing, because TTM really does produce a median of per-season values.
-# Landfast metrics run on FA, not CT: LANDFAST_CONVERSION turns the form code into a 0/1
-# fast-ice indicator, so the kernel's 0.5 reads as "fast ice in more than half the seasons"
-# under MTT, and simply as "fast ice" per season under TTM.
 PLOT_STYLES: dict[str, PlotStyle] = {
     "freeze_up_date": PlotStyle("Freeze-up", {
         "mtt": "First date the median CT reaches ≥ 4/10",
@@ -211,7 +204,7 @@ PLOT_STYLES: dict[str, PlotStyle] = {
     # Developed ice = the joint state CT ≥ 9/10 AND mean thickness ≥ 0.5 m; its
     # clearing/absence is the De Morgan complement (either criterion below).
     "developed_ice_freeze_up_date": PlotStyle("Developed ice freeze-up", {
-        "mtt": "First date the median CT reaches ≥ 9/10 with median thickness ≥ 0.5 m",
+        "mtt": "First date the median CT reaches ≥ 8/10 with median thickness ≥ 0.225 m",
         "ttm": "Median date of developed-ice freeze-up (CT ≥ 9/10, thickness ≥ 0.5 m)",
     }, _date_ticks),
     "developed_ice_breakup_date": PlotStyle("Developed ice break-up", {
@@ -260,9 +253,6 @@ def _kernel_threshold(kernel, field: str) -> str:
     return f"{field} {op} {round(kernel.threshold[0] * 10)}/10"
 
 
-# The reduction order is a methodology statement, so it rides in the footer with the other
-# provenance rather than in the title. TTM additionally drops cells that lack a per-season
-# value in enough seasons (MPO rule, DEC-049) — a real coverage caveat on what is drawn.
 REDUCTION_NOTES: dict[str, str] = {
     "mtt": "Method: median-then-threshold (cross-season median CT per day, then the crossing)",
     "ttm": ("Method: threshold-then-median (per-season crossing, then the cross-season median; "

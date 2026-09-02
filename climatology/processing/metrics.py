@@ -144,14 +144,10 @@ class RawMetricSpec(_MetricSpecBase):
                           stream=lambda: _stream_day_stacks(df, tier=tier))
 
 
-# The metric-spec sum type: existing annotations keep the ``MetricSpec`` name.
 MetricSpec = ClimatologicalMetricSpec | RawMetricSpec
 
+DEVELOPED_ICE_THRESHOLDS = (0.8, STAGE_OF_DEVELOPMENT_THICKNESS["85"]) # 80% of concentration and grey-white (blanchâtre) ice
 
-# Developed ice: consolidated cover (CT >= 9/10) of at least Thin First Year
-# stage — thresholds paired with DEVELOPED_ICE_CONVERSION's (ct, mean_thk).
-DEVELOPED_ICE_THRESHOLDS = (0.9, STAGE_OF_DEVELOPMENT_THICKNESS["87"])
-# The 9 egg-code fields the regime-aware attribution needs (probe 004).
 _EGG_FIELDS = ("CT", "CA", "CB", "CC", "CN", "CD", "SA", "SB", "SC")
 
 # CLI metric choices. C aliases ClimatologicalMetricSpec locally to keep this
