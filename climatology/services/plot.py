@@ -19,7 +19,6 @@ import numpy as np
 from matplotlib.colors import Colormap, LinearSegmentedColormap, Normalize
 from matplotlib.ticker import FuncFormatter, LogLocator, NullFormatter
 from matplotlib.transforms import Bbox
-from shapely.geometry import box
 
 from climatology.processing.reductions import (
     MEDIAN_THEN_THRESHOLD,
@@ -39,10 +38,6 @@ if TYPE_CHECKING:
     from climatology.services.sources import ChartTable
 
 log = logging.getLogger(__name__)
-
-# Display-only overlay: OSM land polygons (island-complete), clipped to the
-# SGRDA domain. NOT used for computation — see osm_land_polygons/README.md.
-LAND_DISPLAY_PATH = Path("/home/eliedl/data/masks/osm_land_polygons/osm_land_gulf.shp")
 
 # Dark "Mapbox-style" theme. Ocean = axes background (shows through NaN /
 # ice-free cells); land polygons are painted on top so they cover dry cells only.
@@ -309,12 +304,6 @@ def _draw_layers(ax, layers: list[tuple[DataGrid, GridBounds]],
     return im
 
 
-def _land_polygons(extent: GridBounds) -> gpd.GeoDataFrame:
-    """The in-view OSM land polygons (bbox-filtered read; the file is EPSG:4326)."""
-    bbox_geom = gpd.GeoSeries([box(*extent)], crs=GRID_CRS)
-    return gpd.read_file(LAND_DISPLAY_PATH, bbox=bbox_geom).to_crs(epsg=GRID_CRS)
-
-
 def _draw_basemap_land(ax, tile: BasemapTile | None, *, zorder: int) -> None:
     """Draw the basemap's land *over* the data: clipped to the sea, so the ice values show through."""
     if tile is None:
@@ -416,8 +405,7 @@ def plot_metric(
     ax.set_facecolor(DARK_OCEAN)          # dark "ocean" behind transparent cells
 
     im = _draw_layers(ax, layers, cmap=cmap, norm=norm)
-    land = _land_polygons(extent)
-    tile = load_basemap(extent, land)
+    tile, land = load_basemap(extent)
     top = len(layers) + 1
     _draw_basemap_land(ax, tile, zorder=top)
     _frame_axes(ax, land, extent, zorder=top + 1, fill=tile is None)
@@ -717,8 +705,7 @@ def plot_metric_panels(
     cmap, norm, tick_values, tick_labels = _metric_scale(
         np.concatenate([p.values for p in panels]), style)
     extent = _union_extent([(l.values, l.bounds) for p in panels for l in p.layers])
-    land = _land_polygons(extent)
-    tile = load_basemap(extent, land)   # one extent across panels -> fetched once, drawn n times
+    tile, land = load_basemap(extent)   # one extent across panels -> fetched once, drawn n times
 
     # Each panel is a map column plus a narrow histogram column to its right. Row height
     # follows the region's own aspect, so the cells hug the (equal-aspect) maps instead of
@@ -833,8 +820,7 @@ def plot_delta_panels(
     cmap, norm, tick_values, tick_labels = _delta_scale(
         np.concatenate([p.values for p in panels]))
     extent = _union_extent([(l.values, l.bounds) for p in panels for l in p.layers])
-    land = _land_polygons(extent)
-    tile = load_basemap(extent, land)   # one extent -> fetched once, drawn n times
+    tile, land = load_basemap(extent)   # one extent -> fetched once, drawn n times
 
     # Each panel is a map column plus a narrow area-weighted change distribution to its
     # right, sharing the map's diverging scale — the same paired layout as plot_metric_panels.
@@ -955,8 +941,7 @@ def plot_source_portrait(
 
     all_layers = [l for p in (baseline, candidate) for l in p.layers] + list(delta.layers)
     extent = _union_extent([(l.values, l.bounds) for l in all_layers])
-    land = _land_polygons(extent)
-    tile = load_basemap(extent, land)   # one extent across panels -> fetched once
+    tile, land = load_basemap(extent)   # one extent across panels -> fetched once
 
     # Map block sits in fixed, symmetric margins; the colourbars live in their own axes
     # outside it (below), so their width/gap never shifts the maps. The delta is the hero

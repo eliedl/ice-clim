@@ -19,10 +19,15 @@ from PIL import Image
 from rasterio.enums import Resampling
 from rasterio.features import rasterize
 from pyproj import Transformer
+from shapely.geometry import box
 
 from climatology.utils._types import GRID_CRS, GridBounds
 
 log = logging.getLogger(__name__)
+
+# Display-only overlay: OSM land polygons (island-complete), clipped to the SGRDA domain.
+# NOT used for computation — see osm_land_polygons/README.md.
+LAND_DISPLAY_PATH = Path("/home/eliedl/data/masks/osm_land_polygons/osm_land_gulf.shp")
 
 # Two styles, rendered separately and composited here (probe 031). Splitting them is what lets
 # the land be clipped to the OSM coastline while the labels are *not*: a single flattened
@@ -179,6 +184,12 @@ def warp_to_grid(rgba: np.ndarray, bounds_3857, extent: GridBounds
     return out, (xmin, xmax, ymin, ymax)
 
 
+def _land_polygons(extent: GridBounds) -> gpd.GeoDataFrame:
+    """The in-view OSM land polygons (bbox-filtered read; the file is EPSG:4326)."""
+    bbox_geom = gpd.GeoSeries([box(*extent)], crs=GRID_CRS)
+    return gpd.read_file(LAND_DISPLAY_PATH, bbox=bbox_geom).to_crs(epsg=GRID_CRS)
+
+
 def land_mask(land: gpd.GeoDataFrame, extent: GridBounds, shape: tuple[int, int]) -> np.ndarray:
     """The landmask burned onto a raster grid: 1 = land, 0 = water."""
     _, transform = _grid(extent, shape[1])
@@ -207,18 +218,21 @@ def _alpha_over(top: np.ndarray, bottom: np.ndarray) -> np.ndarray:
     return np.concatenate([rgb, alpha[..., None]], axis=-1).round().astype(np.uint8)
 
 
-def load_basemap(extent: GridBounds, land: gpd.GeoDataFrame) -> BasemapTile | None:
-    """The basemap for ``extent``: land clipped to ``land``, labels kept apart; None if unavailable.
+def load_basemap(extent: GridBounds) -> tuple[BasemapTile | None, gpd.GeoDataFrame]:
+    """The basemap for ``extent`` with its land polygons: land clipped to OSM polygons, labels kept apart.
+
+    Returns a (BasemapTile, land) tuple. BasemapTile is None if unavailable; land is always loaded.
 
     The labels are deliberately *not* clipped — a town's name may overhang the water it sits
     beside, and cropping it there would be an artefact of the landmask, not cartography.
     """
+    land = _land_polygons(extent)
     base = fetch_style_png(extent, BASE_STYLE)
     labels = fetch_style_png(extent, LABEL_STYLE)
     if base is None or labels is None:
-        return None
+        return None, land
 
     warped, imshow_extent = warp_to_grid(*base, extent)
     clipped = clip_to_land(warped, land_mask(land, extent, warped.shape[:2]))
     label_layer, _ = warp_to_grid(*labels, extent)
-    return BasemapTile(land=clipped, labels=label_layer, extent=imshow_extent)
+    return BasemapTile(land=clipped, labels=label_layer, extent=imshow_extent), land
