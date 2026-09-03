@@ -133,7 +133,18 @@ def run(baseline_npz: Path, candidate_npz: Path) -> None:
 
     # ---- Figure: baseline | candidate-aligned | diff | hist ----
     diff = s["diff"]
-    vlim = max(1.0, float(np.nanpercentile(np.abs(diff[s["both"]]), 99))) if s["both_defined"] else 1.0
+    if s["both_defined"]:
+        # Normalize diff scale to the shared range of baseline and candidate values,
+        # so the colorbar's range reflects the actual data spread.
+        combined = np.concatenate([base.values[np.isfinite(base.values)],
+                                   cand_aligned[np.isfinite(cand_aligned)]])
+        try:
+            _, vmax = percentile_range(combined, low=1, high=99)
+            vlim = max(1.0, vmax)
+        except ValueError:
+            vlim = 1.0
+    else:
+        vlim = 1.0
     fig, ax = plt.subplots(2, 2, figsize=(13, 11))
     for a, arr, title in [
         (ax[0, 0], base.values, f"baseline (EPSG:{base.crs})"),

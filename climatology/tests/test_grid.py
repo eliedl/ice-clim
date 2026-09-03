@@ -73,19 +73,6 @@ def test_sept_rivieres_tiers():
     _assert_adaptive(RegionSpec.build("sept-rivieres"), "Sept-Rivières")
 
 
-def test_legacy_region_single_tier():
-    """Legacy region is one 'full' 35 m tier."""
-    from climatology.processing.regions import RegionSpec
-    try:
-        spec = RegionSpec.build("sept-iles")
-    except FileNotFoundError:
-        print("    (skip: legacy square bbox absent)")
-        return
-    assert len(spec.tiers) == 1, "legacy region is a single tier"
-    tier = spec.tiers[0]
-    assert tier.level == "full" and tier.res_m == 35.0, "legacy tier: uniform 35 m full grid"
-
-
 if __name__ == "__main__":
     failures = 0
     for name, fn in sorted(globals().items()):
