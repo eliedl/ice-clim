@@ -89,7 +89,6 @@ class Comparison:
 
 COMPARISONS = (
     Comparison(baseline=Era("1981-2010", "sgrdr"), candidate=Era("2011-2020", "sgrdr")),
-    Comparison(baseline=Era("1981-2010", "sgrdr"), candidate=Era("2011-2020", "sgrda")),
 )
 
 
