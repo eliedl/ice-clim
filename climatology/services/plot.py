@@ -23,8 +23,10 @@ from matplotlib.transforms import Bbox
 from climatology.processing.reductions import (
     MEDIAN_THEN_THRESHOLD,
     MPO_MIN_SEASON_COVERAGE,
+    StatThenThreshold,
     ThresholdDate,
     ThresholdDateDelta,
+    ThresholdThenStat,
 )
 from climatology.services.temporal import SEASON_ORIGIN
 from climatology.utils._types import GRID_CRS, DataGrid, GridBounds
@@ -116,103 +118,110 @@ def _count_ticks(tick_values: list[float]) -> list[str]:
     return [f"{int(round(d))}" for d in tick_values]
 
 
+# The two reduction orders, as label-template keys. Which statistic did the collapsing
+# is a ``{stat}`` slot the reduction fills, so a new reducer costs no new label.
+STAT_TT = StatThenThreshold.order
+TT_STAT = ThresholdThenStat.order
+
+
 @dataclass(frozen=True)
 class PlotStyle:
-    """Presentation for one metric: one colourbar label **per reduction order**, and a tick formatter.
+    """Presentation for one metric: one colourbar label template **per reduction order**, and a tick formatter.
 
-    MTT and TTMPO do not compute the same quantity, so one string cannot describe both.
-    MTT (DEC-027) takes the cross-season median CT per day and *then* folds the kernel over
-    days: the result is a date read off a smoothed series, so a mid-season thaw is averaged
-    out before the kernel ever sees it — it is not a statistic over dates. TTMPO (DEC-053)
-    folds the kernel per season and *then* averages across seasons: that one is.
+    The two orders do not compute the same quantity, so one string cannot describe both.
+    Stat-then-threshold (DEC-027) collapses the seasons per day and *then* folds the kernel:
+    the result is a date read off a smoothed series, so a mid-season thaw is averaged out
+    before the kernel ever sees it — it is not a statistic over dates. Threshold-then-stat
+    (DEC-049) folds the kernel per season and *then* collapses: that one is. Hence
+    "First date the {stat} CT reaches ≥ 4/10" against "{Stat} date of freeze-up".
 
     Counts are always in days (``TierProduct`` scales a weekly source's step counts by
     ``step_days``), so no label has to interpolate the source's observation unit.
     """
 
     title: str                   # metric name — the figure title; suffixed "date" / "duration"
-    label: dict[str, str]        # reduction slug -> colourbar label
+    label: dict[str, str]        # reduction order -> colourbar label template
     format_ticks: Callable[[list[float]], list[str]]
 
 
 PLOT_STYLES: dict[str, PlotStyle] = {
     "freeze_up_date": PlotStyle("Freeze-up", {
-        "mtt": "First date the median CT reaches ≥ 4/10",
-        "ttmpo": "MPO mean date of freeze-up (CT ≥ 4/10)",
+        STAT_TT: "First date the {stat} CT reaches ≥ 4/10",
+        TT_STAT: "{Stat} date of freeze-up (CT ≥ 4/10)",
     }, _date_ticks),
     "breakup_date": PlotStyle("Break-up", {
-        "mtt": "First date the median CT falls < 4/10",
-        "ttmpo": "MPO mean date of break-up (CT < 4/10)",
+        STAT_TT: "First date the {stat} CT falls < 4/10",
+        TT_STAT: "{Stat} date of break-up (CT < 4/10)",
     }, _date_ticks),
     "first_occurrence_date": PlotStyle("First occurrence", {
-        "mtt": "First date the median CT reaches ≥ 1/10",
-        "ttmpo": "MPO mean date of first ice occurrence (CT ≥ 1/10)",
+        STAT_TT: "First date the {stat} CT reaches ≥ 1/10",
+        TT_STAT: "{Stat} date of first ice occurrence (CT ≥ 1/10)",
     }, _date_ticks),
     "last_occurrence_date": PlotStyle("Last occurrence", {
-        "mtt": "Last date the median CT holds ≥ 1/10",
-        "ttmpo": "MPO mean date of last ice occurrence (CT ≥ 1/10)",
+        STAT_TT: "Last date the {stat} CT holds ≥ 1/10",
+        TT_STAT: "{Stat} date of last ice occurrence (CT ≥ 1/10)",
     }, _date_ticks),
     "closing_date": PlotStyle("Season closing (8/10)", {
-        "mtt": "First date the median CT reaches ≥ 8/10",
-        "ttmpo": "MPO mean date of season closing (CT ≥ 8/10)",
+        STAT_TT: "First date the {stat} CT reaches ≥ 8/10",
+        TT_STAT: "{Stat} date of season closing (CT ≥ 8/10)",
     }, _date_ticks),
     "opening_date": PlotStyle("Season opening (8/10)", {
-        "mtt": "First date the median CT falls < 8/10",
-        "ttmpo": "MPO mean date of season opening (CT < 8/10)",
+        STAT_TT: "First date the {stat} CT falls < 8/10",
+        TT_STAT: "{Stat} date of season opening (CT < 8/10)",
     }, _date_ticks),
     "formation_lag": PlotStyle("Formation lag", {
-        "mtt": "Formation lag (days from median CT ≥ 1/10 to median CT ≥ 4/10)",
-        "ttmpo": "MPO mean formation lag (days from CT ≥ 1/10 to CT ≥ 4/10)",
+        STAT_TT: "Formation lag (days from {stat} CT ≥ 1/10 to {stat} CT ≥ 4/10)",
+        TT_STAT: "{Stat} formation lag (days from CT ≥ 1/10 to CT ≥ 4/10)",
     }, _count_ticks),
     "melt_lag": PlotStyle("Melt lag", {
-        "mtt": "Melt lag (days from median CT < 4/10 to median CT < 1/10)",
-        "ttmpo": "MPO mean melt lag (days from CT < 4/10 to CT < 1/10)",
+        STAT_TT: "Melt lag (days from {stat} CT < 4/10 to {stat} CT < 1/10)",
+        TT_STAT: "{Stat} melt lag (days from CT < 4/10 to CT < 1/10)",
     }, _count_ticks),
     "season_duration": PlotStyle("Season duration (4/10)", {
-        "mtt": "Ice presence (days with median CT ≥ 4/10)",
-        "ttmpo": "MPO mean ice presence (days, CT ≥ 4/10)",
+        STAT_TT: "Ice presence (days with {stat} CT ≥ 4/10)",
+        TT_STAT: "{Stat} ice presence (days, CT ≥ 4/10)",
     }, _count_ticks),
     "season_duration_10": PlotStyle("Season duration (1/10)", {
-        "mtt": "Ice presence (days with median CT ≥ 1/10)",
-        "ttmpo": "MPO mean ice presence (days, CT ≥ 1/10)",
+        STAT_TT: "Ice presence (days with {stat} CT ≥ 1/10)",
+        TT_STAT: "{Stat} ice presence (days, CT ≥ 1/10)",
     }, _count_ticks),
     "storm_exposure_duration": PlotStyle("Storm exposure duration", {
-        "mtt": "Storm exposure (days with median CT ≤ 3/10)",
-        "ttmpo": "MPO mean storm exposure duration (days, CT ≤ 3/10)",
+        STAT_TT: "Storm exposure (days with {stat} CT ≤ 3/10)",
+        TT_STAT: "{Stat} storm exposure duration (days, CT ≤ 3/10)",
     }, _count_ticks),
     "landfast_freeze_up_date": PlotStyle("Landfast freeze-up", {
-        "mtt": "First date the median FA = '08' > 0.5",
-        "ttmpo": "MPO mean date of landfast freeze-up (FA = '08')",
+        STAT_TT: "First date the {stat} FA = '08' > 0.5",
+        TT_STAT: "{Stat} date of landfast freeze-up (FA = '08')",
     }, _date_ticks),
     "landfast_breakup_date": PlotStyle("Landfast break-up", {
-        "mtt": "First date the median FA = '08' falls < 0.5",
-        "ttmpo": "MPO mean date of landfast break-up (FA = '08')",
+        STAT_TT: "First date the {stat} FA = '08' falls < 0.5",
+        TT_STAT: "{Stat} date of landfast break-up (FA = '08')",
     }, _date_ticks),
     "landfast_duration": PlotStyle("Landfast ice duration", {
-        "mtt": "Landfast ice presence (days with median FA = '08' > 0.5)",
-        "ttmpo": "MPO mean landfast ice presence (days, FA = '08')",
+        STAT_TT: "Landfast ice presence (days with {stat} FA = '08' > 0.5)",
+        TT_STAT: "{Stat} landfast ice presence (days, FA = '08')",
     }, _count_ticks),
     "landfast_exposure": PlotStyle("Landfast absence duration", {
-        "mtt": "Landfast exposure (days with median FA = '08' < 0.5)",
-        "ttmpo": "MPO mean landfast exposure (days, FA ≠ '08')",
+        STAT_TT: "Landfast exposure (days with {stat} FA = '08' < 0.5)",
+        TT_STAT: "{Stat} landfast exposure (days, FA ≠ '08')",
     }, _count_ticks),
     # Developed ice = the joint state CT ≥ 8/10 AND mean thickness ≥ 0.225 m (grey-white ice); its
     # clearing/absence is the De Morgan complement (either criterion below).
     "developed_ice_freeze_up_date": PlotStyle("Developed ice freeze-up", {
-        "mtt": "First date the median CT reaches ≥ 8/10 with median thickness ≥ 0.225 m",
-        "ttmpo": "MPO mean date of developed-ice freeze-up (CT ≥ 8/10, thickness ≥ 0.225 m)",
+        STAT_TT: "First date the {stat} CT reaches ≥ 8/10 with {stat} thickness ≥ 0.225 m",
+        TT_STAT: "{Stat} date of developed-ice freeze-up (CT ≥ 8/10, thickness ≥ 0.225 m)",
     }, _date_ticks),
     "developed_ice_breakup_date": PlotStyle("Developed ice break-up", {
-        "mtt": "First date the median CT falls < 8/10 or median thickness < 0.225 m",
-        "ttmpo": "MPO mean date of developed-ice break-up (CT < 8/10 or thickness < 0.225 m)",
+        STAT_TT: "First date the {stat} CT falls < 8/10 or {stat} thickness < 0.225 m",
+        TT_STAT: "{Stat} date of developed-ice break-up (CT < 8/10 or thickness < 0.225 m)",
     }, _date_ticks),
     "developed_ice_duration": PlotStyle("Developed ice duration", {
-        "mtt": "Developed ice presence (days with median CT ≥ 8/10 and median thickness ≥ 0.225 m)",
-        "ttmpo": "MPO mean developed ice presence (days, CT ≥ 8/10 and thickness ≥ 0.225 m)",
+        STAT_TT: "Developed ice presence (days with {stat} CT ≥ 8/10 and {stat} thickness ≥ 0.225 m)",
+        TT_STAT: "{Stat} developed ice presence (days, CT ≥ 8/10 and thickness ≥ 0.225 m)",
     }, _count_ticks),
     "developed_ice_exposure": PlotStyle("Developed ice absence duration", {
-        "mtt": "Developed ice absence (days with median CT < 8/10 or median thickness < 0.225 m)",
-        "ttmpo": "MPO mean developed ice absence (days, CT < 8/10 or thickness < 0.225 m)",
+        STAT_TT: "Developed ice absence (days with {stat} CT < 8/10 or {stat} thickness < 0.225 m)",
+        TT_STAT: "{Stat} developed ice absence (days, CT < 8/10 or thickness < 0.225 m)",
     }, _count_ticks),
 }
 
@@ -223,13 +232,15 @@ def metric_title(metric: MetricSpec) -> str:
 
 
 def metric_label(metric: MetricSpec) -> str:
-    """The metric's colourbar label for the reduction order it was actually computed under."""
+    """The metric's colourbar label for the reduction order it was computed under, naming that order's statistic."""
     labels = PLOT_STYLES[metric.slug].label
-    slug = metric.reduction.slug
-    if slug not in labels:
-        raise KeyError(f"No label for metric '{metric.slug}' under reduction '{slug}' — "
-                       f"PLOT_STYLES carries {sorted(labels)}.")
-    return labels[slug]
+    reduction = metric.reduction
+    if reduction.order not in labels:
+        raise KeyError(f"No label for metric '{metric.slug}' under the "
+                       f"'{reduction.order}' order — PLOT_STYLES carries {sorted(labels)}.")
+    stat = reduction.stat_name
+    # `.capitalize()` would lowercase the rest and turn "MPO mean" into "Mpo mean".
+    return labels[reduction.order].format(stat=stat, Stat=stat[0].upper() + stat[1:])
 
 
 # Threshold direction, read off the kernel rather than restated: ThresholdDate says which
@@ -248,12 +259,19 @@ def _kernel_threshold(kernel, field: str) -> str:
     return f"{field} {op} {round(kernel.threshold[0] * 10)}/10"
 
 
+_COVERAGE_CLAUSE = f"cells need ≥ {MPO_MIN_SEASON_COVERAGE:.0%} season coverage"
+
 REDUCTION_NOTES: dict[str, str] = {
-    "mtt": "Method: median-then-threshold (cross-season median CT per day, then the crossing)",
+    "mediantt": "Method: median-then-threshold (cross-season median CT per day, then the crossing)",
+    "meantt": "Method: mean-then-threshold (cross-season mean CT per day, then the crossing)",
+    "ttmedian": ("Method: threshold-then-median (per-season crossing, then their cross-season "
+                 f"median — a season without a crossing drops out; {_COVERAGE_CLAUSE})"),
+    "ttmean": ("Method: threshold-then-mean (per-season crossing, then their cross-season "
+               f"mean — a season without a crossing drops out; {_COVERAGE_CLAUSE})"),
     "ttmpo": ("Method: threshold-then-MPO-mean (per-season crossing, then the sum over the "
-              "seasons with an event divided by the full record length — an event-less season "
-              "counts as zero, i.e. Dec 31 for a date and 0 d for a count; cells need "
-              f"≥ {MPO_MIN_SEASON_COVERAGE:.0%} season coverage)"),
+              "seasons with a crossing divided by the full record length — a season without "
+              "one counts as zero, i.e. Dec 31 for a date and 0 d for a count; "
+              f"{_COVERAGE_CLAUSE})"),
 }
 
 
@@ -671,7 +689,7 @@ def _assert_comparable(panels: list[MetricPanel], metric: MetricSpec) -> None:
 def _assert_one_reduction(panels: list[MetricPanel], metric: MetricSpec) -> None:
     """The rasters must come from the reduction order the figure claims to label.
 
-    MTT and TTM compute different quantities from the same charts, so a figure labelled for
+    The reduction orders compute different quantities from the same charts, so a figure labelled for
     one and drawn from the other's archives is silently wrong.
     """
     wrong = sorted({p.reduction for p in panels} - {metric.reduction.slug})

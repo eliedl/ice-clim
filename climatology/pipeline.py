@@ -91,7 +91,7 @@ class TierProduct:
 def _label(ctx: RunContext, group: list[TierProduct], *, composite: bool) -> str:
     """Product-file label for a writer group: a resolution tag (with the tier level
     for nested regions, or ``"adaptive"`` for a composite), suffixed with the
-    temporal method for non-default (TTM) products so MTT and TTM outputs coexist."""
+    reduction slug for non-default products so every reducer's outputs coexist."""
     multi = len(ctx.region.tiers) > 1
     if composite:
         base = "adaptive" if multi else f"{int(round(ctx.region.tiers[0].res_m))}m"

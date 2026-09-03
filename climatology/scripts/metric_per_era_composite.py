@@ -63,7 +63,7 @@ def _load_panel(region: str, metric: str, period: str, source: str,
 
 
 def _composite_path(region: str, metric: str, reduction: str) -> Path:
-    """Output path for the per-era composite; the non-default reduction is suffixed so MTT and TTM composites coexist (as their tier products do)."""
+    """Output path for the per-era composite; the non-default reduction is suffixed so every reducer's composites coexist (as their tier products do)."""
     tag = "" if reduction == MEDIAN_THEN_THRESHOLD.slug else f"_{reduction}"
     return OUTPUT_DIR / region / metric / f"{metric}_{region}_eras{tag}.png"
 

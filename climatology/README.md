@@ -12,12 +12,14 @@ metric. Two things vary independently, and the design keeps them orthogonal:
 
 - **The kernel** — *what* is measured along the day axis (a crossing date, a lag between two
   crossings, a day count).
-- **The reduction order** — *when* the cross-season median is taken, before the kernel fold
-  (MTT, DEC-027) or after it (TTM, DEC-049).
+- **The reduction** — *when* the season axis is collapsed, before the kernel fold
+  (`{median,mean}tt`, DEC-027) or after it (`tt{median,mean,mpo}`, DEC-049), and *with which
+  statistic* (DEC-054).
 
 Kernels fold a `SliceStream` and preserve whatever shape they are fed, so the same three kernels
-serve both orders: MTT streams a `(n_wet,)` median vector per day, TTM streams the full
-`(n_seasons, n_wet)` day stack and folds every season in parallel.
+serve both orders: a stat-first order streams a `(n_wet,)` collapsed vector per day, a
+threshold-first order streams the full `(n_seasons, n_wet)` day stack and folds every season in
+parallel.
 
 ### Reduction flow
 
@@ -29,10 +31,10 @@ flowchart TD
 
     BURN --> ORDER{"Reduction order"}
 
-    ORDER -->|"MTT — MedianThenThreshold (DEC-027)"| MED1["_nanmedian_high across seasons<br/>→ WetVector (n_wet,)"]
-    MED1 --> STREAM_M["SliceStream: (ordinal, WetVector)"]
+    ORDER -->|"StatThenThreshold (DEC-027)<br/>mediantt · meantt"| MED1["stat across seasons<br/>→ VarWetVector (n_vars, n_wet)"]
+    MED1 --> STREAM_M["SliceStream: (ordinal, VarWetVector)"]
 
-    ORDER -->|"TTMPO — ThresholdThenMPOMean (DEC-053)"| STREAM_T["SliceStream: (ordinal, WetStack)"]
+    ORDER -->|"ThresholdThenStat (DEC-049)<br/>ttmedian · ttmean · ttmpo"| STREAM_T["SliceStream: (ordinal, VarWetStack)"]
 
     STREAM_M --> K
     STREAM_T --> K
@@ -44,11 +46,11 @@ flowchart TD
         KC["ThresholdDuration(threshold, op)<br/>op=ge → duration · op=le/lt → exposure<br/>→ count of admissible days"]
     end
 
-    K --> OUT_M["MTT: result is a WetVector"]
-    K --> OUT_T["TTM: result is a WetStack<br/>(one fold per season, in parallel)"]
+    K --> OUT_M["stat-first: result is a WetVector"]
+    K --> OUT_T["threshold-first: result is a WetStack<br/>(one fold per season, in parallel)"]
 
     OUT_T --> COV["season-coverage gate<br/>n_valid ≥ ceil(0.5 × n_seasons)"]
-    COV --> MED2["np.nanmedian across seasons<br/>→ WetVector"]
+    COV --> MED2["stat across seasons<br/>→ WetVector"]
 
     OUT_M --> SCAT["_scatter_to_grid<br/>wet vector → (H, W), NaN off-mask"]
     MED2 --> SCAT
@@ -59,8 +61,13 @@ Two details that are easy to miss when reading `reductions.py`:
 
 - `SliceStream` is a zero-arg factory rather than a bare iterator because `ThresholdDateDelta`
   folds the same stream twice.
-- TTM medians with interpolating `np.nanmedian`, MTT with `_nanmedian_high`. This asymmetry is
-  provisional, pending MPO ground-truth validation (DEC-049).
+- Both orders median with `_nanmedian_high`, never the interpolating `np.nanmedian`: the
+  DEC-035 argument applies to the per-season *dates* as much as to the CT series, since an
+  interpolated median lands between two weekly charts, on a day no chart was published for.
+- `ttmpo` differs from `ttmean` only in its denominator — the record length rather than the
+  seasons that crossed — so a season without a crossing dilutes the cell instead of dropping
+  out (DEC-053). The 50 % coverage gate is identical across all three threshold-first
+  variants, so a comparison between them isolates the statistic alone.
 
 ### Metric → kernel bindings
 
@@ -91,4 +98,4 @@ flowchart LR
 ```
 
 Thresholds are CT fractions; `landfast_*` metrics additionally carry a tier restriction (see
-`metrics.py`). Reduction orders are selected on the CLI via `--reduction {mtt,ttmpo}`.
+`metrics.py`). Reductions are selected on the CLI via `--reduction {mediantt,meantt,ttmedian,ttmean,ttmpo}`.

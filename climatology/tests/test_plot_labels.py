@@ -1,6 +1,6 @@
 """Every metric must carry a label for every reduction order — and say the right thing.
 
-MTT and TTMPO compute different quantities from the same charts, so a label written for one
+The two orders compute different quantities from the same charts, so a label written for one
 is wrong on the other. That drifted twice already (the kernel moved to ``first_below`` and
 the prose stayed at ``>=``), so the invariant is pinned here rather than left to review.
 """
@@ -76,28 +76,30 @@ def test_every_metric_has_a_label_per_reduction(slug: str, reduction: str):
 
 
 @pytest.mark.parametrize(("slug", "reduction"), SPECS)
-def test_mtt_and_ttmpo_labels_differ(slug: str, reduction: str):
-    """The two orders never share a label: they do not describe the same quantity."""
+def test_every_reducer_gets_its_own_label(slug: str, reduction: str):
+    """No two reducers share a label: they differ in order, in statistic, or in both."""
     labels = {metric_label(_spec(slug, red)) for red in REDUCTIONS}
     assert len(labels) == len(REDUCTIONS)
 
 
 @pytest.mark.parametrize("slug", sorted(CLIMATOLOGICAL_METRICS))
-def test_mtt_labels_name_the_median_series(slug: str):
-    """Under MTT the number is a crossing of the cross-season *median* series — say so."""
-    assert "median" in metric_label(_spec(slug, "mtt")).lower()
+def test_stat_then_threshold_labels_name_the_series(slug: str):
+    """Under a stat-first order the number is a crossing of the collapsed *series* — the label says which statistic collapsed it."""
+    for reduction, stat in (("mediantt", "median"), ("meantt", "mean")):
+        assert stat in metric_label(_spec(slug, reduction)).lower()
 
 
 @pytest.mark.parametrize("slug", sorted(CLIMATOLOGICAL_METRICS))
-def test_ttmpo_labels_name_the_cross_season_statistic(slug: str):
-    """Under TTMPO the number is MPO's fixed-denominator mean of per-season values — not a median, and not a plain mean."""
-    assert metric_label(_spec(slug, "ttmpo")).lower().startswith("mpo mean")
+def test_threshold_then_stat_labels_open_on_the_statistic(slug: str):
+    """Under a threshold-first order the number *is* a statistic of per-season values, so the label leads with which one — and MPO's fixed-denominator mean is neither a median nor a plain mean."""
+    for reduction, stat in (("ttmedian", "median"), ("ttmean", "mean"), ("ttmpo", "mpo mean")):
+        assert metric_label(_spec(slug, reduction)).lower().startswith(stat)
 
 
 @pytest.mark.parametrize("slug", sorted(CLIMATOLOGICAL_METRICS))
 def test_label_agrees_with_the_kernel_threshold(slug: str):
     """A label must not claim a crossing the kernel does not compute (the drift that bit twice)."""
-    spec = _spec(slug, "mtt")
+    spec = _spec(slug, "mediantt")
     if spec.fields[0] != "CT":          # landfast runs on the FA indicator, not a concentration
         return
     if len(spec.conversion.value_cols) > 1:
@@ -110,9 +112,10 @@ def test_label_agrees_with_the_kernel_threshold(slug: str):
             f"{slug}: label {label!r} does not carry the kernel's crossing {clause!r}")
 
 
-def test_ttmpo_note_states_the_season_coverage_rule():
-    """TTMPO drops cells short of the MPO coverage rule; the figure has to admit that."""
-    note = reduction_note(_spec("breakup_date", "ttmpo"))
+@pytest.mark.parametrize("reduction", ["ttmedian", "ttmean", "ttmpo"])
+def test_threshold_first_notes_state_the_season_coverage_rule(reduction: str):
+    """Every threshold-first order drops cells short of the MPO coverage rule; the figure has to admit that."""
+    note = reduction_note(_spec("breakup_date", reduction))
     assert "50%" in note and "coverage" in note
 
 

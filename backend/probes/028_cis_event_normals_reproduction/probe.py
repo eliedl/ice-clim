@@ -63,7 +63,7 @@ OUTPUT_DIR = Path(__file__).parent / "output"
 REGION = "sept-iles"
 SOURCE = "sgrdr"
 PERIOD = "1991-2020"
-REDUCTION = "mtt"
+REDUCTION = "mediantt"  # was "mtt" before the reducer family was named (DEC-054)
 
 # CIS weekly quantization: the bands the agreement rates are keyed to.
 AGREEMENT_BANDS_D = (3.5, 7.0, 14.0)

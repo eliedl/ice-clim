@@ -26,7 +26,7 @@ sys.path.insert(0, str(Path(__file__).parents[1]))
 
 from climatology.pipeline import run
 from climatology.processing.metrics import METRICS
-from climatology.processing.reductions import REDUCTIONS
+from climatology.processing.reductions import MEDIAN_THEN_THRESHOLD, REDUCTIONS
 from climatology.processing.regions import REGIONS
 from climatology.services.export import WRITERS
 from climatology.services.sources import CHART_TABLES
@@ -55,9 +55,12 @@ def _parse_args() -> argparse.Namespace:
     p.add_argument("--period", type=_parse_period, default="2011-2020",
                    metavar="YYYY-YYYY",
                    help="Climatology period in winters (default: 2011-2020).")
-    p.add_argument("--reduction", choices=sorted(REDUCTIONS), default="mtt",
-                   help="Reduction order: mtt = median-then-threshold "
-                        "(default, DEC-027); ttmpo = threshold-then-MPO-mean (DEC-053).")
+    p.add_argument("--reduction", choices=sorted(REDUCTIONS),
+                   default=MEDIAN_THEN_THRESHOLD.slug,
+                   help="Reduction order — {median,mean}tt collapses the seasons per day and "
+                        "then folds the kernel (DEC-027); tt{median,mean,mpo} folds per season "
+                        "and then collapses (DEC-049/053). Default: "
+                        f"{MEDIAN_THEN_THRESHOLD.slug}.")
     p.add_argument("--output", nargs="+", choices=sorted(WRITERS), default=None, metavar="FMT",
                    help="Output format(s) to write, e.g. --output png netcdf. Default: the "
                         f"metric's default (png for climatology). Choices: {', '.join(sorted(WRITERS))}.")

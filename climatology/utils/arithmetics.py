@@ -28,6 +28,19 @@ def _nanmedian_high(a: Float[np.ndarray, "n_seasons *rest"]) -> Float[np.ndarray
     return out
 
 
+def _nanmean(a: Float[np.ndarray, "n_seasons *rest"]) -> Float[np.ndarray, "*rest"]:
+    """Nan-aware mean along axis 0 — ``np.nanmean`` without its all-NaN ``RuntimeWarning``.
+
+    Unlike ``_nanmedian_high`` the result is *not* drawn from the sample, so it can
+    fall between two representable values; that is the reducer's choice to make,
+    not this helper's (DEC-054).
+    """
+    n = np.sum(~np.isnan(a), axis=0)
+    out = np.nansum(a, axis=0) / np.maximum(n, 1).astype(a.dtype)
+    out[n == 0] = np.nan
+    return out
+
+
 def percentile_range(
     arr,
     low: float = 0,
