@@ -32,7 +32,7 @@ flowchart TD
     ORDER -->|"MTT — MedianThenThreshold (DEC-027)"| MED1["_nanmedian_high across seasons<br/>→ WetVector (n_wet,)"]
     MED1 --> STREAM_M["SliceStream: (ordinal, WetVector)"]
 
-    ORDER -->|"TTM — ThresholdThenMedian (DEC-049)"| STREAM_T["SliceStream: (ordinal, WetStack)"]
+    ORDER -->|"TTMPO — ThresholdThenMPOMean (DEC-053)"| STREAM_T["SliceStream: (ordinal, WetStack)"]
 
     STREAM_M --> K
     STREAM_T --> K
@@ -91,4 +91,4 @@ flowchart LR
 ```
 
 Thresholds are CT fractions; `landfast_*` metrics additionally carry a tier restriction (see
-`metrics.py`). Reduction orders are selected on the CLI via `--temporal {mtt,ttm}`.
+`metrics.py`). Reduction orders are selected on the CLI via `--reduction {mtt,ttmpo}`.

@@ -112,7 +112,7 @@ def find_archived(slug: str, metric_slug: str, *, period_slug: str, source_slug:
     """Newest archived raster for one product, selected on its manifest — never on its filename.
 
     A filename glob cannot separate the reduction orders: the MTT label (``fine_100m``) is a
-    *prefix* of the TTM one (``fine_100m_ttm``), so ``*_fine_*`` matches both and the newest
+    *prefix* of the TTMPO one (``fine_100m_ttmpo``), so ``*_fine_*`` matches both and the newest
     hit may be the wrong reduction. The manifest states ``tier`` and ``reduction`` outright.
 
     Returns the ``.npz`` path and its manifest (bounds, grid_res_m, ... for the caller).

@@ -57,7 +57,7 @@ def _parse_args() -> argparse.Namespace:
                    help="Climatology period in winters (default: 2011-2020).")
     p.add_argument("--reduction", choices=sorted(REDUCTIONS), default="mtt",
                    help="Reduction order: mtt = median-then-threshold "
-                        "(default, DEC-027); ttm = threshold-then-median (DEC-049).")
+                        "(default, DEC-027); ttmpo = threshold-then-MPO-mean (DEC-053).")
     p.add_argument("--output", nargs="+", choices=sorted(WRITERS), default=None, metavar="FMT",
                    help="Output format(s) to write, e.g. --output png netcdf. Default: the "
                         f"metric's default (png for climatology). Choices: {', '.join(sorted(WRITERS))}.")

@@ -16,7 +16,7 @@ from dataclasses import replace
 
 from climatology.pipeline import FetchResult, _compute_raster
 from climatology.processing.metrics import METRICS
-from climatology.processing.reductions import THRESHOLD_THEN_MEDIAN
+from climatology.processing.reductions import THRESHOLD_THEN_MPO_MEAN
 from climatology.processing.rasterize import build_grid
 from climatology.processing.regions import Tier
 from climatology.services.temporal import day_of_season
@@ -148,13 +148,20 @@ def test_filter_admissible_days_drops_under_covered_days():
         "well-covered day survives; the under-covered day is dropped"
 
 
-def _ttm(metric):
-    """The TTM variant of a registry metric — mirrors pipeline._resolve."""
-    return replace(metric, reduction=THRESHOLD_THEN_MEDIAN)
+def _ttmpo(metric):
+    """The TTMPO variant of a registry metric — mirrors pipeline._resolve."""
+    return replace(metric, reduction=THRESHOLD_THEN_MPO_MEAN)
 
 
-def _mtt_vs_ttm_fixture():
-    """Two winters, 4x4 grid: the left half freezes on the first HD in 2001 but only on the second in 2002."""
+def _mtt_vs_ttmpo_fixture():
+    """Two winters, 4x4 grid: the left half freezes on the first HD in 2001 but only on the second in 2002.
+
+                    01-01 01-08          ('#' compact ice, '.' open water)
+        2001   left    #     #
+               right   .     .
+        2002   left    .     #
+               right   .     .
+    """
     left, right = box(0, 0, 2, 4), box(2, 0, 4, 4)
     left_ct = {"2001-01-01": "92", "2001-01-08": "92", "2002-01-01": "00", "2002-01-08": "92"}
     rows = []
@@ -164,37 +171,174 @@ def _mtt_vs_ttm_fixture():
     return pd.DataFrame(rows)
 
 
-def test_ttm_freeze_up_interpolating_median():
-    """TTM freeze-up = interpolating nanmedian of per-season crossings {Jan 1, Jan 8} -> their midpoint (DEC-049)."""
-    out = _raster(_ttm(METRICS["freeze_up_date"]), _mtt_vs_ttm_fixture(), _synthetic_tier(land_mask=None))
+def test_ttmpo_freeze_up_full_coverage_mean():
+    """Every season carries the event, so nothing is diluted: the mean of {Jan 1, Jan 8} is their midpoint (DEC-053).
+
+        left half   01-01 01-08   crossing
+        2001          #     #      Jan 1
+        2002          .     #      Jan 8      -> (1 + 8)/2 = 4.5 -> Jan 4.5
+    """
+    out = _raster(_ttmpo(METRICS["freeze_up_date"]), _mtt_vs_ttmpo_fixture(),
+                  _synthetic_tier(land_mask=None))
     mid = (day_of_season("01-01") + day_of_season("01-08")) / 2
-    assert np.all(out[:, :2] == mid), "median of the two per-season dates"
+    assert np.all(out[:, :2] == mid), "mean of the two per-season dates"
     assert np.all(np.isnan(out[:, 2:])), "never-freezing water stays NaN"
 
 
-def test_mtt_freeze_up_disagrees_with_ttm():
+def test_mtt_freeze_up_disagrees_with_ttmpo():
     """Same rows, MTT order: the upper-middle median CT already crosses on the first HD."""
-    out = _raster(METRICS["freeze_up_date"], _mtt_vs_ttm_fixture(), _synthetic_tier(land_mask=None))
+    out = _raster(METRICS["freeze_up_date"], _mtt_vs_ttmpo_fixture(), _synthetic_tier(land_mask=None))
     assert np.all(out[:, :2] == day_of_season("01-01"))
 
 
-def test_ttm_duration_median_of_counts():
-    """TTM duration = median of per-season counts {2, 1} -> 1.5; observed ice-free water -> 0, not NaN."""
-    out = _raster(_ttm(METRICS["season_duration"]), _mtt_vs_ttm_fixture(), _synthetic_tier(land_mask=None))
-    assert np.all(out[:, :2] == 1.5), "interpolating median of {2, 1}"
+def test_ttmpo_duration_mean_of_counts():
+    """TTMPO duration = mean of per-season counts {2, 1} -> 1.5; observed ice-free water -> 0, not NaN.
+
+        left half   01-01 01-08   count
+        2001          #     #       2
+        2002          .     #       1        -> (2 + 1)/2 = 1.5
+    """
+    out = _raster(_ttmpo(METRICS["season_duration"]), _mtt_vs_ttmpo_fixture(),
+                  _synthetic_tier(land_mask=None))
+    assert np.all(out[:, :2] == 1.5), "mean of {2, 1}"
     assert np.all(out[:, 2:] == 0), "observed ice-free water counts 0"
 
 
-def test_ttm_season_coverage_rule():
-    """Cells with an event in fewer than 50% of seasons are masked (MPO rule, DEC-049)."""
+def test_ttmpo_season_coverage_rule():
+    """Cells with an event in fewer than 50% of seasons are masked (MPO rule, DEC-049).
+
+                    01-01        left: 3/3 seasons -> kept
+        2001   left    #         right: 1/3 < ceil(0.5 x 3) = 2 -> masked
+               right   #
+        2002   left    #
+               right   .
+        2003   left    #
+               right   .
+    """
     left, right = box(0, 0, 2, 4), box(2, 0, 4, 4)
     rows = []
     for yr, right_ct in ((2001, "92"), (2002, "00"), (2003, "00")):
         rows.append({"obs_date": f"{yr}-01-01", "ct_code": "92", "geometry": left})
         rows.append({"obs_date": f"{yr}-01-01", "ct_code": right_ct, "geometry": right})
-    out = _raster(_ttm(METRICS["freeze_up_date"]), pd.DataFrame(rows), _synthetic_tier(land_mask=None))
+    out = _raster(_ttmpo(METRICS["freeze_up_date"]), pd.DataFrame(rows),
+                  _synthetic_tier(land_mask=None))
     assert np.all(out[:, :2] == day_of_season("01-01")), "3/3 seasons -> kept"
     assert np.all(np.isnan(out[:, 2:])), "1/3 seasons < 50% -> masked"
+
+
+# --- The fixed denominator: what an event-less season does to each kernel (DEC-053) ---
+
+def _sparse_fixture(days: dict[str, str], ice_seasons: tuple[int, ...],
+                    seasons: tuple[int, ...] = (2001, 2002, 2003, 2004, 2005)):
+    """Every season charted on every day of ``days``, but only ``ice_seasons`` carry its CT codes.
+
+    The left half is the cell under test, the right half is always open water — a
+    "nothing ever happens here" control. With ``days={"01-15": "92"}`` and
+    ``ice_seasons=(2001, 2002, 2003)``:
+
+        left half   01-15         ('#' the day's ct_code, '.' open water "00")
+        2001          #
+        2002          #
+        2003          #
+        2004          .           charted, but ice-free — a NaN crossing, not a missing season
+        2005          .
+    """
+    left, right = box(0, 0, 2, 4), box(2, 0, 4, 4)
+    rows = []
+    for yr in seasons:
+        for md, ct in days.items():
+            rows.append({"obs_date": f"{yr}-{md}", "geometry": left,
+                         "ct_code": ct if yr in ice_seasons else "00"})
+            rows.append({"obs_date": f"{yr}-{md}", "ct_code": "00", "geometry": right})
+    return pd.DataFrame(rows)
+
+
+def test_ttmpo_date_dilutes_event_less_seasons_toward_dec_31():
+    """3 of 5 seasons cross on Jan 15: MPO sums their signed DOY over a FIXED 5, so the two ice-free winters pull the date back to Jan 9.
+
+        left half   01-15   crossing   signed DOY (Dec 31 = 0)
+        2001          #      Jan 15         15
+        2002          #      Jan 15         15
+        2003          #      Jan 15         15
+        2004          .      none            0   <- the zero is Dec 31, not the Sep-1 origin
+        2005          .      none            0
+                                        sum 45 / 5 = 9 -> Jan 9
+
+    A mean over the contributing seasons only would say Jan 15; summing raw season
+    ordinals with no zero-point would say Nov 21, earlier than any observation on record.
+    """
+    out = _raster(_ttmpo(METRICS["first_occurrence_date"]),
+                  _sparse_fixture({"01-15": "92"}, ice_seasons=(2001, 2002, 2003)),
+                  _synthetic_tier(land_mask=None))
+    assert np.all(out[:, :2] == day_of_season("01-09")), "45/5 = 9 -> Jan 9"
+    assert day_of_season("01-09") - day_of_season("12-31") * (1 - 3 / 5) == 81.6, \
+        "no zero-point would put it 48.4 d earlier, at ordinal 81.6 = Nov 21"
+
+
+def test_ttmpo_date_equals_a_plain_mean_at_full_coverage():
+    """With every season contributing, the fixed denominator is the real one and the zero-point cancels.
+
+        left half   01-15   crossing
+        2001-2005     #      Jan 15    -> 15 x 5 / 5 = 15 -> Jan 15
+    """
+    out = _raster(_ttmpo(METRICS["first_occurrence_date"]),
+                  _sparse_fixture({"01-15": "92"}, ice_seasons=(2001, 2002, 2003, 2004, 2005)),
+                  _synthetic_tier(land_mask=None))
+    assert np.all(out[:, :2] == day_of_season("01-15"))
+
+
+def test_ttmpo_date_differs_from_the_median_of_the_same_seasons():
+    """Over a 3-season record the median of {Jan 1, Jan 8} says Jan 4.5; MPO's fixed denominator says Jan 3.
+
+        left half   01-01 01-08   crossing   signed DOY
+        2001          #     #      Jan 1          1
+        2002          .     #      Jan 8          8
+        2003          .     .      none           0
+                                    MPO    (1 + 8)/3 = 3   -> Jan 3
+                                    median  of {1, 8}      -> Jan 4.5
+    """
+    left, right = box(0, 0, 2, 4), box(2, 0, 4, 4)
+    left_ct = {2001: {"01-01": "92", "01-08": "92"},
+               2002: {"01-01": "00", "01-08": "92"},
+               2003: {"01-01": "00", "01-08": "00"}}
+    rows = [{"obs_date": f"{yr}-{md}", "ct_code": code, "geometry": geom}
+            for yr, days in left_ct.items() for md, ct in days.items()
+            for geom, code in ((left, ct), (right, "00"))]
+    out = _raster(_ttmpo(METRICS["first_occurrence_date"]), pd.DataFrame(rows),
+                  _synthetic_tier(land_mask=None))
+    assert np.all(out[:, :2] == day_of_season("01-03")), "(1 + 8)/3 = 3 -> Jan 3"
+
+
+def test_ttmpo_duration_needs_no_zero_point():
+    """A step count already reads 0 for a season without ice, so no zero-point is applied.
+
+        left half   01-01 01-08   count
+        2001          #     #       2
+        2002          #     #       2
+        2003          #     #       2
+        2004          .     .       0
+        2005          .     .       0        -> 6/5 = 1.2 steps
+    """
+    out = _raster(_ttmpo(METRICS["season_duration_10"]),
+                  _sparse_fixture({"01-01": "92", "01-08": "92"}, ice_seasons=(2001, 2002, 2003)),
+                  _synthetic_tier(land_mask=None))
+    assert np.allclose(out[:, :2], 1.2)
+
+
+def test_ttmpo_lag_needs_no_zero_point():
+    """The zero-point cancels in a difference of two dates, so a lag is summed raw.
+
+        left half   01-01 01-08   lag
+        2001         1/10  4/10    7 d
+        2002         1/10  4/10    7 d
+        2003         1/10  4/10    7 d
+        2004          .     .     none
+        2005          .     .     none       -> 21/5 = 4.2 d
+    """
+    out = _raster(_ttmpo(METRICS["formation_lag"]),
+                  _sparse_fixture({"01-01": "10", "01-08": "40"}, ice_seasons=(2001, 2002, 2003)),
+                  _synthetic_tier(land_mask=None))
+    assert np.allclose(out[:, :2], 4.2), "applying the date zero-point here would give 60.4 d"
 
 
 def _large_fixture(n_seasons: int = 10, n_days: int = 15) -> pd.DataFrame:

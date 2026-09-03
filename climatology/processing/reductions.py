@@ -11,6 +11,7 @@ import numpy as np
 from climatology.processing.conversion import value_columns
 from climatology.processing.rasterize import burn_value_stack
 from climatology.processing.regions import Tier
+from climatology.services.temporal import day_of_season
 from climatology.utils._types import (
     BoolVector, ConvertedPolygons, DataGrid, DateConvertedPolygons,
     VarWetStack, VarWetVector, WetStack, WetVector,
@@ -26,9 +27,9 @@ from climatology.utils.arithmetics import _nanmedian_high
 # they return (n_wet,) under MTT and (n_seasons, n_wet) under TTM. A zero-arg
 # factory rather than a bare iterator so composite kernels (ThresholdDateDelta)
 # can fold the same stream twice.
-WetSlice = VarWetVector | VarWetStack
+WetSlice     = VarWetVector | VarWetStack
 KernelResult = WetVector | WetStack
-SliceStream = Callable[[], Iterator[tuple[int, WetSlice]]]
+SliceStream  = Callable[[], Iterator[tuple[int, WetSlice]]]
 
 
 def _cell_shape(values: WetSlice) -> tuple[int, ...]:
@@ -164,34 +165,53 @@ class MedianThenThreshold:
 
 
 # Minimum fraction of seasons a cell must carry a per-season value for its
-# cross-season median to be emitted (MPO methodology; DEC-049).
+# cross-season statistic to be emitted (MPO methodology; DEC-049).
 MPO_MIN_SEASON_COVERAGE = 0.5
+
+# Ordinal an event-less season contributes to MPO's sum: their signed Jan-1 DOY is
+# 1-based, so its zero is Dec 31, re-expressed here in the Sep-1 anchor (DEC-053).
+MPO_DATE_ZERO = float(day_of_season("12-31"))
+
+
+def _mpo_zero(kernel: Kernel) -> float:
+    """The value an event-less season contributes to the fixed-denominator sum.
+
+    Only dates need a zero chosen for them: a step count and a date *difference*
+    both already read 0 for "nothing happened", so the offset cancels there.
+    """
+    return MPO_DATE_ZERO if isinstance(kernel, ThresholdDate) else 0.0
+
+
+def _mpo_mean(per_season: WetStack, *, zero: float = 0.0) -> WetVector:
+    """MPO's cross-season statistic (probe 027): sum over the seasons carrying a value, over the record length."""
+    # Denominator is the season axis itself, not the count that contributed, so an
+    # event-less season dilutes the cell toward ``zero`` instead of dropping out.
+    n_seasons = per_season.shape[-2]
+    return np.nansum(per_season - zero, axis=-2) / n_seasons + zero
 
 
 @dataclass(frozen=True)
-class ThresholdThenMedian:
-    """Reduction order (DEC-049): fold all seasons in parallel over the day stacks, then nan-median across seasons."""
+class ThresholdThenMPOMean:
+    """Reduction order (DEC-053): fold all seasons in parallel over the day stacks, then MPO's fixed-denominator cross-season mean."""
 
-    slug = "ttm"
+    slug = "ttmpo"
     min_season_coverage: float = MPO_MIN_SEASON_COVERAGE
 
     def __call__(self, kernel: Kernel, df: ConvertedPolygons, tier: Tier) -> DataGrid:
         per_season: WetStack = kernel.reduce(lambda: _stream_day_stacks(df, tier=tier))
-        n_valid = np.sum(~np.isnan(per_season), axis=0)
-        keep: BoolVector = n_valid >= np.ceil(self.min_season_coverage * per_season.shape[0])
-        # median only where the MPO season-coverage rule passes — which doubles as
-        # the all-NaN guard (no RuntimeWarning). Interpolating np.nanmedian, not
-        # _nanmedian_high: provisional pending MPO ground-truth validation (DEC-049).
-        median = np.full(per_season.shape[1], np.nan, dtype=np.float32)
-        median[keep] = np.nanmedian(per_season[:, keep], axis=0)
-        return _scatter_to_grid(median, tier)
+        n_valid = np.sum(~np.isnan(per_season), axis=-2)
+        keep: BoolVector = n_valid >= np.ceil(self.min_season_coverage * per_season.shape[-2])
+        # The coverage rule doubles as the all-NaN guard: nansum reports 0, not NaN.
+        mean = np.full(n_valid.shape, np.nan, dtype=np.float32)
+        mean[keep] = _mpo_mean(per_season[..., keep], zero=_mpo_zero(kernel))
+        return _scatter_to_grid(mean, tier)
 
 
 MEDIAN_THEN_THRESHOLD = MedianThenThreshold()
-THRESHOLD_THEN_MEDIAN = ThresholdThenMedian()
+THRESHOLD_THEN_MPO_MEAN = ThresholdThenMPOMean()
 
-Reduction = MedianThenThreshold | ThresholdThenMedian
+Reduction = MedianThenThreshold | ThresholdThenMPOMean
 
 # CLI --temporal choices
 REDUCTIONS: dict[str, Reduction] = {r.slug: r for r in (MEDIAN_THEN_THRESHOLD,
-                                                        THRESHOLD_THEN_MEDIAN)}
+                                                        THRESHOLD_THEN_MPO_MEAN)}
