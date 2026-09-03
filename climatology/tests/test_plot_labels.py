@@ -1,6 +1,6 @@
 """Every metric must carry a label for every reduction order — and say the right thing.
 
-MTT and TTM compute different quantities from the same charts, so a label written for one
+MTT and TTMPO compute different quantities from the same charts, so a label written for one
 is wrong on the other. That drifted twice already (the kernel moved to ``first_below`` and
 the prose stayed at ``>=``), so the invariant is pinned here rather than left to review.
 """
@@ -76,7 +76,7 @@ def test_every_metric_has_a_label_per_reduction(slug: str, reduction: str):
 
 
 @pytest.mark.parametrize(("slug", "reduction"), SPECS)
-def test_mtt_and_ttm_labels_differ(slug: str, reduction: str):
+def test_mtt_and_ttmpo_labels_differ(slug: str, reduction: str):
     """The two orders never share a label: they do not describe the same quantity."""
     labels = {metric_label(_spec(slug, red)) for red in REDUCTIONS}
     assert len(labels) == len(REDUCTIONS)
@@ -89,9 +89,9 @@ def test_mtt_labels_name_the_median_series(slug: str):
 
 
 @pytest.mark.parametrize("slug", sorted(CLIMATOLOGICAL_METRICS))
-def test_ttm_labels_are_a_median_of_per_season_values(slug: str):
-    """Under TTM the number really is a median across seasons."""
-    assert metric_label(_spec(slug, "ttm")).lower().startswith("median")
+def test_ttmpo_labels_name_the_cross_season_statistic(slug: str):
+    """Under TTMPO the number is MPO's fixed-denominator mean of per-season values — not a median, and not a plain mean."""
+    assert metric_label(_spec(slug, "ttmpo")).lower().startswith("mpo mean")
 
 
 @pytest.mark.parametrize("slug", sorted(CLIMATOLOGICAL_METRICS))
@@ -110,18 +110,25 @@ def test_label_agrees_with_the_kernel_threshold(slug: str):
             f"{slug}: label {label!r} does not carry the kernel's crossing {clause!r}")
 
 
-def test_ttm_note_states_the_season_coverage_rule():
-    """TTM drops cells short of the MPO coverage rule; the figure has to admit that."""
-    note = reduction_note(_spec("breakup_date", "ttm"))
+def test_ttmpo_note_states_the_season_coverage_rule():
+    """TTMPO drops cells short of the MPO coverage rule; the figure has to admit that."""
+    note = reduction_note(_spec("breakup_date", "ttmpo"))
     assert "50%" in note and "coverage" in note
 
 
+def test_ttmpo_note_states_the_fixed_denominator():
+    """The dilution is the reducer's defining property — a reader cannot infer it from the colourbar."""
+    note = reduction_note(_spec("breakup_date", "ttmpo"))
+    assert "record length" in note and "Dec 31" in note
+
+
 def test_developed_ice_labels_name_both_criteria():
-    """Developed ice is a joint CT + thickness state — every label must state both thresholds."""
+    """Developed ice is a joint CT + thickness state — every label must state both of the kernel's thresholds."""
     for slug in (s for s in METRICS if s.startswith("developed_ice")):
+        ct_t, thk_t = METRICS[slug].kernel.threshold
         for reduction in REDUCTIONS:
             label = metric_label(_spec(slug, reduction))
-            assert "9/10" in label and "0.5 m" in label, (
+            assert f"{round(ct_t * 10)}/10" in label and f"{thk_t} m" in label, (
                 f"{slug}/{reduction}: label {label!r} must carry both criteria")
 
 

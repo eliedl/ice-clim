@@ -125,11 +125,11 @@ def _count_ticks(tick_values: list[float]) -> list[str]:
 class PlotStyle:
     """Presentation for one metric: one colourbar label **per reduction order**, and a tick formatter.
 
-    MTT and TTM do not compute the same quantity, so one string cannot describe both.
+    MTT and TTMPO do not compute the same quantity, so one string cannot describe both.
     MTT (DEC-027) takes the cross-season median CT per day and *then* folds the kernel over
     days: the result is a date read off a smoothed series, so a mid-season thaw is averaged
-    out before the kernel ever sees it — it is not a median of dates. TTM (DEC-049) folds the
-    kernel per season and *then* medians across seasons: that one is.
+    out before the kernel ever sees it — it is not a statistic over dates. TTMPO (DEC-053)
+    folds the kernel per season and *then* averages across seasons: that one is.
 
     Counts are always in days (``TierProduct`` scales a weekly source's step counts by
     ``step_days``), so no label has to interpolate the source's observation unit.
@@ -143,81 +143,81 @@ class PlotStyle:
 PLOT_STYLES: dict[str, PlotStyle] = {
     "freeze_up_date": PlotStyle("Freeze-up", {
         "mtt": "First date the median CT reaches ≥ 4/10",
-        "ttm": "Median date of freeze-up (CT ≥ 4/10)",
+        "ttmpo": "MPO mean date of freeze-up (CT ≥ 4/10)",
     }, _date_ticks),
     "breakup_date": PlotStyle("Break-up", {
         "mtt": "First date the median CT falls < 4/10",
-        "ttm": "Median date of break-up (CT < 4/10)",
+        "ttmpo": "MPO mean date of break-up (CT < 4/10)",
     }, _date_ticks),
     "first_occurrence_date": PlotStyle("First occurrence", {
         "mtt": "First date the median CT reaches ≥ 1/10",
-        "ttm": "Median date of first ice occurrence (CT ≥ 1/10)",
+        "ttmpo": "MPO mean date of first ice occurrence (CT ≥ 1/10)",
     }, _date_ticks),
     "last_occurrence_date": PlotStyle("Last occurrence", {
         "mtt": "Last date the median CT holds ≥ 1/10",
-        "ttm": "Median date of last ice occurrence (CT ≥ 1/10)",
+        "ttmpo": "MPO mean date of last ice occurrence (CT ≥ 1/10)",
     }, _date_ticks),
     "closing_date": PlotStyle("Season closing (8/10)", {
         "mtt": "First date the median CT reaches ≥ 8/10",
-        "ttm": "Median date of season closing (CT ≥ 8/10)",
+        "ttmpo": "MPO mean date of season closing (CT ≥ 8/10)",
     }, _date_ticks),
     "opening_date": PlotStyle("Season opening (8/10)", {
         "mtt": "First date the median CT falls < 8/10",
-        "ttm": "Median date of season opening (CT < 8/10)",
+        "ttmpo": "MPO mean date of season opening (CT < 8/10)",
     }, _date_ticks),
     "formation_lag": PlotStyle("Formation lag", {
         "mtt": "Formation lag (days from median CT ≥ 1/10 to median CT ≥ 4/10)",
-        "ttm": "Median formation lag (days from CT ≥ 1/10 to CT ≥ 4/10)",
+        "ttmpo": "MPO mean formation lag (days from CT ≥ 1/10 to CT ≥ 4/10)",
     }, _count_ticks),
     "melt_lag": PlotStyle("Melt lag", {
         "mtt": "Melt lag (days from median CT < 4/10 to median CT < 1/10)",
-        "ttm": "Median melt lag (days from CT < 4/10 to CT < 1/10)",
+        "ttmpo": "MPO mean melt lag (days from CT < 4/10 to CT < 1/10)",
     }, _count_ticks),
     "season_duration": PlotStyle("Season duration (4/10)", {
         "mtt": "Ice presence (days with median CT ≥ 4/10)",
-        "ttm": "Median ice presence (days, CT ≥ 4/10)",
+        "ttmpo": "MPO mean ice presence (days, CT ≥ 4/10)",
     }, _count_ticks),
     "season_duration_10": PlotStyle("Season duration (1/10)", {
         "mtt": "Ice presence (days with median CT ≥ 1/10)",
-        "ttm": "Median ice presence (days, CT ≥ 1/10)",
+        "ttmpo": "MPO mean ice presence (days, CT ≥ 1/10)",
     }, _count_ticks),
     "storm_exposure_duration": PlotStyle("Storm exposure duration", {
         "mtt": "Storm exposure (days with median CT ≤ 3/10)",
-        "ttm": "Median storm exposure duration (days, CT ≤ 3/10)",
+        "ttmpo": "MPO mean storm exposure duration (days, CT ≤ 3/10)",
     }, _count_ticks),
     "landfast_freeze_up_date": PlotStyle("Landfast freeze-up", {
         "mtt": "First date the median FA = '08' > 0.5",
-        "ttm": "Median date of landfast freeze-up (FA = '08')",
+        "ttmpo": "MPO mean date of landfast freeze-up (FA = '08')",
     }, _date_ticks),
     "landfast_breakup_date": PlotStyle("Landfast break-up", {
         "mtt": "First date the median FA = '08' falls < 0.5",
-        "ttm": "Median date of landfast break-up (FA = '08')",
+        "ttmpo": "MPO mean date of landfast break-up (FA = '08')",
     }, _date_ticks),
     "landfast_duration": PlotStyle("Landfast ice duration", {
         "mtt": "Landfast ice presence (days with median FA = '08' > 0.5)",
-        "ttm": "Median landfast ice presence (days, FA = '08')",
+        "ttmpo": "MPO mean landfast ice presence (days, FA = '08')",
     }, _count_ticks),
     "landfast_exposure": PlotStyle("Landfast absence duration", {
         "mtt": "Landfast exposure (days with median FA = '08' < 0.5)",
-        "ttm": "Median landfast exposure (days, FA ≠ '08')",
+        "ttmpo": "MPO mean landfast exposure (days, FA ≠ '08')",
     }, _count_ticks),
-    # Developed ice = the joint state CT ≥ 9/10 AND mean thickness ≥ 0.5 m; its
+    # Developed ice = the joint state CT ≥ 8/10 AND mean thickness ≥ 0.225 m (grey-white ice); its
     # clearing/absence is the De Morgan complement (either criterion below).
     "developed_ice_freeze_up_date": PlotStyle("Developed ice freeze-up", {
         "mtt": "First date the median CT reaches ≥ 8/10 with median thickness ≥ 0.225 m",
-        "ttm": "Median date of developed-ice freeze-up (CT ≥ 9/10, thickness ≥ 0.5 m)",
+        "ttmpo": "MPO mean date of developed-ice freeze-up (CT ≥ 8/10, thickness ≥ 0.225 m)",
     }, _date_ticks),
     "developed_ice_breakup_date": PlotStyle("Developed ice break-up", {
-        "mtt": "First date the median CT falls < 9/10 or median thickness < 0.5 m",
-        "ttm": "Median date of developed-ice break-up (CT < 9/10 or thickness < 0.5 m)",
+        "mtt": "First date the median CT falls < 8/10 or median thickness < 0.225 m",
+        "ttmpo": "MPO mean date of developed-ice break-up (CT < 8/10 or thickness < 0.225 m)",
     }, _date_ticks),
     "developed_ice_duration": PlotStyle("Developed ice duration", {
-        "mtt": "Developed ice presence (days with median CT ≥ 9/10 and median thickness ≥ 0.5 m)",
-        "ttm": "Median developed ice presence (days, CT ≥ 9/10 and thickness ≥ 0.5 m)",
+        "mtt": "Developed ice presence (days with median CT ≥ 8/10 and median thickness ≥ 0.225 m)",
+        "ttmpo": "MPO mean developed ice presence (days, CT ≥ 8/10 and thickness ≥ 0.225 m)",
     }, _count_ticks),
     "developed_ice_exposure": PlotStyle("Developed ice absence duration", {
-        "mtt": "Developed ice absence (days with median CT < 9/10 or median thickness < 0.5 m)",
-        "ttm": "Median developed ice absence (days, CT < 9/10 or thickness < 0.5 m)",
+        "mtt": "Developed ice absence (days with median CT < 8/10 or median thickness < 0.225 m)",
+        "ttmpo": "MPO mean developed ice absence (days, CT < 8/10 or thickness < 0.225 m)",
     }, _count_ticks),
 }
 
@@ -255,8 +255,10 @@ def _kernel_threshold(kernel, field: str) -> str:
 
 REDUCTION_NOTES: dict[str, str] = {
     "mtt": "Method: median-then-threshold (cross-season median CT per day, then the crossing)",
-    "ttm": ("Method: threshold-then-median (per-season crossing, then the cross-season median; "
-            f"cells need ≥ {MPO_MIN_SEASON_COVERAGE:.0%} season coverage)"),
+    "ttmpo": ("Method: threshold-then-MPO-mean (per-season crossing, then the sum over the "
+              "seasons with an event divided by the full record length — an event-less season "
+              "counts as zero, i.e. Dec 31 for a date and 0 d for a count; cells need "
+              f"≥ {MPO_MIN_SEASON_COVERAGE:.0%} season coverage)"),
 }
 
 
