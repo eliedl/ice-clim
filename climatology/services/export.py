@@ -107,6 +107,16 @@ def archive_dir(slug: str, metric_slug: str, *, period_slug: str, source_slug: s
                         source_slug=source_slug) / "archive"
 
 
+def delta_composite_path(region_slug: str, metric_slug: str, baseline_period: str,
+                         candidate_period: str, *, filename: str) -> Path:
+    """Output path for a delta (period-vs-period change) composite figure.
+
+    Constructs: ``output / region / metric / delta / {candidate_period}-{baseline_period} / filename``
+    """
+    return (OUTPUT_DIR / region_slug / metric_slug / "delta"
+            / f"{candidate_period}-{baseline_period}" / filename)
+
+
 def find_archived(slug: str, metric_slug: str, *, period_slug: str, source_slug: str,
                   tier_level: str, reduction_slug: str) -> tuple[Path, dict]:
     """Newest archived raster for one product, selected on its manifest — never on its filename.

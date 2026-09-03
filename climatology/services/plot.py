@@ -563,7 +563,7 @@ def _balance_margins(fig) -> float:
     """
     fig.canvas.draw()
     renderer = fig.canvas.get_renderer()
-    ink = Bbox.union([ax.get_tightbbox(renderer) for ax in fig.axes])
+    ink = Bbox.union([ax.get_tightbbox(renderer) for ax in fig.axes if ax.get_visible()])
     width_px = fig.get_window_extent().width
 
     shift_px = ((width_px - ink.x1) - ink.x0) / 2.0

@@ -37,7 +37,7 @@ from climatology.services.plot import (
     DeltaPanel, MetricPanel, RasterLayer, plot_delta_panels, plot_source_portrait,
 )
 from climatology.services.sources import CHART_TABLES
-from climatology.services.export import find_archived
+from climatology.services.export import find_archived, delta_composite_path
 from climatology.scripts.sweep import DEFAULT_REGION
 
 logging.basicConfig(
@@ -46,9 +46,6 @@ logging.basicConfig(
     datefmt="%H:%M:%S",
 )
 log = logging.getLogger("delta")
-
-# Where the change composites are written (outside the repo, alongside the region's products).
-OUTPUT_DIR = Path("/home/eliedl/data/ldgizc/glace/delta")
 
 # The seven metrics the delta report covers (première/dernière occurrence = two).
 METRIC_SLUGS = (
@@ -148,12 +145,16 @@ def _render(region: str, metric: str, tiers: list[str], reduction: str) -> list[
         delta = _delta_panel(base, cand, comp.title)
         deltas.append(delta)
 
-        portrait = OUTPUT_DIR / f"{metric}_portrait_{region}_{comp.slug}.png"
+        portrait = delta_composite_path(
+            region, metric, comp.baseline.period, comp.candidate.period,
+            filename=f"{metric}_portrait_{region}_{comp.slug}.png")
         plot_source_portrait(base, cand, delta, png_path=portrait, metric=spec,
                              region_display=region_display, res_label=_res_label(base))
         written.append(portrait)
 
-    synthesis = OUTPUT_DIR / f"{metric}_delta_{region}.png"
+    synthesis = delta_composite_path(
+        region, metric, COMPARISONS[0].baseline.period, COMPARISONS[0].candidate.period,
+        filename=f"{metric}_delta_{region}.png")
     plot_delta_panels(deltas, png_path=synthesis, metric=spec,
                       region_display=region_display,
                       res_label=_res_label(deltas[0]), source_label=_source_label())
@@ -183,4 +184,6 @@ if __name__ == "__main__":
     for metric in args.metrics or METRIC_SLUGS:
         written.extend(_render(args.region, metric, tiers, args.reduction))
 
-    log.info("=== %d figure(s) written to %s ===", len(written), OUTPUT_DIR)
+    log.info("=== %d figure(s) written ===", len(written))
+    for path in written:
+        log.info("  %s", path)
