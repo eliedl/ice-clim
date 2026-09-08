@@ -14,7 +14,7 @@ import pytest
 from climatology.processing.metrics import METRICS, ClimatologicalMetricSpec
 from climatology.processing.reductions import REDUCTIONS
 from climatology.services.sources import CHART_TABLES
-from climatology.services.plot import (
+from climatology.utils.labels import (
     PLOT_STYLES,
     REDUCTION_NOTES,
     metric_label,

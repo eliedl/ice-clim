@@ -236,3 +236,23 @@ def load_basemap(extent: GridBounds) -> tuple[BasemapTile | None, gpd.GeoDataFra
     clipped = clip_to_land(warped, land_mask(land, extent, warped.shape[:2]))
     label_layer, _ = warp_to_grid(*labels, extent)
     return BasemapTile(land=clipped, labels=label_layer, extent=imshow_extent), land
+
+
+# --- drawing the tile's two layers ------------------------------------------
+# Separate calls, because the caller slips the coastline between them (see BasemapTile).
+# Both no-op on a missing tile, so an unconfigured basemap costs the caller no branch.
+
+def draw_basemap_land(ax, tile: BasemapTile | None, *, zorder: int) -> None:
+    """Draw the basemap's land *over* the data: clipped to the sea, so the ice values show through."""
+    if tile is None:
+        return
+    ax.imshow(tile.land, extent=tile.extent, origin="upper",
+              zorder=zorder, interpolation="none")
+
+
+def draw_basemap_labels(ax, tile: BasemapTile | None, *, zorder: int) -> None:
+    """Draw the place names last, above the coastline — a label is annotation, not geography."""
+    if tile is None:
+        return
+    ax.imshow(tile.labels, extent=tile.extent, origin="upper",
+              zorder=zorder, interpolation="none")

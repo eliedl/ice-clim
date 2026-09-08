@@ -40,7 +40,8 @@ from climatology.processing.metrics import METRICS
 from climatology.processing.reductions import MEDIAN_THEN_THRESHOLD, REDUCTIONS
 from climatology.processing.regions import resolve_region
 from climatology.scripts.metric_per_era_composite import _load_panel
-from climatology.services.plot import _area_weights, plot_metric_panels, threshold_label
+from climatology.services.plot import _area_weights, plot_metric_panels
+from climatology.utils.labels import threshold_label
 from climatology.services.sources import PERIOD_SOURCES
 from climatology.services.temporal import SEASON_ORIGIN
 from climatology.utils.arithmetics import percentile_range

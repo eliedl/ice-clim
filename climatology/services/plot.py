@@ -1,16 +1,12 @@
-"""Climatology map plotting — metric presentation styles and map rendering."""
+"""Climatology map rendering: rasters, basemap overlays, panel layout."""
 
 from __future__ import annotations
 
 import logging
-from collections.abc import Callable
 from dataclasses import dataclass
-from datetime import timedelta
 from math import ceil
 from pathlib import Path
 from typing import TYPE_CHECKING
-
-import operator
 
 import geopandas as gpd
 import matplotlib.pyplot as plt
@@ -19,26 +15,27 @@ from matplotlib.colors import Colormap, Normalize
 from matplotlib.ticker import FuncFormatter, LogLocator, NullFormatter
 from matplotlib.transforms import Bbox
 
-from climatology.processing.reductions import (
-    MEDIAN_THEN_THRESHOLD,
-    MPO_MIN_SEASON_COVERAGE,
-    StatThenThreshold,
-    ThresholdDate,
-    ThresholdDateDelta,
-    ThresholdThenStat,
-)
-from climatology.services.temporal import SEASON_ORIGIN
+from climatology.processing.reductions import MEDIAN_THEN_THRESHOLD
 from climatology.utils._types import GRID_CRS, DataGrid, GridBounds
-from climatology.utils.basemap import BasemapTile, load_basemap
+from climatology.utils.basemap import draw_basemap_labels, draw_basemap_land, load_basemap
 from climatology.utils.colors import (
     DARK_COAST,
     DARK_FG,
     DARK_LAND,
     DARK_LINE,
-    DARK_MUTED,
     DARK_OCEAN,
     delta_scale,
     metric_scale,
+    style_axes,
+    style_colorbar,
+    style_colorbar_v,
+)
+from climatology.utils.labels import (
+    PLOT_STYLES,
+    footer,
+    metric_label,
+    metric_title,
+    reduction_note,
 )
 
 if TYPE_CHECKING:
@@ -50,6 +47,7 @@ if TYPE_CHECKING:
 log = logging.getLogger(__name__)
 
 PANEL_NCOLS = 2   # 4 periods -> 2 x 2
+
 
 # --- shared rendering primitives -------------------------------------------
 
@@ -70,22 +68,6 @@ def _draw_layers(ax, layers: list[tuple[DataGrid, GridBounds]],
     return im
 
 
-def _draw_basemap_land(ax, tile: BasemapTile | None, *, zorder: int) -> None:
-    """Draw the basemap's land *over* the data: clipped to the sea, so the ice values show through."""
-    if tile is None:
-        return
-    ax.imshow(tile.land, extent=tile.extent, origin="upper",
-              zorder=zorder, interpolation="none")
-
-
-def _draw_basemap_labels(ax, tile: BasemapTile | None, *, zorder: int) -> None:
-    """Draw the place names last, above the coastline — a label is annotation, not geography."""
-    if tile is None:
-        return
-    ax.imshow(tile.labels, extent=tile.extent, origin="upper",
-              zorder=zorder, interpolation="none")
-
-
 def _frame_axes(ax, land: gpd.GeoDataFrame, extent: GridBounds, *,
                 zorder: int, fill: bool = True) -> None:
     """Paint land over the dry cells (wet cells keep their ice colours) and clamp the view.
@@ -103,24 +85,6 @@ def _frame_axes(ax, land: gpd.GeoDataFrame, extent: GridBounds, *,
     xmin, ymin, xmax, ymax = extent
     ax.set_xlim(xmin, xmax)
     ax.set_ylim(ymin, ymax)
-
-
-def _style_axes(ax) -> None:
-    """Dark-theme the ticks and spines."""
-    ax.tick_params(axis="both", colors=DARK_FG)
-    ax.ticklabel_format(style="plain", axis="both")
-    for spine in ax.spines.values():
-        spine.set_edgecolor(DARK_LINE)
-
-
-def _style_colorbar(cbar, *, label: str, tick_values: list[float],
-                    tick_labels: list[str]) -> None:
-    """Dark-theme a colourbar and apply the metric's tick formatting."""
-    cbar.set_ticks(tick_values)
-    cbar.set_ticklabels(tick_labels, fontsize=8)
-    cbar.set_label(label, color=DARK_FG)
-    cbar.ax.xaxis.set_tick_params(color=DARK_LINE, labelcolor=DARK_FG)
-    cbar.outline.set_edgecolor(DARK_LINE)
 
 
 def _save(fig, png_path: Path, *, tight: bool = True) -> None:
@@ -161,14 +125,14 @@ def plot_metric(
     im = _draw_layers(ax, layers, cmap=cmap, norm=norm)
     tile, land = load_basemap(extent)
     top = len(layers) + 1
-    _draw_basemap_land(ax, tile, zorder=top)
+    draw_basemap_land(ax, tile, zorder=top)
     _frame_axes(ax, land, extent, zorder=top + 1, fill=tile is None)
-    _draw_basemap_labels(ax, tile, zorder=top + 2)   # names ride above the coastline
+    draw_basemap_labels(ax, tile, zorder=top + 2)   # names ride above the coastline
 
     cbar = fig.colorbar(im, ax=ax, orientation="horizontal",
                         fraction=0.046, pad=0.1, extend="both")
-    _style_colorbar(cbar, label=display_label, tick_values=tick_values,
-                    tick_labels=tick_labels)
+    style_colorbar(cbar, label=display_label, tick_values=tick_values,
+                   tick_labels=tick_labels)
 
     ax.set_title(
         f"{metric_title(ctx.metric)}\n{ctx.region.display} region — winters {ctx.period.slug}",
@@ -176,10 +140,10 @@ def plot_metric(
     )
     ax.set_xlabel(f"Easting (m, EPSG:{GRID_CRS})", color=DARK_FG)
     ax.set_ylabel(f"Northing (m, EPSG:{GRID_CRS})", color=DARK_FG)
-    _style_axes(ax)
+    style_axes(ax)
 
-    _footer(fig, source_label=ctx.source.display_label, res_label=res_label,
-            method=reduction_note(ctx.metric), basemap=tile is not None)
+    footer(fig, source_label=ctx.source.display_label, res_label=res_label,
+           method=reduction_note(ctx.metric), basemap=tile is not None)
     _save(fig, png_path)
     plt.show()
 
@@ -488,13 +452,13 @@ def plot_metric_panels(
         im = _draw_layers(ax, [(l.values, l.bounds) for l in panel.layers],
                           cmap=cmap, norm=norm)
         top = len(panel.layers) + 1
-        _draw_basemap_land(ax, tile, zorder=top)
+        draw_basemap_land(ax, tile, zorder=top)
         _frame_axes(ax, land, extent, zorder=top + 1, fill=tile is None)
-        _draw_basemap_labels(ax, tile, zorder=top + 2)   # names ride above the coastline
+        draw_basemap_labels(ax, tile, zorder=top + 2)   # names ride above the coastline
         ax.set_title(f"Winters {panel.period} — {panel.source.slug}",
                      fontsize=11, pad=6, color=DARK_FG)
         ax.tick_params(labelsize=7)
-        _style_axes(ax)
+        style_axes(ax)
 
         _draw_distribution(hax, panel.layers, cmap=cmap, norm=norm,
                            tick_values=tick_values, tick_labels=tick_labels)
@@ -503,8 +467,8 @@ def plot_metric_panels(
 
     cbar = fig.colorbar(im, ax=axes.ravel().tolist(), orientation="horizontal",
                         fraction=0.04, pad=PANEL_CBAR_PAD, extend="both")
-    _style_colorbar(cbar, label=display_label, tick_values=tick_values,
-                    tick_labels=tick_labels)
+    style_colorbar(cbar, label=display_label, tick_values=tick_values,
+                   tick_labels=tick_labels)
 
     fig.suptitle(f"{metric_title(metric)}\n{region_display} region",
                  fontsize=14, color=DARK_FG)
@@ -512,9 +476,9 @@ def plot_metric_panels(
     margin = _balance_margins(fig)
 
     sources = sorted({p.source.display_label for p in panels})
-    _footer(fig, source_label=" + ".join(sources), res_label=res_label, x=margin,
-            method=reduction_note(metric),
-            basemap=tile is not None)
+    footer(fig, source_label=" + ".join(sources), res_label=res_label, x=margin,
+           method=reduction_note(metric),
+           basemap=tile is not None)
     _save(fig, png_path, tight=False)   # keep the margins so the suptitle stays centred
     plt.close(fig)
 
@@ -581,12 +545,12 @@ def plot_delta_panels(
         im = _draw_layers(ax, [(l.values, l.bounds) for l in panel.layers],
                           cmap=cmap, norm=norm)
         top = len(panel.layers) + 1
-        _draw_basemap_land(ax, tile, zorder=top)
+        draw_basemap_land(ax, tile, zorder=top)
         _frame_axes(ax, land, extent, zorder=top + 1, fill=tile is None)
-        _draw_basemap_labels(ax, tile, zorder=top + 2)
+        draw_basemap_labels(ax, tile, zorder=top + 2)
         ax.set_title(panel.title, fontsize=11, pad=6, color=DARK_FG)
         ax.tick_params(labelsize=7)
-        _style_axes(ax)
+        style_axes(ax)
 
         _draw_distribution(hax, panel.layers, cmap=cmap, norm=norm,
                            tick_values=tick_values, tick_labels=tick_labels)
@@ -597,15 +561,15 @@ def plot_delta_panels(
     # the same gap above it whatever the panel-row count — matching plot_metric_panels' look.
     cbar = fig.colorbar(im, ax=axes.ravel().tolist(), orientation="horizontal",
                         fraction=0.04, pad=1.5 * PANEL_CBAR_PAD, aspect=30, extend="both")
-    _style_colorbar(cbar, label=f"Δ {metric_title(metric)} (days, candidate − baseline)",
-                    tick_values=tick_values, tick_labels=tick_labels)
+    style_colorbar(cbar, label=f"Δ {metric_title(metric)} (days, candidate − baseline)",
+                   tick_values=tick_values, tick_labels=tick_labels)
 
     fig.suptitle(f"{metric_title(metric)} — change between periods\n{region_display} region",
                  fontsize=14, color=DARK_FG)
     _match_map_heights(fig, pairs)   # after the colourbar has claimed its space
     margin = _balance_margins(fig)
-    _footer(fig, source_label=source_label, res_label=res_label, x=margin,
-            method=reduction_note(metric), basemap=tile is not None)
+    footer(fig, source_label=source_label, res_label=res_label, x=margin,
+           method=reduction_note(metric), basemap=tile is not None)
     _save(fig, png_path, tight=False)   # keep margins so the suptitle stays centred
     plt.close(fig)
 
@@ -624,27 +588,17 @@ PORTRAIT_CBAR_H = 0.50         # colourbar height (figure fraction), centred on 
 PORTRAIT_CBAR_GAP = 0.05      # symmetric gap between a colourbar and the map block
 
 
-def _style_colorbar_v(cbar, *, label: str, tick_values: list[float],
-                      tick_labels: list[str]) -> None:
-    """Dark-theme a *vertical* colourbar (ticks on the y axis) and apply tick formatting."""
-    cbar.set_ticks(tick_values)
-    cbar.set_ticklabels(tick_labels, fontsize=12)
-    cbar.set_label(label, color=DARK_FG, fontsize=13)
-    cbar.ax.yaxis.set_tick_params(color=DARK_LINE, labelcolor=DARK_FG)
-    cbar.outline.set_edgecolor(DARK_LINE)
-
-
 def _draw_map(ax, layers: list[RasterLayer], *, title: str, cmap: Colormap, norm: Normalize,
               land, tile, extent):
     """One map panel (no distribution), drawn back-to-front on the scale passed in."""
     ax.set_facecolor(DARK_OCEAN)
     im = _draw_layers(ax, [(l.values, l.bounds) for l in layers], cmap=cmap, norm=norm)
     top = len(layers) + 1
-    _draw_basemap_land(ax, tile, zorder=top)
+    draw_basemap_land(ax, tile, zorder=top)
     _frame_axes(ax, land, extent, zorder=top + 1, fill=tile is None)
-    _draw_basemap_labels(ax, tile, zorder=top + 2)
+    draw_basemap_labels(ax, tile, zorder=top + 2)
     ax.set_title(title, fontsize=15, pad=18, color=DARK_FG)
-    _style_axes(ax)
+    style_axes(ax)
     ax.set_xticks([])   # portrait maps carry no easting/northing ticks — only the frame
     ax.set_yticks([])
     return im
@@ -727,18 +681,18 @@ def plot_source_portrait(
     cbar_v = fig.colorbar(v_im, cax=cax_v, orientation="vertical", extend="both")
     cbar_v.ax.yaxis.set_ticks_position("left")
     cbar_v.ax.yaxis.set_label_position("left")
-    _style_colorbar_v(cbar_v, label=metric_label(metric),
-                      tick_values=v_ticks, tick_labels=v_labels)
+    style_colorbar_v(cbar_v, label=metric_label(metric),
+                     tick_values=v_ticks, tick_labels=v_labels)
     cbar_d = fig.colorbar(d_im, cax=cax_d, orientation="vertical", extend="both")
-    _style_colorbar_v(cbar_d, label=f"Δ {metric_title(metric)} (days, candidate − baseline)",
-                      tick_values=d_ticks, tick_labels=d_labels)
+    style_colorbar_v(cbar_d, label=f"Δ {metric_title(metric)} (days, candidate − baseline)",
+                     tick_values=d_ticks, tick_labels=d_labels)
 
     fig.suptitle(f"{metric_title(metric)} — {region_display} region\n"
                  f"winters {baseline.period} ({baseline.source.slug}) → "
                  f"{candidate.period} ({candidate.source.slug})",
                  fontsize=19, color=DARK_FG, y=0.99)
     sources = sorted({baseline.source.display_label, candidate.source.display_label})
-    _footer(fig, source_label=" + ".join(sources), res_label=res_label,
-            method=reduction_note(metric), basemap=tile is not None)
+    footer(fig, source_label=" + ".join(sources), res_label=res_label,
+           method=reduction_note(metric), basemap=tile is not None)
     _save(fig, png_path, tight=False)
     plt.close(fig)

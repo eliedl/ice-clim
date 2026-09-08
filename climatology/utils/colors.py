@@ -57,6 +57,34 @@ DELTA_PALETTE: list[tuple[float, str]] = [
 DELTA_FALLBACK_VABS = 1.0   # symmetric ± limit (days) when the delta is ~flat everywhere
 
 
+def style_axes(ax) -> None:
+    """Dark-theme the ticks and spines."""
+    ax.tick_params(axis="both", colors=DARK_FG)
+    ax.ticklabel_format(style="plain", axis="both")
+    for spine in ax.spines.values():
+        spine.set_edgecolor(DARK_LINE)
+
+
+def style_colorbar(cbar, *, label: str, tick_values: list[float],
+                   tick_labels: list[str]) -> None:
+    """Dark-theme a colourbar and apply the metric's tick formatting."""
+    cbar.set_ticks(tick_values)
+    cbar.set_ticklabels(tick_labels, fontsize=8)
+    cbar.set_label(label, color=DARK_FG)
+    cbar.ax.xaxis.set_tick_params(color=DARK_LINE, labelcolor=DARK_FG)
+    cbar.outline.set_edgecolor(DARK_LINE)
+
+
+def style_colorbar_v(cbar, *, label: str, tick_values: list[float],
+                     tick_labels: list[str]) -> None:
+    """Dark-theme a *vertical* colourbar (ticks on the y axis) and apply tick formatting."""
+    cbar.set_ticks(tick_values)
+    cbar.set_ticklabels(tick_labels, fontsize=12)
+    cbar.set_label(label, color=DARK_FG, fontsize=13)
+    cbar.ax.yaxis.set_tick_params(color=DARK_LINE, labelcolor=DARK_FG)
+    cbar.outline.set_edgecolor(DARK_LINE)
+
+
 def build_cmap(
     palette: str | list[tuple[float, str]],
     vmin: float,
