@@ -15,7 +15,7 @@ from climatology.processing.reductions import (
     ThresholdDateDelta,
     ThresholdThenStat,
 )
-from climatology.services.temporal import SEASON_ORIGIN
+from climatology.services.calendar import SEASON_ORIGIN
 from climatology.utils._types import GRID_CRS
 from climatology.plot.colors import DARK_MUTED
 

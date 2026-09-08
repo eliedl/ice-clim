@@ -11,7 +11,7 @@ import numpy as np
 from climatology.processing.conversion import value_columns
 from climatology.processing.rasterize import burn_value_stack
 from climatology.processing.regions import Tier
-from climatology.services.temporal import day_of_season
+from climatology.services.calendar import day_of_season
 from climatology.utils._types import (
     BoolVector, ConvertedPolygons, DataGrid, DateConvertedPolygons,
     VarWetStack, VarWetVector, WetStack, WetVector,

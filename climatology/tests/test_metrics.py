@@ -24,7 +24,7 @@ from climatology.processing.reductions import (
 )
 from climatology.processing.rasterize import build_grid
 from climatology.processing.regions import Tier
-from climatology.services.temporal import day_of_season
+from climatology.services.calendar import day_of_season
 
 
 def _synthetic_tier(land_mask):
@@ -145,7 +145,7 @@ def test_feb29_rows_dropped_by_season_calendar():
 
 def test_filter_admissible_days_drops_under_covered_days():
     """The WMO rule keeps a day only if it is charted in >= 80% of seasons (DEC-025/027)."""
-    from climatology.services.temporal import attach_season_calendar, filter_admissible_days
+    from climatology.services.calendar import attach_season_calendar, filter_admissible_days
     rows = [{"obs_date": f"{yr}-01-01"} for yr in range(2011, 2016)]  # 01-01 in 5/5 seasons
     rows += [{"obs_date": f"{yr}-01-08"} for yr in (2011, 2012)]      # 01-08 in 2/5 (< 80%)
     kept = filter_admissible_days(attach_season_calendar(pd.DataFrame(rows)))

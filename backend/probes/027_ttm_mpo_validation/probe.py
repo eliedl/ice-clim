@@ -67,7 +67,7 @@ from climatology.processing.reductions import (
 )
 from climatology.processing.regions import Tier
 from climatology.services.db import load_polygons
-from climatology.services.temporal import Period, attach_season_calendar
+from climatology.services.calendar import Period, attach_season_calendar
 
 DAT = Path("/home/eliedl/data/MPO/IceGridOccurrence.GEC.climatology.dat")
 OUT = Path(__file__).parent / "output"

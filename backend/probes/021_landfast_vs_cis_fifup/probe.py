@@ -43,7 +43,7 @@ from climatology.processing.rasterize import burn_values  # noqa: E402
 from climatology.utils._types import GRID_CRS  # noqa: E402
 from climatology.processing.regions import resolve_region  # noqa: E402
 from climatology.services.sources import CHART_TABLES  # noqa: E402
-from climatology.services.temporal import SEASON_ORIGIN, Period, day_of_season  # noqa: E402
+from climatology.services.calendar import SEASON_ORIGIN, Period, day_of_season  # noqa: E402
 from climatology.processing.conversion import CT_CONVERSION  # noqa: E402
 
 OUTPUT_DIR = Path(__file__).parent / "output"

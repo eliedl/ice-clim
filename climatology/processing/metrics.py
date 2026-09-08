@@ -28,7 +28,7 @@ from climatology.processing.conversion import (
     ConversionStrategy,
     value_columns,
 )
-from climatology.services.temporal import filter_admissible_days
+from climatology.services.calendar import filter_admissible_days
 from climatology.utils._types import GRID_CRS, ConvertedPolygons, DataGrid
 
 

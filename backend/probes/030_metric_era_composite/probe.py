@@ -44,7 +44,7 @@ from climatology.plot.render import plot_metric_panels
 from climatology.scripts.metric_per_era_composite import _load_panel
 from climatology.services.plot import _area_weights
 from climatology.services.sources import PERIOD_SOURCES
-from climatology.services.temporal import SEASON_ORIGIN
+from climatology.services.calendar import SEASON_ORIGIN
 from climatology.utils.arithmetics import percentile_range
 
 OUTPUT_DIR = Path(__file__).parent / "output"

@@ -51,7 +51,7 @@ from sqlalchemy import text  # noqa: E402
 from climatology.pipeline import _fetch, _resolve  # noqa: E402
 from climatology.utils._types import GRID_CRS  # noqa: E402
 from climatology.services.db import get_engine  # noqa: E402
-from climatology.services.temporal import attach_season_calendar  # noqa: E402
+from climatology.services.calendar import attach_season_calendar  # noqa: E402
 
 OUTPUT_DIR = Path(__file__).parent / "output"
 
