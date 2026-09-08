@@ -9,12 +9,12 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from math import ceil
-from pathlib import Path
 from typing import TYPE_CHECKING
 
 import matplotlib.pyplot as plt
 import numpy as np
 from matplotlib.colors import Colormap, Normalize
+from matplotlib.figure import Figure
 from matplotlib.ticker import FuncFormatter, LogLocator, NullFormatter
 
 from climatology.plot.basemap import draw_basemap_labels, draw_basemap_land, load_basemap
@@ -64,11 +64,9 @@ from climatology.plot.layout import (
 from climatology.plot.validate import assert_comparable, assert_one_reduction
 from climatology.processing.reduction.spatial import RasterLayer, area_weights
 from climatology.processing.reduction.temporal import MEDIAN_THEN_THRESHOLD
-from climatology.services.export import save_figure
 from climatology.utils._types import GRID_CRS, DataGrid, GridBounds
 
 if TYPE_CHECKING:
-    from climatology.pipeline import RunContext
     from climatology.processing.metrics import MetricSpec
     from climatology.services.sources import ChartTable
 
@@ -97,13 +95,15 @@ def _draw_layers(ax, layers: list[tuple[DataGrid, GridBounds]],
 def plot_metric(
     layers: list[tuple[DataGrid, GridBounds]],
     *,
-    png_path: Path,
-    ctx: RunContext,
-) -> None:
+    metric: MetricSpec,
+    region_display: str,
+    res_label: str,
+    period_slug: str,
+    source_label: str,
+) -> Figure:
     """Render one or more raster layers, drawn back-to-front, into one map."""
-    style = PLOT_STYLES[ctx.metric.slug]
-    display_label = metric_label(ctx.metric)
-    res_label = " / ".join(f"{int(round(t.res_m))} m" for t in ctx.region.tiers)
+    style = PLOT_STYLES[metric.slug]
+    display_label = metric_label(metric)
 
     all_values = np.concatenate([v.ravel() for v, _ in layers])
     cmap, norm, tick_values = metric_scale(all_values)
@@ -127,17 +127,16 @@ def plot_metric(
                    tick_labels=tick_labels)
 
     ax.set_title(
-        f"{metric_title(ctx.metric)}\n{ctx.region.display} region — winters {ctx.period.slug}",
+        f"{metric_title(metric)}\n{region_display} region — winters {period_slug}",
         fontsize=12, pad=10, color=DARK_FG,
     )
     ax.set_xlabel(f"Easting (m, EPSG:{GRID_CRS})", color=DARK_FG)
     ax.set_ylabel(f"Northing (m, EPSG:{GRID_CRS})", color=DARK_FG)
     style_axes(ax)
 
-    footer(fig, source_label=ctx.source.display_label, res_label=res_label,
-           method=reduction_note(ctx.metric), basemap=tile is not None)
-    save_figure(fig, png_path)
-    plt.show()
+    footer(fig, source_label=source_label, res_label=res_label,
+           method=reduction_note(metric), basemap=tile is not None)
+    return fig
 
 
 @dataclass(frozen=True)
@@ -158,12 +157,11 @@ class MetricPanel:
 def plot_metric_panels(
     panels: list[MetricPanel],
     *,
-    png_path: Path,
     metric: MetricSpec,
     region_display: str,
     res_label: str,
     ncols: int = PANEL_NCOLS,
-) -> None:
+) -> Figure:
     """Render one metric across periods as a panel grid sharing one colour scale and one extent."""
     if not panels:
         raise ValueError("plot_metric_panels needs at least one panel.")
@@ -234,8 +232,7 @@ def plot_metric_panels(
     footer(fig, source_label=" + ".join(sources), res_label=res_label, x=margin,
            method=reduction_note(metric),
            basemap=tile is not None)
-    save_figure(fig, png_path, tight=False)   # keep the margins so the suptitle stays centred
-    plt.close(fig)
+    return fig
 
 
 # --- delta (period-vs-period change) panels --------------------------------
@@ -256,13 +253,12 @@ class DeltaPanel:
 def plot_delta_panels(
     panels: list[DeltaPanel],
     *,
-    png_path: Path,
     metric: MetricSpec,
     region_display: str,
     res_label: str,
     source_label: str,
     ncols: int = PANEL_NCOLS,
-) -> None:
+) -> Figure:
     """Render period-vs-period change maps sharing one diverging, zero-centred scale."""
     if not panels:
         raise ValueError("plot_delta_panels needs at least one panel.")
@@ -325,8 +321,7 @@ def plot_delta_panels(
     margin = balance_margins(fig)
     footer(fig, source_label=source_label, res_label=res_label, x=margin,
            method=reduction_note(metric), basemap=tile is not None)
-    save_figure(fig, png_path, tight=False)   # keep margins so the suptitle stays centred
-    plt.close(fig)
+    return fig
 
 
 # --- source portrait: baseline & candidate over their change ----------------
@@ -352,11 +347,10 @@ def plot_source_portrait(
     candidate: MetricPanel,
     delta: DeltaPanel,
     *,
-    png_path: Path,
     metric: MetricSpec,
     region_display: str,
     res_label: str,
-) -> None:
+) -> Figure:
     """One comparison's before / after / change portrait.
 
     Baseline and candidate sit on the top row, sharing one sequential scale (a colour is the
@@ -437,8 +431,7 @@ def plot_source_portrait(
     sources = sorted({baseline.source.display_label, candidate.source.display_label})
     footer(fig, source_label=" + ".join(sources), res_label=res_label,
            method=reduction_note(metric), basemap=tile is not None)
-    save_figure(fig, png_path, tight=False)
-    plt.close(fig)
+    return fig
 
 # --- per-panel value distribution ------------------------------------------
 

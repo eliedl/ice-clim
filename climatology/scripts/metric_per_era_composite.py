@@ -33,7 +33,7 @@ from climatology.processing.reduction.temporal import MEDIAN_THEN_THRESHOLD, RED
 from climatology.plot.render import MetricPanel, plot_metric_panels
 from climatology.processing.regions import REGIONS, RegionSpec
 from climatology.services.sources import CHART_TABLES, PERIOD_SOURCES
-from climatology.services.export import OUTPUT_DIR, find_archived
+from climatology.services.export import OUTPUT_DIR, find_archived, save_figure
 from climatology.scripts.sweep import DEFAULT_REGION
 
 logging.basicConfig(
@@ -77,12 +77,13 @@ def _render(region: str, metric: str, tiers: list[str], reduction: str) -> Path 
     png = _composite_path(region, metric, reduction)
     spec = replace(METRICS[metric], reduction=REDUCTIONS[reduction])
     try:
-        plot_metric_panels(panels, png_path=png, metric=spec,
-                           region_display=RegionSpec.build(region).display,
-                           res_label=res_label)
+        fig = plot_metric_panels(panels, metric=spec,
+                                 region_display=RegionSpec.build(region).display,
+                                 res_label=res_label)
     except ValueError as e:      # mixed observation units across the eras' sources
         log.warning("Skipped %s: %s", metric, e)
         return None
+    save_figure(fig, png, tight=False)
     return png
 
 

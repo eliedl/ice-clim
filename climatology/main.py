@@ -62,8 +62,10 @@ def _parse_args() -> argparse.Namespace:
                         "and then collapses (DEC-049/053). Default: "
                         f"{MEDIAN_THEN_THRESHOLD.slug}.")
     p.add_argument("--output", nargs="+", choices=sorted(WRITERS), default=None, metavar="FMT",
-                   help="Output format(s) to write, e.g. --output png netcdf. Default: the "
-                        f"metric's default (png for climatology). Choices: {', '.join(sorted(WRITERS))}.")
+                   help="Extra format(s) to write beside the always-on .npz archive, e.g. "
+                        f"--output netcdf. Choices: {', '.join(sorted(WRITERS))}.")
+    p.add_argument("--no-plot", action="store_false", dest="plot",
+                   help="Skip the run's figure (built from the archive by plot.build).")
     return p.parse_args()
 
 
@@ -71,6 +73,6 @@ if __name__ == "__main__":
     args = _parse_args()
     try:
         run(args.metric, args.region, args.source, args.period,
-            reduction_slug=args.reduction, outputs=args.output)
+            reduction_slug=args.reduction, outputs=args.output, plot=args.plot)
     except ValueError as e:
         sys.exit(f"ERROR: {e}")

@@ -30,6 +30,7 @@ from climatology.services.export import (
     archive_product,
     default_outputs,
     product_path,
+    save_figure,
     write_raw_netcdf,
 )
 
@@ -181,15 +182,34 @@ def _emit(writer: Writer, products: list[TierProduct], ctx: RunContext,
                                   manifest=manifests[group[0].tier.level]))
 
 
+def _plot(ctx: RunContext) -> None:
+    """Build the run's figure from the archive it just wrote, and save it beside the products.
+
+    Reads back rather than drawing from the in-memory rasters: ``plot.build`` has one fetch
+    path, so a figure is reproducible from the archive alone and the run's PNG is the same
+    artefact a later CLI invocation would produce.
+    """
+    from climatology.plot.build import Era, build
+
+    product = build(ctx.region.slug, ctx.metric.slug,
+                    (Era(period=ctx.period.slug, source=ctx.source.slug),),
+                    reduction_slug=ctx.metric.reduction.slug,
+                    type="raw", layout="single", distribution=False)
+    path = product_path(ctx, label=_label(ctx, [], composite=True), ext="png")
+    save_figure(product.figure, path, tight=product.tight)
+
+
 def _export(products: list[TierProduct], ctx: RunContext, fetch: FetchResult,
-            *, outputs: list[str]) -> None:
-    """Archive every tier (always), then run each requested writer — product-agnostic."""
+            *, outputs: list[str], plot: bool) -> None:
+    """Archive every tier (always), run each requested writer, then draw from the archive."""
     manifests = {p.tier.level: _build_manifest(ctx, p.tier, n_rows=fetch.n_rows)
                  for p in products}
     _archive(products, ctx, manifests)
     meta = VarMeta.of(ctx)
     for name in outputs:
         _emit(WRITERS[name], products, ctx, meta, manifests)
+    if plot:
+        _plot(ctx)
 
 
 @singledispatch
@@ -207,20 +227,20 @@ def _(metric: RawMetricSpec, outputs: list[str]) -> None:
 
 @singledispatch
 def _produce(metric: MetricSpec, fetch: FetchResult, ctx: RunContext,
-             outputs: list[str]) -> None:
+             outputs: list[str], plot: bool) -> None:
     """Compute and emit a run's products — the one dispatch seam between the metric variants."""
     raise TypeError(f"No producer for metric spec {type(metric).__name__}")
 
 
 @_produce.register
 def _(metric: ClimatologicalMetricSpec, fetch: FetchResult, ctx: RunContext,
-      outputs: list[str]) -> None:
-    _export(_compute_tiers(fetch, ctx), ctx, fetch, outputs=outputs)
+      outputs: list[str], plot: bool) -> None:
+    _export(_compute_tiers(fetch, ctx), ctx, fetch, outputs=outputs, plot=plot)
 
 
 @_produce.register
 def _(metric: RawMetricSpec, fetch: FetchResult, ctx: RunContext,
-      outputs: list[str]) -> None:
+      outputs: list[str], plot: bool) -> None:
     if len(ctx.region.tiers) != 1:
         raise ValueError(f"Raw hypercube needs a single-grid region; '{ctx.region.slug}' "
                          f"has {len(ctx.region.tiers)} tiers.")
@@ -230,15 +250,16 @@ def _(metric: RawMetricSpec, fetch: FetchResult, ctx: RunContext,
 
 def run(metric_slug: str, region_slug: str, source_slug: str, period_slug: str,
         *, reduction_slug: str = MEDIAN_THEN_THRESHOLD.slug,
-        outputs: list[str] | None = None) -> None:
+        outputs: list[str] | None = None, plot: bool = True) -> None:
     """Produce the products for one (metric, region, source, period, reduction order).
 
-    ``outputs`` names the formats to write (see ``services.export.WRITERS``); when
-    None it defaults to the metric spec's ``default_outputs`` (climatological PNG,
-    raw netCDF). The producer is dispatched on the metric spec's variant.
+    ``outputs`` names the extra formats to write (see ``services.export.WRITERS``);
+    when None it defaults to the metric spec's ``default_outputs``. The ``.npz`` archive
+    is always written regardless. ``plot`` draws the run's figure from that archive
+    afterwards, via ``plot.build``. The producer is dispatched on the metric spec's variant.
     """
     context = _resolve(metric_slug, region_slug, source_slug, period_slug, reduction_slug)
     resolved = list(outputs) if outputs else list(default_outputs(context.metric))
     _check_outputs(context.metric, resolved)
     fetch = _fetch(context)
-    _produce(context.metric, fetch, context, resolved)
+    _produce(context.metric, fetch, context, resolved, plot)

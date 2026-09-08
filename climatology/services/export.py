@@ -377,16 +377,6 @@ class WriteJob:
     manifest: dict
 
 
-def _serialize_png(job: WriteJob) -> None:
-    """Composite map over all tiers (coarse -> fine) via plot.render."""
-    # Imported at call time, not module scope: plot.render pulls save_figure back out of
-    # this module, so a top-level import would close the loop and fail at startup.
-    from climatology.plot.render import plot_metric
-
-    layers = [(p.values, p.tier.grid.bounds) for p in job.products]
-    plot_metric(layers, png_path=job.path, ctx=job.ctx)
-
-
 def _serialize_geotiff(job: WriteJob) -> None:
     """One float32 GeoTIFF for the job's tier; the run manifest travels as tags."""
     p = job.products[0]
@@ -413,8 +403,10 @@ class Writer:
     serialize: Callable[[WriteJob], None]
 
 
+# No PNG writer: a figure is not serialized from a run's in-memory rasters, it is *built*
+# from the archive by `plot.build` after the run has emitted. The pipeline branches on that
+# separately, so this registry stays purely about turning a raster into a file.
 WRITERS: dict[str, Writer] = {w.slug: w for w in (
-    Writer("png", "png", composite=True, serialize=_serialize_png),
     Writer("geotiff", "tif", composite=False, serialize=_serialize_geotiff),
     Writer("netcdf", "nc", composite=False, serialize=_serialize_netcdf),
 )}
@@ -422,12 +414,14 @@ WRITERS: dict[str, Writer] = {w.slug: w for w in (
 
 @singledispatch
 def default_outputs(metric: "MetricSpec") -> tuple[str, ...]:
-    """Default output formats for a metric spec (climatological metrics render a PNG).
+    """Default output formats for a metric spec.
 
-    The writer-layer home of the default so the metric specs stay free of emission
-    policy; dispatched on spec type (raw hypercubes default to netCDF).
+    Climatological runs default to nothing beyond the always-on ``.npz`` archive: the
+    archive *is* the product, and the figure is built from it afterwards. The writer-layer
+    home of the default so the metric specs stay free of emission policy; dispatched on
+    spec type (raw hypercubes default to netCDF).
     """
-    return ("png",)
+    return ()
 
 
 @default_outputs.register

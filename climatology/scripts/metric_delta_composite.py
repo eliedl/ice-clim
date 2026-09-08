@@ -38,7 +38,7 @@ from climatology.processing.reduction.spatial import RasterLayer
 from climatology.processing.reduction.temporal import MEDIAN_THEN_THRESHOLD, REDUCTIONS
 from climatology.processing.regions import REGIONS, RegionSpec
 from climatology.services.sources import CHART_TABLES
-from climatology.services.export import find_archived, delta_composite_path
+from climatology.services.export import delta_composite_path, find_archived, save_figure
 from climatology.scripts.sweep import DEFAULT_REGION
 
 logging.basicConfig(
@@ -149,16 +149,17 @@ def _render(region: str, metric: str, tiers: list[str], reduction: str) -> list[
         portrait = delta_composite_path(
             region, metric, comp.baseline.period, comp.candidate.period,
             filename=f"{metric}_portrait_{region}_{comp.slug}.png")
-        plot_source_portrait(base, cand, delta, png_path=portrait, metric=spec,
-                             region_display=region_display, res_label=_res_label(base))
+        fig = plot_source_portrait(base, cand, delta, metric=spec,
+                                   region_display=region_display, res_label=_res_label(base))
+        save_figure(fig, portrait, tight=False)
         written.append(portrait)
 
     synthesis = delta_composite_path(
         region, metric, COMPARISONS[0].baseline.period, COMPARISONS[0].candidate.period,
         filename=f"{metric}_delta_{region}.png")
-    plot_delta_panels(deltas, png_path=synthesis, metric=spec,
-                      region_display=region_display,
-                      res_label=_res_label(deltas[0]), source_label=_source_label())
+    fig = plot_delta_panels(deltas, metric=spec, region_display=region_display,
+                            res_label=_res_label(deltas[0]), source_label=_source_label())
+    save_figure(fig, synthesis, tight=False)
     written.append(synthesis)
     return written
 
