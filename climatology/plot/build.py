@@ -406,7 +406,14 @@ def _parse_args() -> argparse.Namespace:
 
 
 def main() -> None:
+    from dotenv import load_dotenv
+
     from climatology.services.export import save_figure
+
+    # Only on the CLI path: MAPBOX_TOKEN reaches `plot.basemap` through the environment, and
+    # importing this module (as `pipeline` does) must not have the side effect of setting it.
+    # Every other entry point — main, sweep, the composite scripts — bootstraps the same way.
+    load_dotenv(Path(__file__).parents[2] / ".env")
 
     logging.basicConfig(level=logging.INFO, datefmt="%H:%M:%S",
                         format="%(asctime)s %(levelname)s %(message)s")
