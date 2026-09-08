@@ -60,7 +60,7 @@ load_dotenv(Path(__file__).parents[3] / ".env")
 from climatology.processing.conversion import CONCENTRATION_FRACTION
 from climatology.processing.metrics import METRICS
 from climatology.utils._types import Grid
-from climatology.processing.reductions import (
+from climatology.processing.reduction.temporal import (
     ThresholdDate,
     ThresholdDuration,
     _stream_day_stacks,

@@ -16,7 +16,7 @@ from dataclasses import replace
 
 from climatology.pipeline import FetchResult, _compute_raster
 from climatology.processing.metrics import METRICS
-from climatology.processing.reductions import (
+from climatology.processing.reduction.temporal import (
     MEAN_THEN_THRESHOLD,
     THRESHOLD_THEN_MEAN,
     THRESHOLD_THEN_MEDIAN,

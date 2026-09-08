@@ -20,7 +20,7 @@ from climatology.plot.labels import (
     threshold_label,
 )
 from climatology.processing.metrics import METRICS, ClimatologicalMetricSpec
-from climatology.processing.reductions import REDUCTIONS
+from climatology.processing.reduction.temporal import REDUCTIONS
 from climatology.services.sources import CHART_TABLES
 
 # Plot labels are a climatological concern; raw metrics carry no reduction / plot style.

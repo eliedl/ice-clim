@@ -57,7 +57,7 @@ from climatology.plot.layout import (
     match_map_heights,
 )
 from climatology.plot.validate import assert_comparable, assert_one_reduction
-from climatology.processing.reductions import MEDIAN_THEN_THRESHOLD
+from climatology.processing.reduction.temporal import MEDIAN_THEN_THRESHOLD
 from climatology.services.plot import (
     PANEL_NCOLS,
     RasterLayer,

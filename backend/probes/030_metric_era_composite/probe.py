@@ -38,7 +38,7 @@ import numpy as np
 
 from climatology.plot.labels import threshold_label
 from climatology.processing.metrics import METRICS
-from climatology.processing.reductions import MEDIAN_THEN_THRESHOLD, REDUCTIONS
+from climatology.processing.reduction.temporal import MEDIAN_THEN_THRESHOLD, REDUCTIONS
 from climatology.processing.regions import resolve_region
 from climatology.plot.render import plot_metric_panels
 from climatology.scripts.metric_per_era_composite import _load_panel

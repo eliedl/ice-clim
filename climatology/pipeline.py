@@ -14,7 +14,7 @@ from climatology.processing.metrics import (
     MetricSpec,
     RawMetricSpec,
 )
-from climatology.processing.reductions import MEDIAN_THEN_THRESHOLD, REDUCTIONS
+from climatology.processing.reduction.temporal import MEDIAN_THEN_THRESHOLD, REDUCTIONS
 from climatology.processing.regions import RegionSpec, Tier
 from climatology.services.sources import CHART_TABLES, ChartTable
 from climatology.services.db import load_polygons

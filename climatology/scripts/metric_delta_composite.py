@@ -34,7 +34,7 @@ from climatology.plot.render import (
     DeltaPanel, MetricPanel, plot_delta_panels, plot_source_portrait,
 )
 from climatology.processing.metrics import METRICS
-from climatology.processing.reductions import MEDIAN_THEN_THRESHOLD, REDUCTIONS
+from climatology.processing.reduction.temporal import MEDIAN_THEN_THRESHOLD, REDUCTIONS
 from climatology.processing.regions import REGIONS, RegionSpec
 from climatology.services.plot import RasterLayer
 from climatology.services.sources import CHART_TABLES

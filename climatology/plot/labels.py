@@ -8,7 +8,7 @@ from dataclasses import dataclass
 from datetime import timedelta
 from typing import TYPE_CHECKING
 
-from climatology.processing.reductions import (
+from climatology.processing.reduction.temporal import (
     MPO_MIN_SEASON_COVERAGE,
     StatThenThreshold,
     ThresholdDate,

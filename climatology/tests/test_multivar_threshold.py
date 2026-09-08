@@ -16,7 +16,7 @@ import operator
 
 import numpy as np
 
-from climatology.processing.reductions import ThresholdDate, ThresholdDuration
+from climatology.processing.reduction.temporal import ThresholdDate, ThresholdDuration
 
 log = logging.getLogger(__name__)
 

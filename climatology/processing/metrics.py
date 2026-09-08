@@ -8,7 +8,7 @@ from dataclasses import dataclass, replace
 
 import numpy as np
 
-from climatology.processing.reductions import (
+from climatology.processing.reduction.temporal import (
     MEDIAN_THEN_THRESHOLD,
     Kernel,
     Reduction,
