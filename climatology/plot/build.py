@@ -14,6 +14,35 @@ and leaves each stage one concern: locate-and-check, load, draw.
 Two callers, one path — the CLI here, and ``pipeline`` after it has emitted a run's archive.
 Neither hands in rasters: a figure is always built from what is on disk, so a plot is
 reproducible from the archive alone.
+
+Usage:
+    python -m climatology.plot.build METRIC REGION --era PERIOD:SOURCE ... --out FIG.png
+
+``--era`` is repeatable and *ordered*; a delta differences consecutive pairs. Run the sweep
+first — every era named must already be archived under the requested reduction.
+
+    # one era, one map: the same figure the pipeline emits per run
+    python -m climatology.plot.build freeze_up_date manicouagan \\
+        --era 2011-2020:sgrda --layout single --no-distribution \\
+        --out freeze_up_manicouagan_2011-2020.png
+
+    # every era side by side on one colour scale (per-era composite)
+    python -m climatology.plot.build freeze_up_date manicouagan \\
+        --era 1971-2000:sgrdr --era 1981-2010:sgrdr \\
+        --era 1991-2020:sgrdr --era 2011-2020:sgrda \\
+        --out freeze_up_manicouagan_eras.png
+
+    # signed change, SGRDR against SGRDR — chart type held fixed, since data
+    # reliability is chart-type dependent (Angela Cheng/CIS, pers. comm. 2026)
+    python -m climatology.plot.build breakup_date manicouagan --type delta \\
+        --era 1981-2010:sgrdr --era 2011-2020:sgrdr \\
+        --out breakup_manicouagan_delta.png
+
+    # baseline / candidate / change, one portrait
+    python -m climatology.plot.build breakup_date manicouagan \\
+        --type delta --layout portrait --no-distribution \\
+        --era 1981-2010:sgrdr --era 2011-2020:sgrdr \\
+        --out breakup_manicouagan_portrait.png
 """
 
 from __future__ import annotations
@@ -52,6 +81,8 @@ log = logging.getLogger(__name__)
 
 RAW, DELTA = "raw", "delta"
 SINGLE, MULTI, PORTRAIT = "single", "multi", "portrait"
+
+GRID_MATCH_CELLS = 0.01   # bounds within 1/100 of a cell are the same grid
 
 
 # --- context ----------------------------------------------------------------
@@ -127,6 +158,10 @@ class ArchiveRef:
     @property
     def grid_shape(self) -> tuple[int, int]:
         return tuple(self.manifest["grid_shape"])
+
+    @property
+    def res_m(self) -> float:
+        return float(self.manifest["grid_res_m"])
 
 
 @dataclass(frozen=True)
@@ -280,17 +315,22 @@ def _assert_shared_grid(refs: list[list[ArchiveRef]]) -> None:
 
     The region+tier grid is source- and period-invariant by construction, so a mismatch means
     the archives were written against different region definitions — which a delta would
-    silently subtract cell-for-cell into nonsense.
+    silently subtract cell-for-cell into nonsense. Corners closer than ``GRID_MATCH_CELLS``
+    of a cell are the same grid: bounds are recomputed per run and round-tripped through
+    JSON, so the same corner drifts in its last bits across eras.
     """
     for tier_refs in zip(*refs):
+        first = tier_refs[0]
+        tol = GRID_MATCH_CELLS * first.res_m
         shapes = {r.grid_shape for r in tier_refs}
-        bounds = {r.bounds for r in tier_refs}
-        if len(shapes) > 1 or len(bounds) > 1:
-            first = tier_refs[0]
+        moved = any(abs(a - b) > tol
+                    for r in tier_refs for a, b in zip(first.bounds, r.bounds))
+        if len(shapes) > 1 or moved:
             raise ValueError(
                 f"Tier {first.tier!r} archives disagree on the grid across eras "
                 f"({', '.join(r.era.label for r in tier_refs)}): shapes={sorted(shapes)}, "
-                f"bounds={sorted(bounds)}. The region+tier grid must be era-invariant.")
+                f"bounds={sorted({r.bounds for r in tier_refs})}. The region+tier grid must "
+                "be era-invariant.")
 
 
 def _fetch(ctx: PlotContext, refs: list[list[ArchiveRef]]) -> list[MetricPanel]:
@@ -298,7 +338,7 @@ def _fetch(ctx: PlotContext, refs: list[list[ArchiveRef]]) -> list[MetricPanel]:
     panels = []
     for era_refs in refs:
         layers = [RasterLayer(values=np.load(r.npz)["values"],
-                              bounds=r.bounds, res_m=float(r.manifest["grid_res_m"]))
+                              bounds=r.bounds, res_m=r.res_m)
                   for r in era_refs]
         era = era_refs[0].era
         panels.append(MetricPanel(period=era.period, source=CHART_TABLES[era.source],
