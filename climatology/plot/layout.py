@@ -33,12 +33,6 @@ PANEL_RIGHT = 0.93
 PANEL_TOP = 0.88
 PANEL_BOTTOM = 0.12
 PANEL_CBAR_PAD = 0.09         # gap between the bottom row and the colourbar
-# ``Tier.res_m`` is the *requested* resolution: build_grid rounds the cell count up
-# (ceil) and then stretches the cells to span the wet bbox exactly, so true cells are
-# slightly smaller than nominal, not square, and never off by more than ~1/width.
-# Areas must therefore come from bounds/shape, never from res_m²; res_m is only a
-# sanity anchor, so the check is a band and not an equality.
-CELL_SIZE_TOL = 0.02
 
 
 # --- source portrait: baseline & candidate over their change ----------------

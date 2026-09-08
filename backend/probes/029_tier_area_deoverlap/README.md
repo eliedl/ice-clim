@@ -6,7 +6,7 @@ The per-era composite (`climatology/scripts/metric_per_era_composite.py`) draws 
 **area-weighted** value distribution beside each map. Adaptive regions carry two tiers over
 the *same ground* — coarse 1 km over the whole MRC, fine 100 m over the coastal buffer — so
 a raw cell count would let a 100 m cell and a 1 km cell speak equally and the fine tier
-would outvote the coarse one ~100:1 per km². `plot._area_weights` instead attributes each
+would outvote the coarse one ~100:1 per km². `spatial.area_weights` instead attributes each
 patch of ground to the **finest tier holding data there**, weighting cells by true area.
 
 This probe asserts that the weighting neither double counts nor loses ground, against the
@@ -69,7 +69,7 @@ Any area work must derive cell size from bounds/shape.
 
 ## Provenance
 
-Validates `climatology/services/plot.py::_area_weights` / `_deposit`, consumed by
+Validates `climatology/processing/reduction/spatial.py::area_weights` / `_deposit`, consumed by
 `climatology/scripts/metric_per_era_composite.py`. Grid geometry from
 `climatology/processing/rasterize.py::build_grid`.
 

@@ -78,7 +78,7 @@ Every panel but one renders its smallest real value at **under 1 px** — invisi
 what prompted the log axis: the Outardes estuary's Apr 02 break-up holds 0.36% of the region
 (probe 029), vanished on the linear axis, yet dominates the map's colour.
 
-While staged, `probe.py` overrode `plot._draw_distribution` and emitted **both** scales per
+While staged, `probe.py` overrode `plot.render.draw_distribution` and emitted **both** scales per
 metric (`*_linear.png`, `*_log.png`) for comparison. The log axis read the tail without
 distorting the mode, so it was **promoted into `plot.py`** and the probe-local override
 deleted — the probe now renders the production figure. The measurement above is kept as the

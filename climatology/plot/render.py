@@ -15,10 +15,12 @@ from typing import TYPE_CHECKING
 import matplotlib.pyplot as plt
 import numpy as np
 from matplotlib.colors import Colormap, Normalize
+from matplotlib.ticker import FuncFormatter, LogLocator, NullFormatter
 
 from climatology.plot.basemap import draw_basemap_labels, draw_basemap_land, load_basemap
 from climatology.plot.colors import (
     DARK_FG,
+    DARK_LINE,
     DARK_OCEAN,
     delta_scale,
     metric_scale,
@@ -37,7 +39,9 @@ from climatology.plot.layout import (
     PANEL_BOTTOM,
     PANEL_CBAR_PAD,
     PANEL_DECORATION_IN,
+    PANEL_HIST_BINS,
     PANEL_HIST_WIDTH,
+    PANEL_HIST_XLIM,
     PANEL_HSPACE,
     PANEL_LEFT,
     PANEL_RIGHT,
@@ -57,13 +61,9 @@ from climatology.plot.layout import (
     match_map_heights,
 )
 from climatology.plot.validate import assert_comparable, assert_one_reduction
+from climatology.processing.reduction.spatial import RasterLayer, area_weights
 from climatology.processing.reduction.temporal import MEDIAN_THEN_THRESHOLD
-from climatology.services.plot import (
-    PANEL_NCOLS,
-    RasterLayer,
-    draw_distribution,
-    save_figure,
-)
+from climatology.services.plot import PANEL_NCOLS, save_figure
 from climatology.utils._types import GRID_CRS, DataGrid, GridBounds
 
 if TYPE_CHECKING:
@@ -215,7 +215,7 @@ def plot_metric_panels(
         style_axes(ax)
 
         draw_distribution(hax, panel.layers, cmap=cmap, norm=norm,
-                           tick_values=tick_values, tick_labels=tick_labels)
+                          tick_values=tick_values, tick_labels=tick_labels)
     for spare in axes.ravel()[2 * len(panels):]:
         spare.set_visible(False)
 
@@ -307,7 +307,7 @@ def plot_delta_panels(
         style_axes(ax)
 
         draw_distribution(hax, panel.layers, cmap=cmap, norm=norm,
-                           tick_values=tick_values, tick_labels=tick_labels)
+                          tick_values=tick_values, tick_labels=tick_labels)
     for spare in axes.ravel()[2 * len(panels):]:
         spare.set_visible(False)
 
@@ -438,3 +438,53 @@ def plot_source_portrait(
            method=reduction_note(metric), basemap=tile is not None)
     save_figure(fig, png_path, tight=False)
     plt.close(fig)
+
+# --- per-panel value distribution ------------------------------------------
+
+def draw_distribution(hax, layers: list[RasterLayer], *, cmap: Colormap, norm: Normalize,
+                      tick_values: list[float], tick_labels: list[str]) -> None:
+    """Draw the panel's area-weighted value distribution on its own axes, beside the map.
+
+    Shares the map's colour scale: the y axis carries the colourbar's ticks and each bar
+    is drawn in the colour its values map to. Values outside the scale fall into the end
+    bins, mirroring the colourbar's saturated over/under.
+    """
+    values, weights = area_weights(layers)
+    vmin, vmax = norm.vmin, norm.vmax
+    edges = np.linspace(vmin, vmax, PANEL_HIST_BINS + 1)
+    hist, _ = np.histogram(np.clip(values, vmin, vmax), bins=edges, weights=weights)
+    pct = 100.0 * hist / weights.sum()
+    centers = 0.5 * (edges[:-1] + edges[1:])
+
+    hax.set_facecolor(DARK_OCEAN)
+    hax.barh(centers, pct, height=np.diff(edges), color=cmap(norm(centers)),
+             edgecolor="none")
+
+    hax.set_ylim(vmax, vmin)        # dates increase downward, like the map's origin="upper"
+    hax.set_yticks(tick_values)
+    hax.set_yticklabels(tick_labels, fontsize=7)
+
+    # Log area axis (probe 030): shares span 2-5 decades, so on a linear axis the smallest
+    # real value renders under 1 px — the Outardes estuary's late break-up holds 0.36% of
+    # the region yet dominates the map's colour. Bars anchor at 0 and so read from the left
+    # spine; the limits are fixed, never derived from the values, so a bar length is the
+    # same share of the region in every panel and every metric.
+    hax.set_xscale("log")
+    hax.set_xlim(*PANEL_HIST_XLIM)
+    hax.xaxis.set_major_locator(LogLocator(base=10.0, numticks=5))
+    hax.xaxis.set_major_formatter(FuncFormatter(lambda v, _: f"{v:g}"))
+    hax.xaxis.set_minor_locator(LogLocator(base=10.0, subs=tuple(np.arange(2, 10) * 0.1)))
+    hax.xaxis.set_minor_formatter(NullFormatter())   # unlabelled, or the decades collide
+
+    hax.set_xlabel("% of area (log)", fontsize=7, color=DARK_FG, labelpad=2)
+    hax.tick_params(axis="both", labelsize=7, colors=DARK_FG, length=2, pad=1)
+    for side, spine in hax.spines.items():
+        spine.set_visible(side in ("left", "bottom"))
+        spine.set_edgecolor(DARK_LINE)
+
+    # Decade lines carry most of the reading on a log axis; the value lines tie a bar back
+    # to the colourbar's ticks.
+    hax.grid(True, which="major", linestyle=":", linewidth=0.5, color=DARK_LINE, alpha=0.9)
+    hax.grid(True, which="minor", axis="x", linestyle=":", linewidth=0.3,
+             color=DARK_LINE, alpha=0.5)
+    hax.set_axisbelow(True)

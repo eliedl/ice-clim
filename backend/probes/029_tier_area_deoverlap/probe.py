@@ -4,7 +4,7 @@ The per-era composite (`climatology/scripts/metric_per_era_composite.py`) draws 
 area-weighted value distribution beside each map. Adaptive regions carry two tiers that
 cover the *same ground* at different resolutions (coarse 1 km over the whole MRC, fine
 100 m over the coastal buffer), so a raw cell count would let a 100 m cell and a 1 km cell
-speak equally and the fine tier would outvote the coarse one 100:1 per km². `_area_weights`
+speak equally and the fine tier would outvote the coarse one 100:1 per km². `area_weights`
 instead attributes each patch of ground to the finest tier holding data there.
 
 ## What this validates
@@ -41,9 +41,9 @@ from pathlib import Path
 
 import numpy as np
 
+from climatology.processing.reduction.spatial import RasterLayer, _deposit, area_weights
 from climatology.processing.reduction.temporal import MEDIAN_THEN_THRESHOLD, REDUCTIONS
 from climatology.processing.regions import resolve_region
-from climatology.services.plot import RasterLayer, _area_weights, _deposit
 from climatology.services.calendar import SEASON_ORIGIN
 from climatology.services.export import find_archived
 
@@ -106,7 +106,7 @@ def report_deoverlap(layers: list[RasterLayer], truth: float, label: str) -> lis
     with each other; the leak and over-claim lines below say by how much and why.
     """
     coarse, finest = layers[0], layers[-1]
-    _, weights = _area_weights(layers)
+    _, weights = area_weights(layers)
 
     dedup = float(weights.sum())
     naive = sum(float(np.isfinite(l.values).sum()) * l.cell_area for l in layers)
@@ -146,7 +146,7 @@ def report_deoverlap(layers: list[RasterLayer], truth: float, label: str) -> lis
 def report_distribution(layers: list[RasterLayer], metric: str, period: str,
                         source: str) -> list[str]:
     """C: the area-weighted value distribution of an archived product."""
-    values, weights = _area_weights(layers)
+    values, weights = area_weights(layers)
     total = float(weights.sum())
     is_date = metric.endswith("_date")
 

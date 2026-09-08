@@ -38,11 +38,11 @@ import numpy as np
 
 from climatology.plot.labels import threshold_label
 from climatology.processing.metrics import METRICS
+from climatology.processing.reduction.spatial import area_weights
 from climatology.processing.reduction.temporal import MEDIAN_THEN_THRESHOLD, REDUCTIONS
 from climatology.processing.regions import resolve_region
 from climatology.plot.render import plot_metric_panels
 from climatology.scripts.metric_per_era_composite import _load_panel
-from climatology.services.plot import _area_weights
 from climatology.services.sources import PERIOD_SOURCES
 from climatology.services.calendar import SEASON_ORIGIN
 from climatology.utils.arithmetics import percentile_range
@@ -76,7 +76,7 @@ def _scorecard(region: str, metric: str, panels: list) -> list[str]:
         f"{'min share':>10} {'max share':>10} {'decades':>8} {'lin. px':>8}",
     ]
     for panel in panels:
-        values, weights = _area_weights(panel.layers)
+        values, weights = area_weights(panel.layers)
         total = weights.sum()
         shares = np.array([weights[values == v].sum() / total for v in np.unique(values)])
         lo, hi = 100.0 * shares.min(), 100.0 * shares.max()
