@@ -3,13 +3,14 @@
 from __future__ import annotations
 
 import operator
-from collections.abc import Callable
+from collections.abc import Callable, Iterable
 from dataclasses import dataclass
 from datetime import timedelta
 from typing import TYPE_CHECKING
 
 from climatology.processing.reduction.temporal import (
     MPO_MIN_SEASON_COVERAGE,
+    REDUCTIONS,
     StatThenThreshold,
     ThresholdDate,
     ThresholdDateDelta,
@@ -159,6 +160,16 @@ def metric_label(metric: MetricSpec) -> str:
     return labels[reduction.order].format(stat=stat, Stat=stat[0].upper() + stat[1:])
 
 
+def panel_metric_label(metric: MetricSpec, reduction_slug: str) -> str:
+    """One panel's colourbar label, under the reduction order that panel was computed under.
+
+    A figure branching on reduction draws one bar per map precisely so each can say what its
+    own map means: the orders phrase the quantity differently (see ``PlotStyle``) and no single
+    string describes both.
+    """
+    return metric_label(metric.with_reduction(REDUCTIONS[reduction_slug]))
+
+
 # Threshold direction, read off the kernel rather than restated: ThresholdDate says which
 # crossing it takes, ThresholdDuration carries the comparison operator itself.
 _DATE_OPS = {"first_above": "≥", "last_above": "≥", "first_below": "<"}
@@ -191,9 +202,14 @@ REDUCTION_NOTES: dict[str, str] = {
 }
 
 
+def reduction_notes(slugs: Iterable[str]) -> str:
+    """Footer note naming every reduction order the figure draws, in order, deduped."""
+    return " | ".join(REDUCTION_NOTES[s] for s in dict.fromkeys(slugs))
+
+
 def reduction_note(metric: MetricSpec) -> str:
     """Footer note naming the reduction order the product was computed under."""
-    return REDUCTION_NOTES[metric.reduction.slug]
+    return reduction_notes([metric.reduction.slug])
 
 
 def threshold_label(metric: MetricSpec) -> str:

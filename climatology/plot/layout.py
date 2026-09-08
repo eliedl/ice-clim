@@ -38,16 +38,19 @@ PANEL_CBAR_PAD = 0.09         # gap between the bottom row and the colourbar
 
 # --- source portrait: baseline & candidate over their change ----------------
 
-# Fixed, symmetric map-block margins (figure fractions) and colourbar geometry. The
-# colourbars live in their own axes outside the block, so their width and gap are
-# decoupled from the maps' position — the hero panel stays centred whatever the gap.
+# Fixed, symmetric map-block margins (figure fractions). Each map carries its *own*
+# horizontal colourbar, placed under it from its drawn box: a portrait can branch on
+# reduction order, and the orders phrase the quantity differently, so one bar per map is
+# what lets each say what its own map means. The bars live in the gaps the margins already
+# reserve — row 1's in the inter-row gap, the hero's in the bottom margin — so their
+# geometry never moves a map.
 PORTRAIT_LEFT, PORTRAIT_RIGHT = 0.13, 0.87
-PORTRAIT_TOP, PORTRAIT_BOTTOM = 0.9, 0.05
+PORTRAIT_TOP, PORTRAIT_BOTTOM = 0.9, 0.13
 PORTRAIT_WSPACE = 0.12
-PORTRAIT_HSPACE = 0.2         # gap between row 1 and row 2 (fraction of average row height)
-PORTRAIT_CBAR_W = 0.014        # colourbar bar width (figure fraction)
-PORTRAIT_CBAR_H = 0.50         # colourbar height (figure fraction), centred on the block
-PORTRAIT_CBAR_GAP = 0.05      # symmetric gap between a colourbar and the map block
+PORTRAIT_HSPACE = 0.42        # gap between row 1 and row 2 (fraction of average row height)
+PORTRAIT_FIG_W_IN = 16.0      # figure width with no histogram columns (widened pro rata with them)
+PORTRAIT_CBAR_THICK = 0.010   # colourbar thickness (figure fraction)
+PORTRAIT_CBAR_GAP = 0.028     # gap between a map's bottom edge and its own colourbar
 
 
 # --- axes framing and post-draw geometry -------------------------------------

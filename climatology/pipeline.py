@@ -189,11 +189,11 @@ def _plot(ctx: RunContext) -> None:
     path, so a figure is reproducible from the archive alone and the run's PNG is the same
     artefact a later CLI invocation would produce.
     """
-    from climatology.plot.build import Era, build
+    from climatology.plot.build import Product, build
 
     product = build(ctx.region.slug, ctx.metric.slug,
-                    (Era(period=ctx.period.slug, source=ctx.source.slug),),
-                    reduction_slug=ctx.metric.reduction.slug,
+                    (Product(period=ctx.period.slug, source=ctx.source.slug,
+                             reduction=ctx.metric.reduction.slug),),
                     type="raw", layout="single", distribution=False)
     path = product_path(ctx, label=_label(ctx, [], composite=True), ext="png")
     save_figure(product.figure, path, tight=product.tight)

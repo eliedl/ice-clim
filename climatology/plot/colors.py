@@ -75,16 +75,6 @@ def style_colorbar(cbar, *, label: str, tick_values: list[float],
     cbar.outline.set_edgecolor(DARK_LINE)
 
 
-def style_colorbar_v(cbar, *, label: str, tick_values: list[float],
-                     tick_labels: list[str]) -> None:
-    """Dark-theme a *vertical* colourbar (ticks on the y axis) and apply tick formatting."""
-    cbar.set_ticks(tick_values)
-    cbar.set_ticklabels(tick_labels, fontsize=12)
-    cbar.set_label(label, color=DARK_FG, fontsize=13)
-    cbar.ax.yaxis.set_tick_params(color=DARK_LINE, labelcolor=DARK_FG)
-    cbar.outline.set_edgecolor(DARK_LINE)
-
-
 def build_cmap(
     palette: str | list[tuple[float, str]],
     vmin: float,
