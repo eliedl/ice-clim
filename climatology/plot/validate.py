@@ -12,7 +12,7 @@ from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
     from climatology.processing.metrics import MetricSpec
-    from climatology.services.plot import MetricPanel
+    from climatology.plot.render import MetricPanel
 
 
 def assert_comparable(panels: list[MetricPanel], metric: MetricSpec) -> None:

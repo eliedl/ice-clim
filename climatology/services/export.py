@@ -18,8 +18,8 @@ import rasterio
 from rasterio.crs import CRS
 
 from climatology.plot.labels import metric_label
+from climatology.plot.render import plot_metric
 from climatology.processing.metrics import RawMetricSpec
-from climatology.services.plot import plot_metric
 from climatology.services.temporal import SEASON_ORIGIN
 from climatology.utils._types import GRID_CRS, DataGrid, Grid
 

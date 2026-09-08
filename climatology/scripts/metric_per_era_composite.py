@@ -29,8 +29,9 @@ sys.path.insert(0, str(Path(__file__).parents[2]))
 
 from climatology.processing.metrics import METRICS
 from climatology.processing.reductions import MEDIAN_THEN_THRESHOLD, REDUCTIONS
+from climatology.plot.render import MetricPanel, plot_metric_panels
 from climatology.processing.regions import REGIONS, RegionSpec
-from climatology.services.plot import MetricPanel, RasterLayer, plot_metric_panels
+from climatology.services.plot import RasterLayer
 from climatology.services.sources import CHART_TABLES, PERIOD_SOURCES
 from climatology.services.export import OUTPUT_DIR, find_archived
 from climatology.scripts.sweep import DEFAULT_REGION

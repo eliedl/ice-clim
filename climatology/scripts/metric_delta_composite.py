@@ -30,12 +30,13 @@ from dotenv import load_dotenv
 load_dotenv(Path(__file__).parents[2] / ".env")
 sys.path.insert(0, str(Path(__file__).parents[2]))
 
+from climatology.plot.render import (
+    DeltaPanel, MetricPanel, plot_delta_panels, plot_source_portrait,
+)
 from climatology.processing.metrics import METRICS
 from climatology.processing.reductions import MEDIAN_THEN_THRESHOLD, REDUCTIONS
 from climatology.processing.regions import REGIONS, RegionSpec
-from climatology.services.plot import (
-    DeltaPanel, MetricPanel, RasterLayer, plot_delta_panels, plot_source_portrait,
-)
+from climatology.services.plot import RasterLayer
 from climatology.services.sources import CHART_TABLES
 from climatology.services.export import find_archived, delta_composite_path
 from climatology.scripts.sweep import DEFAULT_REGION
