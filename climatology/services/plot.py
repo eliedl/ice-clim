@@ -15,10 +15,8 @@ from matplotlib.colors import Colormap, Normalize
 from matplotlib.ticker import FuncFormatter, LogLocator, NullFormatter
 from matplotlib.transforms import Bbox
 
-from climatology.processing.reductions import MEDIAN_THEN_THRESHOLD
-from climatology.utils._types import GRID_CRS, DataGrid, GridBounds
-from climatology.utils.basemap import draw_basemap_labels, draw_basemap_land, load_basemap
-from climatology.utils.colors import (
+from climatology.plot.basemap import draw_basemap_labels, draw_basemap_land, load_basemap
+from climatology.plot.colors import (
     DARK_COAST,
     DARK_FG,
     DARK_LAND,
@@ -30,13 +28,16 @@ from climatology.utils.colors import (
     style_colorbar,
     style_colorbar_v,
 )
-from climatology.utils.labels import (
+from climatology.plot.labels import (
     PLOT_STYLES,
     footer,
     metric_label,
     metric_title,
     reduction_note,
 )
+from climatology.plot.validate import assert_comparable, assert_one_reduction
+from climatology.processing.reductions import MEDIAN_THEN_THRESHOLD
+from climatology.utils._types import GRID_CRS, DataGrid, GridBounds
 
 if TYPE_CHECKING:
     from climatology.pipeline import RunContext
@@ -369,37 +370,6 @@ class MetricPanel:
         return np.concatenate([layer.values.ravel() for layer in self.layers])
 
 
-def _assert_comparable(panels: list[MetricPanel], metric: MetricSpec) -> None:
-    """Reject a shared colour scale over mixed observation units.
-
-    Step-count metrics only land on a common unit because ``TierProduct`` scales them to
-    days; this is the backstop if a source ever reports its counts in something else.
-    """
-    if not metric.counts_steps:
-        return
-    units = {p.source.obs_unit for p in panels}
-    if len(units) > 1:
-        raise ValueError(
-            f"Metric '{metric.slug}' is counted in the source's observation unit "
-            f"({', '.join(sorted(units))}) — panels from different chart cadences "
-            "cannot share one colour scale. Plot one source per figure."
-        )
-
-
-def _assert_one_reduction(panels: list[MetricPanel], metric: MetricSpec) -> None:
-    """The rasters must come from the reduction order the figure claims to label.
-
-    The reduction orders compute different quantities from the same charts, so a figure labelled for
-    one and drawn from the other's archives is silently wrong.
-    """
-    wrong = sorted({p.reduction for p in panels} - {metric.reduction.slug})
-    if wrong:
-        raise ValueError(
-            f"Panels carry reduction {wrong} but the figure is labelled for "
-            f"'{metric.reduction.slug}' — the rasters and the label disagree."
-        )
-
-
 def plot_metric_panels(
     panels: list[MetricPanel],
     *,
@@ -412,8 +382,8 @@ def plot_metric_panels(
     """Render one metric across periods as a panel grid sharing one colour scale and one extent."""
     if not panels:
         raise ValueError("plot_metric_panels needs at least one panel.")
-    _assert_comparable(panels, metric)
-    _assert_one_reduction(panels, metric)
+    assert_comparable(panels, metric)
+    assert_one_reduction(panels, metric)
 
     style = PLOT_STYLES[metric.slug]
     display_label = metric_label(metric)

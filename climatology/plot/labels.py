@@ -17,7 +17,7 @@ from climatology.processing.reductions import (
 )
 from climatology.services.temporal import SEASON_ORIGIN
 from climatology.utils._types import GRID_CRS
-from climatology.utils.colors import DARK_MUTED
+from climatology.plot.colors import DARK_MUTED
 
 if TYPE_CHECKING:
     from climatology.processing.metrics import MetricSpec

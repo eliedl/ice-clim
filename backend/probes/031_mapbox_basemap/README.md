@@ -63,7 +63,7 @@ The two stacks take **different credentials** — v1 renders an `admin-ogsl` sty
 ours — so they cannot share `MAPBOX_TOKEN`. Once the borrowed token is revoked, `--legacy`
 stops running and the figures it produced remain in `output/` as the record.
 
-Renders are cached on disk by `climatology.utils.basemap` (`~/.cache/ice-clim/basemap/`),
+Renders are cached on disk by `climatology.plot.basemap` (`~/.cache/ice-clim/basemap/`),
 so re-runs are offline; `--recompute` drops the cache and re-fetches.
 
 ## Outcome — v1, the OGSL style (2026-07-14, superseded)

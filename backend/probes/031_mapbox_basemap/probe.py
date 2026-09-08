@@ -41,7 +41,7 @@ read back from the pipeline's own archives (no probe-local recomputation of the 
     7_clip           the OSM clip *is* the coastline, and it opens the Outardes
     8_label_order    clip-then-label keeps the names; label-then-clip crops them
 
-Needs MAPBOX_TOKEN. Renders are cached by climatology.utils.basemap, so re-runs are offline.
+Needs MAPBOX_TOKEN. Renders are cached by climatology.plot.basemap, so re-runs are offline.
 
 Run:
     .venv/bin/python -m backend.probes.031_mapbox_basemap.probe [--recompute] [--legacy]
@@ -68,15 +68,14 @@ from shapely.geometry import box
 
 load_dotenv(Path(__file__).parents[3] / ".env")
 
-from climatology.utils._types import GRID_CRS                               # noqa: E402
-from climatology.services.plot import LAND_DISPLAY_PATH                     # noqa: E402
-from climatology.utils.colors import (                                      # noqa: E402
+from climatology.plot.basemap import (                                      # noqa: E402
+    BASE_STYLE, CACHE_DIR, LABEL_STYLE, LAND_DISPLAY_PATH, _alpha_over, _request_geometry,
+    clip_to_land, fetch_style_png, land_mask, load_basemap, warp_to_grid,
+)
+from climatology.plot.colors import (                                       # noqa: E402
     DARK_COAST, DARK_FG, DARK_OCEAN, build_cmap,
 )
-from climatology.utils.basemap import (                                     # noqa: E402
-    BASE_STYLE, CACHE_DIR, LABEL_STYLE, _alpha_over, _request_geometry, clip_to_land,
-    fetch_style_png, land_mask, load_basemap, warp_to_grid,
-)
+from climatology.utils._types import GRID_CRS                               # noqa: E402
 
 OUT = Path(__file__).parent / "output"
 

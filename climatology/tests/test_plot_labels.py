@@ -11,10 +11,7 @@ from dataclasses import replace
 
 import pytest
 
-from climatology.processing.metrics import METRICS, ClimatologicalMetricSpec
-from climatology.processing.reductions import REDUCTIONS
-from climatology.services.sources import CHART_TABLES
-from climatology.utils.labels import (
+from climatology.plot.labels import (
     PLOT_STYLES,
     REDUCTION_NOTES,
     metric_label,
@@ -22,6 +19,9 @@ from climatology.utils.labels import (
     reduction_note,
     threshold_label,
 )
+from climatology.processing.metrics import METRICS, ClimatologicalMetricSpec
+from climatology.processing.reductions import REDUCTIONS
+from climatology.services.sources import CHART_TABLES
 
 # Plot labels are a climatological concern; raw metrics carry no reduction / plot style.
 CLIMATOLOGICAL_METRICS = {slug: m for slug, m in METRICS.items()
