@@ -1,4 +1,4 @@
-"""Climatology map plotting — palettes, colormap building, and map rendering."""
+"""Climatology map plotting — metric presentation styles and map rendering."""
 
 from __future__ import annotations
 
@@ -13,10 +13,9 @@ from typing import TYPE_CHECKING
 import operator
 
 import geopandas as gpd
-import matplotlib.colors as mcolors
 import matplotlib.pyplot as plt
 import numpy as np
-from matplotlib.colors import Colormap, LinearSegmentedColormap, Normalize
+from matplotlib.colors import Colormap, Normalize
 from matplotlib.ticker import FuncFormatter, LogLocator, NullFormatter
 from matplotlib.transforms import Bbox
 
@@ -30,8 +29,17 @@ from climatology.processing.reductions import (
 )
 from climatology.services.temporal import SEASON_ORIGIN
 from climatology.utils._types import GRID_CRS, DataGrid, GridBounds
-from climatology.utils.arithmetics import percentile_range
 from climatology.utils.basemap import BasemapTile, load_basemap
+from climatology.utils.colors import (
+    DARK_COAST,
+    DARK_FG,
+    DARK_LAND,
+    DARK_LINE,
+    DARK_MUTED,
+    DARK_OCEAN,
+    delta_scale,
+    metric_scale,
+)
 
 if TYPE_CHECKING:
     from climatology.pipeline import RunContext
@@ -41,70 +49,7 @@ if TYPE_CHECKING:
 
 log = logging.getLogger(__name__)
 
-# Dark "Mapbox-style" theme. Ocean = axes background (shows through NaN /
-# ice-free cells); land polygons are painted on top so they cover dry cells only.
-DARK_OCEAN = "#0b0f14"
-DARK_LAND  = "#1c2128"
-DARK_COAST = "#3a4350"
-DARK_FG    = "#dfe3e8"
-DARK_MUTED = "#7a828c"
-DARK_LINE  = "#3a3f47"
-
 PANEL_NCOLS = 2   # 4 periods -> 2 x 2
-
-PALETTES: dict[str, list[tuple[float, str]]] = {
-    # 7-stop cool-to-warm sequential ramp (teal -> indigo -> plum -> ember -> red).
-    "cool_to_warm_7": [
-        (0.0,     "#7dc6d5"),
-        (1 / 6,   "#6576bb"),
-        (2 / 6,   "#5b389a"),
-        (3 / 6,   "#a05b55"),
-        (4 / 6,   "#e17117"),
-        (5 / 6,   "#ed5009"),
-        (1.0,     "#f63601"),
-    ],
-    # 5-stop coarser variant of the same family.
-    "cool_to_warm_5": [
-        (0.00, "#7ec8d5"),
-        (0.25, "#5e61b5"),
-        (0.50, "#7d4b78"),
-        (0.75, "#d47123"),
-        (1.00, "#ee5009"),
-    ],
-    # 5-stop palette tuned for wave-height style scales.
-    "waves_5": [
-        (0.00, "#7dc6d5"),
-        (0.25, "#5540ab"),
-        (0.50, "#b9663d"),
-        (0.75, "#ec5009"),
-        (1.00, "#f73700"),
-    ],
-}
-
-
-def build_cmap(
-    palette: str | list[tuple[float, str]],
-    vmin: float,
-    vmax: float,
-    *,
-    under: str | None = None,
-    over: str | None = None,
-    bad: str = "none",
-    n: int = 1024,
-) -> tuple[Colormap, Normalize]:
-    """Build a ``(cmap, norm)`` pair anchored to ``[vmin, vmax]``."""
-    stops = PALETTES[palette] if isinstance(palette, str) else palette
-    positions = [p for p, _ in stops]
-    colors = [mcolors.to_rgba(c) for _, c in stops]
-
-    cmap = LinearSegmentedColormap.from_list(
-        "custom", list(zip(positions, colors)), N=n,
-    )
-    cmap.set_under(mcolors.to_rgba(under) if under else colors[0])
-    cmap.set_over(mcolors.to_rgba(over) if over else colors[-1])
-    cmap.set_bad(bad)
-
-    return cmap, Normalize(vmin=vmin, vmax=vmax, clip=False)
 
 
 def _date_ticks(tick_values: list[float]) -> list[str]:
@@ -297,14 +242,6 @@ def threshold_label(metric: MetricSpec) -> str:
 
 # --- shared rendering primitives -------------------------------------------
 
-def _metric_scale(values: np.ndarray, style: PlotStyle) -> tuple[Colormap, Normalize, list[float], list[str]]:
-    """Colour scale + colourbar ticks anchored on the value range (drops near-coast extremas)."""
-    vmin, vmax = percentile_range(values, low=1, high=100)
-    cmap, norm = build_cmap("cool_to_warm_7", vmin=vmin, vmax=vmax)
-    tick_values = list(np.linspace(vmin, vmax, 6))
-    return cmap, norm, tick_values, style.format_ticks(tick_values)
-
-
 def _union_extent(layers: list[tuple[DataGrid, GridBounds]]) -> GridBounds:
     """Bounds covering every layer, for axis limits and the land overlay read."""
     return (min(b[0] for _, b in layers), min(b[1] for _, b in layers),
@@ -415,7 +352,8 @@ def plot_metric(
     res_label = " / ".join(f"{int(round(t.res_m))} m" for t in ctx.region.tiers)
 
     all_values = np.concatenate([v.ravel() for v, _ in layers])
-    cmap, norm, tick_values, tick_labels = _metric_scale(all_values, style)
+    cmap, norm, tick_values = metric_scale(all_values)
+    tick_labels = style.format_ticks(tick_values)
     extent = _union_extent(layers)
 
     fig, ax = plt.subplots(figsize=(10, 9))
@@ -720,8 +658,8 @@ def plot_metric_panels(
 
     # One scale and one extent across panels — the point of the figure is that
     # a colour and a location mean the same thing in every period.
-    cmap, norm, tick_values, tick_labels = _metric_scale(
-        np.concatenate([p.values for p in panels]), style)
+    cmap, norm, tick_values = metric_scale(np.concatenate([p.values for p in panels]))
+    tick_labels = style.format_ticks(tick_values)
     extent = _union_extent([(l.values, l.bounds) for p in panels for l in p.layers])
     tile, land = load_basemap(extent)   # one extent across panels -> fetched once, drawn n times
 
@@ -785,17 +723,6 @@ def plot_metric_panels(
 
 # --- delta (period-vs-period change) panels --------------------------------
 
-# Diverging palette for signed-change maps, anchored symmetrically about zero so
-# the *sign* of a change reads as the colour's direction (cool = earlier/less,
-# neutral = no change, warm = later/more), never as magnitude alone. Absolute
-# per-era values use a sequential scale (_metric_scale); a difference must not.
-DELTA_PALETTE: list[tuple[float, str]] = [
-    (0.0, "#2166ac"), (0.25, "#67a9cf"), (0.5, "#f7f7f7"),
-    (0.75, "#ef8a62"), (1.0, "#b2182b"),
-]
-DELTA_FALLBACK_VABS = 1.0   # symmetric ± limit (days) when the delta is ~flat everywhere
-
-
 @dataclass(frozen=True)
 class DeltaPanel:
     """One period-vs-period change (candidate − baseline), as one panel of a delta composite."""
@@ -807,16 +734,6 @@ class DeltaPanel:
     def values(self) -> np.ndarray:
         """Every layer's cells, flattened (feeds the figure's shared diverging scale)."""
         return np.concatenate([layer.values.ravel() for layer in self.layers])
-
-
-def _delta_scale(values: np.ndarray) -> tuple[Colormap, Normalize, list[float], list[str]]:
-    """Diverging colour scale symmetric about zero, with signed-day (±N) ticks."""
-    finite = values[np.isfinite(values)]
-    vabs = float(np.percentile(np.abs(finite), 99)) if finite.size else DELTA_FALLBACK_VABS
-    vabs = max(vabs, DELTA_FALLBACK_VABS)   # never collapse to a zero-width scale
-    cmap, norm = build_cmap(DELTA_PALETTE, vmin=-vabs, vmax=vabs)
-    tick_values = list(np.linspace(-vabs, vabs, 5))
-    return cmap, norm, tick_values, [f"{v:+.0f}" for v in tick_values]
 
 
 def plot_delta_panels(
@@ -835,8 +752,8 @@ def plot_delta_panels(
 
     # One symmetric scale and one extent across panels: a colour and a location
     # mean the same change in every comparison.
-    cmap, norm, tick_values, tick_labels = _delta_scale(
-        np.concatenate([p.values for p in panels]))
+    cmap, norm, tick_values = delta_scale(np.concatenate([p.values for p in panels]))
+    tick_labels = [f"{v:+.0f}" for v in tick_values]
     extent = _union_extent([(l.values, l.bounds) for p in panels for l in p.layers])
     tile, land = load_basemap(extent)   # one extent -> fetched once, drawn n times
 
@@ -953,9 +870,11 @@ def plot_source_portrait(
     left, diverging (change) at the right — each spanning both rows.
     """
     style = PLOT_STYLES[metric.slug]
-    v_cmap, v_norm, v_ticks, v_labels = _metric_scale(
-        np.concatenate([baseline.values, candidate.values]), style)
-    d_cmap, d_norm, d_ticks, d_labels = _delta_scale(delta.values)
+    v_cmap, v_norm, v_ticks = metric_scale(
+        np.concatenate([baseline.values, candidate.values]))
+    v_labels = style.format_ticks(v_ticks)
+    d_cmap, d_norm, d_ticks = delta_scale(delta.values)
+    d_labels = [f"{v:+.0f}" for v in d_ticks]
 
     all_layers = [l for p in (baseline, candidate) for l in p.layers] + list(delta.layers)
     extent = _union_extent([(l.values, l.bounds) for l in all_layers])

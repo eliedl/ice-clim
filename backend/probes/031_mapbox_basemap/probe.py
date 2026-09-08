@@ -69,8 +69,9 @@ from shapely.geometry import box
 load_dotenv(Path(__file__).parents[3] / ".env")
 
 from climatology.utils._types import GRID_CRS                               # noqa: E402
-from climatology.services.plot import (                                     # noqa: E402
-    DARK_COAST, DARK_FG, DARK_OCEAN, LAND_DISPLAY_PATH, build_cmap,
+from climatology.services.plot import LAND_DISPLAY_PATH                     # noqa: E402
+from climatology.utils.colors import (                                      # noqa: E402
+    DARK_COAST, DARK_FG, DARK_OCEAN, build_cmap,
 )
 from climatology.utils.basemap import (                                     # noqa: E402
     BASE_STYLE, CACHE_DIR, LABEL_STYLE, _alpha_over, _request_geometry, clip_to_land,
