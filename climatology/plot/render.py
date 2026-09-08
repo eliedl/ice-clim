@@ -49,18 +49,12 @@ from climatology.plot.layout import (
     PANEL_RIGHT,
     PANEL_TOP,
     PANEL_WIDTH_IN,
-    PORTRAIT_BOTTOM,
     PORTRAIT_CBAR_GAP,
     PORTRAIT_CBAR_THICK,
-    PORTRAIT_FIG_W_IN,
-    PORTRAIT_HSPACE,
-    PORTRAIT_LEFT,
-    PORTRAIT_RIGHT,
-    PORTRAIT_TOP,
-    PORTRAIT_WSPACE,
     balance_margins,
     frame_axes,
     match_map_heights,
+    portrait_grid,
 )
 from climatology.plot.validate import assert_comparable, assert_one_reduction
 from climatology.processing.reduction.spatial import RasterLayer, area_weights
@@ -256,6 +250,11 @@ class DeltaPanel:
         return np.concatenate([layer.values.ravel() for layer in self.layers])
 
 
+def _delta_reductions(panels: list[DeltaPanel]) -> list[str]:
+    """Every reduction order the panels difference, in panel order (names the figure's method)."""
+    return [reduction for panel in panels for reduction in panel.reductions]
+
+
 def plot_delta_panels(
     panels: list[DeltaPanel],
     *,
@@ -326,7 +325,7 @@ def plot_delta_panels(
     match_map_heights(fig, pairs)   # after the colourbar has claimed its space
     margin = balance_margins(fig)
     footer(fig, source_label=source_label, res_label=res_label, x=margin,
-           method=reduction_notes(r for p in panels for r in p.reductions),
+           method=reduction_notes(_delta_reductions(panels)),
            basemap=tile is not None)
     return fig
 
@@ -398,47 +397,13 @@ def plot_source_portrait(
     extent = _union_extent([(l.values, l.bounds) for l in all_layers])
     tile, land = load_basemap(extent)   # one extent across panels -> fetched once
 
-    # Map block sits in fixed, symmetric margins. Each map's colourbar goes in its own axes
-    # under it, inside the gap the margins already reserve — row 1's in the inter-row gap, the
-    # hero's in the bottom margin — so bar geometry never shifts a map. The delta is the hero
-    # panel: the value maps share the top row, the delta spans a taller bottom row.
-    # With distributions, each map gains a narrow histogram column to its right and the hero
-    # spans every column but the last.
-    xmin, ymin, xmax, ymax = extent
-    ncols = 4 if distribution else 2
-    width_ratios = [1.0, PANEL_HIST_WIDTH] * 2 if distribution else [1.0, 1.0]
-    span = ncols - 1 if distribution else ncols          # columns the hero covers
-    mosaic = ([["base", "bhist", "cand", "chist"], ["delta", "delta", "delta", "dhist"]]
-              if distribution else [["base", "cand"], ["delta", "delta"]])
-
-    # wspace is a fraction of the *mean* column width, so one gap is that fraction of the
-    # ratio total over the column count.
-    gap = PORTRAIT_WSPACE * sum(width_ratios) / ncols
-    block_ratio = sum(width_ratios) + (ncols - 1) * gap
-    # The hero spans its columns *and* the gaps between them, so it needs a matching height to
-    # fill that width at equal aspect.
-    hero_ratio = sum(width_ratios[:span]) + (span - 1) * gap
-    # Histogram columns widen the figure by exactly the width they add, leaving the maps their
-    # own size rather than squeezing them.
-    fig_w_in = PORTRAIT_FIG_W_IN * block_ratio / (2.0 + PORTRAIT_WSPACE)
-
-    # Figure height derived so the equal-aspect maps fill the (fixed) map block with no float:
-    # column width -> row-1 height -> the row stack -> the usable band between the margins.
-    col_w_in = (PORTRAIT_RIGHT - PORTRAIT_LEFT) * fig_w_in / block_ratio
-    # stack height = row 1 + hero + the hspace gap (fraction of the average row height).
-    stack_h_in = ((1 + hero_ratio) * (1 + PORTRAIT_HSPACE / 2)
-                  * col_w_in * (ymax - ymin) / (xmax - xmin))
-    fig_h_in = stack_h_in / (PORTRAIT_TOP - PORTRAIT_BOTTOM)
-
-    fig = plt.figure(figsize=(fig_w_in, fig_h_in))
+    # Each map's colourbar goes in its own axes under it, inside the gap the fixed margins
+    # already reserve — row 1's in the inter-row gap, the hero's in the bottom margin — so
+    # bar geometry never shifts a map.
+    grid = portrait_grid(extent, distribution=distribution)
+    fig = plt.figure(figsize=(grid.fig_w_in, grid.fig_h_in))
     fig.patch.set_facecolor(DARK_OCEAN)
-    axd = fig.subplot_mosaic(
-        mosaic,
-        gridspec_kw={"height_ratios": [1, hero_ratio], "width_ratios": width_ratios,
-                     "wspace": PORTRAIT_WSPACE, "hspace": PORTRAIT_HSPACE,
-                     "left": PORTRAIT_LEFT, "right": PORTRAIT_RIGHT,
-                     "top": PORTRAIT_TOP, "bottom": PORTRAIT_BOTTOM},
-    )
+    axd = fig.subplot_mosaic(grid.mosaic, gridspec_kw=grid.gridspec_kw)
     ax_base, ax_cand, ax_delta = axd["base"], axd["cand"], axd["delta"]
 
     v_base = _draw_map(ax_base, baseline.layers, cmap=v_cmap, norm=v_norm,

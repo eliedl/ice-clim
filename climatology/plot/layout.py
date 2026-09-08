@@ -11,6 +11,8 @@ grid cell.
 
 from __future__ import annotations
 
+from dataclasses import dataclass
+
 import geopandas as gpd
 from matplotlib.transforms import Bbox
 
@@ -51,6 +53,64 @@ PORTRAIT_HSPACE = 0.42        # gap between row 1 and row 2 (fraction of average
 PORTRAIT_FIG_W_IN = 16.0      # figure width with no histogram columns (widened pro rata with them)
 PORTRAIT_CBAR_THICK = 0.010   # colourbar thickness (figure fraction)
 PORTRAIT_CBAR_GAP = 0.028     # gap between a map's bottom edge and its own colourbar
+
+
+@dataclass(frozen=True)
+class PortraitGrid:
+    """The portrait's mosaic, and the figure size derived from it."""
+
+    mosaic: list[list[str]]
+    width_ratios: list[float]
+    hero_ratio: float
+    fig_w_in: float
+    fig_h_in: float
+
+    @property
+    def gridspec_kw(self) -> dict:
+        """Everything ``subplot_mosaic`` needs to place this grid in the fixed margins."""
+        return {"height_ratios": [1, self.hero_ratio], "width_ratios": self.width_ratios,
+                "wspace": PORTRAIT_WSPACE, "hspace": PORTRAIT_HSPACE,
+                "left": PORTRAIT_LEFT, "right": PORTRAIT_RIGHT,
+                "top": PORTRAIT_TOP, "bottom": PORTRAIT_BOTTOM}
+
+
+def portrait_grid(extent: GridBounds, *, distribution: bool) -> PortraitGrid:
+    """Lay out the portrait — two value maps over a hero delta — and size the figure to it.
+
+    The delta is the hero panel: the value maps share the top row, the delta spans a taller
+    bottom row. With distributions, each map gains a narrow histogram column to its right and
+    the hero spans every column but the last.
+
+    Both the hero's height and the figure's are *derived*, never floated: the maps hold an
+    equal aspect, so a height that did not match the block would leave the region padded out
+    with dead space instead of filling it.
+    """
+    xmin, ymin, xmax, ymax = extent
+    ncols = 4 if distribution else 2
+    width_ratios = [1.0, PANEL_HIST_WIDTH] * 2 if distribution else [1.0, 1.0]
+    span = ncols - 1 if distribution else ncols          # columns the hero covers
+    mosaic = ([["base", "bhist", "cand", "chist"], ["delta", "delta", "delta", "dhist"]]
+              if distribution else [["base", "cand"], ["delta", "delta"]])
+
+    # wspace is a fraction of the *mean* column width, so one gap is that fraction of the
+    # ratio total over the column count.
+    gap = PORTRAIT_WSPACE * sum(width_ratios) / ncols
+    block_ratio = sum(width_ratios) + (ncols - 1) * gap
+    # The hero spans its columns *and* the gaps between them, so it needs a matching height
+    # to fill that width at equal aspect.
+    hero_ratio = sum(width_ratios[:span]) + (span - 1) * gap
+    # Histogram columns widen the figure by exactly the width they add, leaving the maps their
+    # own size rather than squeezing them.
+    fig_w_in = PORTRAIT_FIG_W_IN * block_ratio / (2.0 + PORTRAIT_WSPACE)
+
+    # column width -> row-1 height -> the row stack -> the usable band between the margins.
+    col_w_in = (PORTRAIT_RIGHT - PORTRAIT_LEFT) * fig_w_in / block_ratio
+    # stack height = row 1 + hero + the hspace gap (a fraction of the average row height).
+    stack_h_in = ((1 + hero_ratio) * (1 + PORTRAIT_HSPACE / 2)
+                  * col_w_in * (ymax - ymin) / (xmax - xmin))
+    return PortraitGrid(mosaic=mosaic, width_ratios=width_ratios, hero_ratio=hero_ratio,
+                        fig_w_in=fig_w_in,
+                        fig_h_in=stack_h_in / (PORTRAIT_TOP - PORTRAIT_BOTTOM))
 
 
 # --- axes framing and post-draw geometry -------------------------------------
