@@ -8,18 +8,14 @@ from math import ceil
 from pathlib import Path
 from typing import TYPE_CHECKING
 
-import geopandas as gpd
 import matplotlib.pyplot as plt
 import numpy as np
 from matplotlib.colors import Colormap, Normalize
 from matplotlib.ticker import FuncFormatter, LogLocator, NullFormatter
-from matplotlib.transforms import Bbox
 
 from climatology.plot.basemap import draw_basemap_labels, draw_basemap_land, load_basemap
 from climatology.plot.colors import (
-    DARK_COAST,
     DARK_FG,
-    DARK_LAND,
     DARK_LINE,
     DARK_OCEAN,
     delta_scale,
@@ -34,6 +30,32 @@ from climatology.plot.labels import (
     metric_label,
     metric_title,
     reduction_note,
+)
+from climatology.plot.layout import (
+    CELL_SIZE_TOL,
+    PANEL_BOTTOM,
+    PANEL_CBAR_PAD,
+    PANEL_DECORATION_IN,
+    PANEL_HIST_BINS,
+    PANEL_HIST_WIDTH,
+    PANEL_HIST_XLIM,
+    PANEL_HSPACE,
+    PANEL_LEFT,
+    PANEL_RIGHT,
+    PANEL_TOP,
+    PANEL_WIDTH_IN,
+    PORTRAIT_BOTTOM,
+    PORTRAIT_CBAR_GAP,
+    PORTRAIT_CBAR_H,
+    PORTRAIT_CBAR_W,
+    PORTRAIT_HSPACE,
+    PORTRAIT_LEFT,
+    PORTRAIT_RIGHT,
+    PORTRAIT_TOP,
+    PORTRAIT_WSPACE,
+    balance_margins,
+    frame_axes,
+    match_map_heights,
 )
 from climatology.plot.validate import assert_comparable, assert_one_reduction
 from climatology.processing.reductions import MEDIAN_THEN_THRESHOLD
@@ -67,25 +89,6 @@ def _draw_layers(ax, layers: list[tuple[DataGrid, GridBounds]],
                        extent=[lxmin, lxmax, lymin, lymax],
                        cmap=cmap, norm=norm, interpolation="none", zorder=z)
     return im
-
-
-def _frame_axes(ax, land: gpd.GeoDataFrame, extent: GridBounds, *,
-                zorder: int, fill: bool = True) -> None:
-    """Paint land over the dry cells (wet cells keep their ice colours) and clamp the view.
-
-    ``fill=False`` when the basemap already supplies the land: only the coastline is drawn,
-    so the region has exactly one — OSM's, which resolves the river channels Mapbox's own
-    land polygon buries (probe 031).
-    """
-    if not land.empty:
-        if fill:
-            land.plot(ax=ax, facecolor=DARK_LAND, edgecolor=DARK_COAST,
-                      linewidth=0.4, zorder=zorder)
-        else:
-            land.boundary.plot(ax=ax, color=DARK_COAST, linewidth=0.4, zorder=zorder)
-    xmin, ymin, xmax, ymax = extent
-    ax.set_xlim(xmin, xmax)
-    ax.set_ylim(ymin, ymax)
 
 
 def _save(fig, png_path: Path, *, tight: bool = True) -> None:
@@ -127,7 +130,7 @@ def plot_metric(
     tile, land = load_basemap(extent)
     top = len(layers) + 1
     draw_basemap_land(ax, tile, zorder=top)
-    _frame_axes(ax, land, extent, zorder=top + 1, fill=tile is None)
+    frame_axes(ax, land, extent, zorder=top + 1, fill=tile is None)
     draw_basemap_labels(ax, tile, zorder=top + 2)   # names ride above the coastline
 
     cbar = fig.colorbar(im, ax=ax, orientation="horizontal",
@@ -150,28 +153,6 @@ def plot_metric(
 
 
 # --- per-panel value distribution ------------------------------------------
-
-PANEL_HIST_BINS = 30
-PANEL_HIST_WIDTH = 0.30       # histogram column width, relative to its map column
-# Log area axis, fixed: the full share range, 0.01% (standing in for the 0 a log axis cannot
-# draw) to the whole region. Data-dependent limits would make a bar's length mean something
-# different in every panel — the same trap as a per-panel colour scale (probe 030).
-PANEL_HIST_XLIM = (0.01, 100.0)
-PANEL_WIDTH_IN = 8.0          # one panel (map + histogram) across
-PANEL_DECORATION_IN = 0.85    # row height beyond the map itself: title + tick labels
-PANEL_HSPACE = 0.28           # gap between rows, as a fraction of a row's height
-PANEL_LEFT = 0.07             # figure margins, kept symmetric so the suptitle centres on the content
-PANEL_RIGHT = 0.93
-PANEL_TOP = 0.88
-PANEL_BOTTOM = 0.12
-PANEL_CBAR_PAD = 0.09         # gap between the bottom row and the colourbar
-# ``Tier.res_m`` is the *requested* resolution: build_grid rounds the cell count up
-# (ceil) and then stretches the cells to span the wet bbox exactly, so true cells are
-# slightly smaller than nominal, not square, and never off by more than ~1/width.
-# Areas must therefore come from bounds/shape, never from res_m²; res_m is only a
-# sanity anchor, so the check is a band and not an equality.
-CELL_SIZE_TOL = 0.02
-
 
 def _cell_size(shape: tuple[int, int], bounds: GridBounds,
                *, res_m: float | None = None) -> tuple[float, float]:
@@ -269,41 +250,6 @@ def _area_weights(layers: list[RasterLayer]) -> tuple[np.ndarray, np.ndarray]:
     values = np.concatenate([layer.values[m] for layer, m in zip(layers, finite)])
     weights = np.concatenate([area[m] for area, m in zip(own, finite)])
     return values, weights
-
-
-def _balance_margins(fig) -> float:
-    """Recentre every axes so the drawn content carries equal left and right margins.
-
-    Symmetric subplot params are not symmetric margins: tick labels overhang the axes box,
-    and the maps' y labels overhang far more than anything on the right. Measure where the
-    ink actually lands, then recentre it — which also puts the (figure-centred) suptitle
-    back over the middle of the content. Returns the resulting margin as a figure fraction,
-    so the footer can start on the same line as the content rather than at the paper edge.
-    """
-    fig.canvas.draw()
-    renderer = fig.canvas.get_renderer()
-    ink = Bbox.union([ax.get_tightbbox(renderer) for ax in fig.axes if ax.get_visible()])
-    width_px = fig.get_window_extent().width
-
-    shift_px = ((width_px - ink.x1) - ink.x0) / 2.0
-    shift = shift_px / width_px
-    for ax in fig.axes:
-        box = ax.get_position()
-        ax.set_position([box.x0 + shift, box.y0, box.width, box.height])
-    return (ink.x0 + shift_px) / width_px
-
-
-def _match_map_heights(fig, pairs: list[tuple]) -> None:
-    """Pin each histogram's box to its map's drawn box.
-
-    The maps hold an equal aspect, so matplotlib shrinks them inside their grid cell at
-    draw time; the histograms have no aspect and would otherwise stand taller. Read the
-    maps' post-draw geometry, then copy their vertical span.
-    """
-    fig.canvas.draw()
-    for ax, hax in pairs:
-        map_box, hist_box = ax.get_position(), hax.get_position()
-        hax.set_position([hist_box.x0, map_box.y0, hist_box.width, map_box.height])
 
 
 def _draw_distribution(hax, layers: list[RasterLayer], *, cmap: Colormap, norm: Normalize,
@@ -423,7 +369,7 @@ def plot_metric_panels(
                           cmap=cmap, norm=norm)
         top = len(panel.layers) + 1
         draw_basemap_land(ax, tile, zorder=top)
-        _frame_axes(ax, land, extent, zorder=top + 1, fill=tile is None)
+        frame_axes(ax, land, extent, zorder=top + 1, fill=tile is None)
         draw_basemap_labels(ax, tile, zorder=top + 2)   # names ride above the coastline
         ax.set_title(f"Winters {panel.period} — {panel.source.slug}",
                      fontsize=11, pad=6, color=DARK_FG)
@@ -442,8 +388,8 @@ def plot_metric_panels(
 
     fig.suptitle(f"{metric_title(metric)}\n{region_display} region",
                  fontsize=14, color=DARK_FG)
-    _match_map_heights(fig, pairs)   # after the colourbar has claimed its space
-    margin = _balance_margins(fig)
+    match_map_heights(fig, pairs)   # after the colourbar has claimed its space
+    margin = balance_margins(fig)
 
     sources = sorted({p.source.display_label for p in panels})
     footer(fig, source_label=" + ".join(sources), res_label=res_label, x=margin,
@@ -516,7 +462,7 @@ def plot_delta_panels(
                           cmap=cmap, norm=norm)
         top = len(panel.layers) + 1
         draw_basemap_land(ax, tile, zorder=top)
-        _frame_axes(ax, land, extent, zorder=top + 1, fill=tile is None)
+        frame_axes(ax, land, extent, zorder=top + 1, fill=tile is None)
         draw_basemap_labels(ax, tile, zorder=top + 2)
         ax.set_title(panel.title, fontsize=11, pad=6, color=DARK_FG)
         ax.tick_params(labelsize=7)
@@ -536,8 +482,8 @@ def plot_delta_panels(
 
     fig.suptitle(f"{metric_title(metric)} — change between periods\n{region_display} region",
                  fontsize=14, color=DARK_FG)
-    _match_map_heights(fig, pairs)   # after the colourbar has claimed its space
-    margin = _balance_margins(fig)
+    match_map_heights(fig, pairs)   # after the colourbar has claimed its space
+    margin = balance_margins(fig)
     footer(fig, source_label=source_label, res_label=res_label, x=margin,
            method=reduction_note(metric), basemap=tile is not None)
     _save(fig, png_path, tight=False)   # keep margins so the suptitle stays centred
@@ -546,18 +492,6 @@ def plot_delta_panels(
 
 # --- source portrait: baseline & candidate over their change ----------------
 
-# Fixed, symmetric map-block margins (figure fractions) and colourbar geometry. The
-# colourbars live in their own axes outside the block, so their width and gap are
-# decoupled from the maps' position — the hero panel stays centred whatever the gap.
-PORTRAIT_LEFT, PORTRAIT_RIGHT = 0.13, 0.87
-PORTRAIT_TOP, PORTRAIT_BOTTOM = 0.9, 0.05
-PORTRAIT_WSPACE = 0.12
-PORTRAIT_HSPACE = 0.2         # gap between row 1 and row 2 (fraction of average row height)
-PORTRAIT_CBAR_W = 0.014        # colourbar bar width (figure fraction)
-PORTRAIT_CBAR_H = 0.50         # colourbar height (figure fraction), centred on the block
-PORTRAIT_CBAR_GAP = 0.05      # symmetric gap between a colourbar and the map block
-
-
 def _draw_map(ax, layers: list[RasterLayer], *, title: str, cmap: Colormap, norm: Normalize,
               land, tile, extent):
     """One map panel (no distribution), drawn back-to-front on the scale passed in."""
@@ -565,7 +499,7 @@ def _draw_map(ax, layers: list[RasterLayer], *, title: str, cmap: Colormap, norm
     im = _draw_layers(ax, [(l.values, l.bounds) for l in layers], cmap=cmap, norm=norm)
     top = len(layers) + 1
     draw_basemap_land(ax, tile, zorder=top)
-    _frame_axes(ax, land, extent, zorder=top + 1, fill=tile is None)
+    frame_axes(ax, land, extent, zorder=top + 1, fill=tile is None)
     draw_basemap_labels(ax, tile, zorder=top + 2)
     ax.set_title(title, fontsize=15, pad=18, color=DARK_FG)
     style_axes(ax)
