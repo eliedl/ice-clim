@@ -44,6 +44,7 @@ from climatology.plot.layout import (
     PANEL_HIST_XLIM,
     PANEL_HSPACE,
     PANEL_LEFT,
+    PANEL_NCOLS,
     PANEL_RIGHT,
     PANEL_TOP,
     PANEL_WIDTH_IN,
@@ -63,7 +64,7 @@ from climatology.plot.layout import (
 from climatology.plot.validate import assert_comparable, assert_one_reduction
 from climatology.processing.reduction.spatial import RasterLayer, area_weights
 from climatology.processing.reduction.temporal import MEDIAN_THEN_THRESHOLD
-from climatology.services.plot import PANEL_NCOLS, save_figure
+from climatology.services.export import save_figure
 from climatology.utils._types import GRID_CRS, DataGrid, GridBounds
 
 if TYPE_CHECKING:

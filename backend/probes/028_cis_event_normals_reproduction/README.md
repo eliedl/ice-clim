@@ -84,7 +84,7 @@ products genuinely use **different conventions from one another** — `last` is 
 ### The fix
 
 A `first_below` mode was added to `ThresholdDate`
-(`climatology/processing/reductions.py`): the first sub-threshold day *after the last*
+(`climatology/processing/reduction/temporal.py`): the first sub-threshold day *after the last*
 crossing above, so a mid-season thaw followed by a re-freeze does not register, an
 unobserved (NaN) day never clears a cell, and a cell still above threshold on the final
 admissible day never clears at all (NaN — CIS records no break-up there either).

@@ -18,7 +18,6 @@ import rasterio
 from rasterio.crs import CRS
 
 from climatology.plot.labels import metric_label
-from climatology.plot.render import plot_metric
 from climatology.processing.metrics import RawMetricSpec
 from climatology.services.calendar import SEASON_ORIGIN
 from climatology.utils._types import GRID_CRS, DataGrid, Grid
@@ -147,6 +146,19 @@ def find_archived(slug: str, metric_slug: str, *, period_slug: str, source_slug:
 
     _, npz, manifest = max(matches)   # 'created' stamps sort oldest -> newest
     return npz, manifest
+
+
+def save_figure(fig, png_path: Path, *, tight: bool = True) -> None:
+    """Write the figure to disk under the dark theme.
+
+    ``tight=False`` keeps the figure's own margins: a tight bbox crops each side down to
+    the artists on it, which pulls a centred suptitle off-centre whenever the two sides
+    are cropped by different amounts.
+    """
+    png_path.parent.mkdir(parents=True, exist_ok=True)
+    fig.savefig(png_path, dpi=300, bbox_inches="tight" if tight else None,
+                facecolor=fig.get_facecolor())
+    log.info("Map saved to %s", png_path)
 
 
 def write_geotiff(values: DataGrid, transform, *, path: Path,
@@ -366,7 +378,11 @@ class WriteJob:
 
 
 def _serialize_png(job: WriteJob) -> None:
-    """Composite map over all tiers (coarse -> fine) via services.plot."""
+    """Composite map over all tiers (coarse -> fine) via plot.render."""
+    # Imported at call time, not module scope: plot.render pulls save_figure back out of
+    # this module, so a top-level import would close the loop and fail at startup.
+    from climatology.plot.render import plot_metric
+
     layers = [(p.values, p.tier.grid.bounds) for p in job.products]
     plot_metric(layers, png_path=job.path, ctx=job.ctx)
 

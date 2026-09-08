@@ -113,7 +113,7 @@ labels collide), drawn under the bars.
 
 ## Provenance
 
-Renders `climatology/services/plot.py::plot_metric_panels`; panels built by
+Renders `climatology/plot/render.py::plot_metric_panels`; panels built by
 `climatology/scripts/metric_per_era_composite.py`; archives from
 `climatology/scripts/sweep.py`. Area weighting validated by **probe 029**. Unit conversion
 in `climatology/pipeline.py::TierProduct.build` + `services/sources.py::step_days`.

@@ -3,7 +3,7 @@
 ## Hypothesis
 
 The dark basemap behind nautilo.ca (`admin-ogsl` / `production-nautilo-theme-sombre`) can
-replace the synthetic dark theme in `climatology/services/plot.py` — flat `DARK_OCEAN` fill
+replace the synthetic dark theme in `climatology/plot/colors.py` — flat `DARK_OCEAN` fill
 plus a flat `DARK_LAND` polygon paint — giving the climatology maps a real basemap (land
 texture, hillshade, coastal town labels) **without compromising the data**: the ice values
 must stay at full saturation, and the coastline must stay accurate enough for the river
