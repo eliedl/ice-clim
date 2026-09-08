@@ -33,8 +33,10 @@ first — every era named must already be archived under the requested reduction
         --out freeze_up_manicouagan_eras.png
 
     # signed change, SGRDR against SGRDR — chart type held fixed, since data
-    # reliability is chart-type dependent (Angela Cheng/CIS, pers. comm. 2026)
-    python -m climatology.plot.build breakup_date manicouagan --type delta \\
+    # reliability is chart-type dependent (Angela Cheng/CIS, pers. comm. 2026).
+    # One comparison is one panel, hence `single`.
+    python -m climatology.plot.build breakup_date manicouagan \\
+        --type delta --layout single \\
         --era 1981-2010:sgrdr --era 2011-2020:sgrdr \\
         --out breakup_manicouagan_delta.png
 
@@ -228,7 +230,7 @@ def _draw_portrait(ctx: PlotContext, panels: list[MetricPanel]) -> Figure:
 RENDERERS: dict[tuple[str, str, bool], Renderer] = {
     (RAW,   SINGLE,   False): Renderer(_draw_single,   n_eras=1,    tight=True),
     (RAW,   MULTI,    True):  Renderer(_draw_multi,    n_eras=None),
-    (DELTA, MULTI,    True):  Renderer(_draw_delta,    n_eras=None),
+    (DELTA, SINGLE,    True):  Renderer(_draw_delta,    n_eras=None),
     (DELTA, PORTRAIT, False): Renderer(_draw_portrait, n_eras=2),
 }
 
