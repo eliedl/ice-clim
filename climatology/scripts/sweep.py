@@ -1,13 +1,17 @@
 """Batch driver: every metric × every climatology period for one region.
 
-Each (metric, period) is one ``pipeline.run`` call; the source is decided by the
-period, since only ``sgrdr`` (HD weekly) reaches back before 2006 while the
-2011-2020 decade is read from ``sgrda`` (daily analysis). A failing run is
-recorded and the sweep continues; the exit status reflects whether any failed.
+Each (metric, period) is one ``pipeline.run`` call over the three 30-year normals,
+all read from ``sgrdr`` (HD weekly) — the only source reaching back before 2006.
+A failing run is recorded and the sweep continues; the exit status reflects
+whether any failed.
+
+The reduction order is fixed for the whole sweep: one sweep compares metrics and
+periods under a single reducer, so two orders are two invocations (DEC-054).
 
 Usage:
     python climatology/scripts/sweep.py [--region manicouagan] [--period 1991-2020 ...]
-                            [--metric freeze_up_date ...] [--output png netcdf] [--dry-run]
+                            [--metric freeze_up_date ...] [--reduction mediantt]
+                            [--output png netcdf] [--dry-run]
 """
 
 from __future__ import annotations
@@ -27,9 +31,9 @@ sys.path.insert(0, str(Path(__file__).parents[2]))
 
 from climatology.pipeline import run
 from climatology.processing.metrics import METRICS
+from climatology.processing.reduction.temporal import MEDIAN_THEN_THRESHOLD, REDUCTIONS
 from climatology.processing.regions import REGIONS
 from climatology.services.export import WRITERS
-from climatology.services.sources import PERIOD_SOURCES
 
 logging.basicConfig(
     level=logging.INFO,
@@ -39,6 +43,14 @@ logging.basicConfig(
 log = logging.getLogger("sweep")
 
 DEFAULT_REGION = "manicouagan"
+
+# The sweep's own scope: the 30-year normals only. Narrower than
+# ``services.sources.PERIOD_SOURCES``, which also carries the 2011-2020 sgrda decade.
+PERIOD_SOURCES: dict[str, str] = {
+    "1971-2000": "sgrdr",
+    "1981-2010": "sgrdr",
+    "1991-2020": "sgrdr",
+}
 
 
 @dataclass(frozen=True)
@@ -60,12 +72,20 @@ def _parse_args() -> argparse.Namespace:
     p = argparse.ArgumentParser(description=__doc__.splitlines()[0])
     p.add_argument("--region", choices=REGIONS, default=DEFAULT_REGION,
                    help=f"Region slug (default: {DEFAULT_REGION}).")
-    p.add_argument("--period", action="append", choices=sorted(PERIOD_SOURCES),
+    p.add_argument("--period", action="extend", nargs="+", choices=sorted(PERIOD_SOURCES),
                    metavar="YYYY-YYYY", dest="periods",
-                   help="Restrict to these periods (repeatable; default: all).")
-    p.add_argument("--metric", action="append", choices=sorted(METRICS),
+                   help="Restrict to these periods (space-separated and/or repeatable; "
+                        "default: all).")
+    p.add_argument("--metric", action="extend", nargs="+", choices=sorted(METRICS),
                    metavar="SLUG", dest="metrics",
-                   help="Restrict to these metrics (repeatable; default: all).")
+                   help="Restrict to these metrics (space-separated and/or repeatable; "
+                        "default: all).")
+    p.add_argument("--reduction", choices=sorted(REDUCTIONS),
+                   default=MEDIAN_THEN_THRESHOLD.slug,
+                   help="Reduction order applied to every run in the sweep — {median,mean}tt "
+                        "collapses the seasons per day and then folds the kernel (DEC-027); "
+                        "tt{median,mean,mpo} folds per season and then collapses (DEC-049/053). "
+                        f"Default: {MEDIAN_THEN_THRESHOLD.slug}.")
     p.add_argument("--output", nargs="+", choices=sorted(WRITERS), default=None,
                    metavar="FMT", dest="outputs",
                    help="Output format(s) to write, e.g. --output png netcdf. Default: the "
@@ -82,15 +102,16 @@ def _plan(metrics: list[str], periods: list[str]) -> list[tuple[str, str, str]]:
 
 
 def _execute(plan: list[tuple[str, str, str]], region: str,
-             *, outputs: list[str] | None) -> list[RunOutcome]:
+             *, reduction: str, outputs: list[str] | None) -> list[RunOutcome]:
     """Run every planned climatology, surviving individual failures."""
     outcomes: list[RunOutcome] = []
     for i, (metric, period, source) in enumerate(plan, start=1):
-        log.info("=== [%d/%d] %s | %s | %s | %s ===",
-                 i, len(plan), region, metric, period, source)
+        log.info("=== [%d/%d] %s | %s | %s | %s | %s ===",
+                 i, len(plan), region, metric, period, source, reduction)
         started = time.perf_counter()
         try:
-            run(metric, region, source, period, outputs=outputs)
+            run(metric, region, source, period,
+                reduction_slug=reduction, outputs=outputs)
             error = None
         except Exception as e:  # keep the sweep alive; the summary reports the failure
             log.error("FAILED %s %s (%s): %s", metric, period, source, e)
@@ -124,9 +145,9 @@ if __name__ == "__main__":
 
     if args.dry_run:
         for metric, period, source in plan:
-            print(f"{args.region}  {metric}  {period}  {source}")
+            print(f"{args.region}  {metric}  {period}  {source}  {args.reduction}")
         sys.exit(0)
 
-    outcomes = _execute(plan, args.region, outputs=args.outputs)
+    outcomes = _execute(plan, args.region, reduction=args.reduction, outputs=args.outputs)
     _report(outcomes)
     sys.exit(1 if any(not o.ok for o in outcomes) else 0)
