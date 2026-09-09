@@ -1,16 +1,17 @@
-"""Batch driver: every metric × every climatology period for one region.
+"""Batch driver: every metric × climatology period × reduction order for one region.
 
-Each (metric, period) is one ``pipeline.run`` call over the three 30-year normals,
-all read from ``sgrdr`` (HD weekly) — the only source reaching back before 2006.
-A failing run is recorded and the sweep continues; the exit status reflects
+Each (metric, period, reduction) is one ``pipeline.run`` call over the three 30-year
+normals, all read from ``sgrdr`` (HD weekly) — the only source reaching back before
+2006. A failing run is recorded and the sweep continues; the exit status reflects
 whether any failed.
 
-The reduction order is fixed for the whole sweep: one sweep compares metrics and
-periods under a single reducer, so two orders are two invocations (DEC-054).
+Reduction is a sweep axis, not a sweep-wide setting, so one invocation can hold the
+metric and period fixed and vary only the reducer (DEC-054). It defaults to the single
+default order rather than to all of them, since the other two axes default to "all".
 
 Usage:
     python climatology/scripts/sweep.py [--region manicouagan] [--period 1991-2020 ...]
-                            [--metric freeze_up_date ...] [--reduction mediantt]
+                            [--metric freeze_up_date ...] [--reduction mediantt ttmpo ...]
                             [--output png netcdf] [--dry-run]
 """
 
@@ -55,11 +56,12 @@ PERIOD_SOURCES: dict[str, str] = {
 
 @dataclass(frozen=True)
 class RunOutcome:
-    """One (metric, period) run: how long it took and how it ended."""
+    """One (metric, period, reduction) run: how long it took and how it ended."""
 
     metric: str
     period: str
     source: str
+    reduction: str
     seconds: float
     error: str | None = None
 
@@ -80,12 +82,13 @@ def _parse_args() -> argparse.Namespace:
                    metavar="SLUG", dest="metrics",
                    help="Restrict to these metrics (space-separated and/or repeatable; "
                         "default: all).")
-    p.add_argument("--reduction", choices=sorted(REDUCTIONS),
-                   default=MEDIAN_THEN_THRESHOLD.slug,
-                   help="Reduction order applied to every run in the sweep — {median,mean}tt "
-                        "collapses the seasons per day and then folds the kernel (DEC-027); "
-                        "tt{median,mean,mpo} folds per season and then collapses (DEC-049/053). "
-                        f"Default: {MEDIAN_THEN_THRESHOLD.slug}.")
+    p.add_argument("--reduction", action="extend", nargs="+", choices=sorted(REDUCTIONS),
+                   metavar="SLUG", dest="reductions",
+                   help="Reduction order(s) to sweep (space-separated and/or repeatable) — "
+                        "{median,mean}tt collapses the seasons per day and then folds the "
+                        "kernel (DEC-027); tt{median,mean,mpo} folds per season and then "
+                        f"collapses (DEC-049/053). Default: {MEDIAN_THEN_THRESHOLD.slug} "
+                        f"alone. Choices: {', '.join(sorted(REDUCTIONS))}.")
     p.add_argument("--output", nargs="+", choices=sorted(WRITERS), default=None,
                    metavar="FMT", dest="outputs",
                    help="Output format(s) to write, e.g. --output png netcdf. Default: the "
@@ -95,17 +98,22 @@ def _parse_args() -> argparse.Namespace:
     return p.parse_args()
 
 
-def _plan(metrics: list[str], periods: list[str]) -> list[tuple[str, str, str]]:
-    """The (metric, period, source) triples to run, metrics outermost."""
-    return [(metric, period, PERIOD_SOURCES[period])
-            for metric in metrics for period in periods]
+def _plan(metrics: list[str], periods: list[str],
+          reductions: list[str]) -> list[tuple[str, str, str, str]]:
+    """The (metric, period, source, reduction) tuples to run, metrics outermost.
+
+    Reduction is innermost so a period's reducers sit adjacent in the log — the
+    comparison the axis exists for.
+    """
+    return [(metric, period, PERIOD_SOURCES[period], reduction)
+            for metric in metrics for period in periods for reduction in reductions]
 
 
-def _execute(plan: list[tuple[str, str, str]], region: str,
-             *, reduction: str, outputs: list[str] | None) -> list[RunOutcome]:
+def _execute(plan: list[tuple[str, str, str, str]], region: str,
+             *, outputs: list[str] | None) -> list[RunOutcome]:
     """Run every planned climatology, surviving individual failures."""
     outcomes: list[RunOutcome] = []
-    for i, (metric, period, source) in enumerate(plan, start=1):
+    for i, (metric, period, source, reduction) in enumerate(plan, start=1):
         log.info("=== [%d/%d] %s | %s | %s | %s | %s ===",
                  i, len(plan), region, metric, period, source, reduction)
         started = time.perf_counter()
@@ -114,9 +122,9 @@ def _execute(plan: list[tuple[str, str, str]], region: str,
                 reduction_slug=reduction, outputs=outputs)
             error = None
         except Exception as e:  # keep the sweep alive; the summary reports the failure
-            log.error("FAILED %s %s (%s): %s", metric, period, source, e)
+            log.error("FAILED %s %s %s (%s): %s", metric, period, reduction, source, e)
             error = f"{type(e).__name__}: {e}"
-        outcomes.append(RunOutcome(metric, period, source,
+        outcomes.append(RunOutcome(metric, period, source, reduction,
                                    time.perf_counter() - started, error))
     return outcomes
 
@@ -135,19 +143,21 @@ def _report(outcomes: list[RunOutcome]) -> None:
         log.info("  %s  (%d/%d ok, %.1fs)", metric, n_ok, len(runs),
                  sum(o.seconds for o in runs))
         for o in runs:
-            log.info("      %-9s %-5s %6.1fs  %s", o.period, o.source, o.seconds,
-                     "ok" if o.ok else o.error)
+            log.info("      %-9s %-5s %-8s %6.1fs  %s", o.period, o.source, o.reduction,
+                     o.seconds, "ok" if o.ok else o.error)
 
 
 if __name__ == "__main__":
     args = _parse_args()
-    plan = _plan(args.metrics or sorted(METRICS), args.periods or sorted(PERIOD_SOURCES))
+    plan = _plan(args.metrics or sorted(METRICS),
+                 args.periods or sorted(PERIOD_SOURCES),
+                 args.reductions or [MEDIAN_THEN_THRESHOLD.slug])
 
     if args.dry_run:
-        for metric, period, source in plan:
-            print(f"{args.region}  {metric}  {period}  {source}  {args.reduction}")
+        for metric, period, source, reduction in plan:
+            print(f"{args.region}  {metric}  {period}  {source}  {reduction}")
         sys.exit(0)
 
-    outcomes = _execute(plan, args.region, reduction=args.reduction, outputs=args.outputs)
+    outcomes = _execute(plan, args.region, outputs=args.outputs)
     _report(outcomes)
     sys.exit(1 if any(not o.ok for o in outcomes) else 0)
