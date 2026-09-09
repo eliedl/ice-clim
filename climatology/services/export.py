@@ -241,7 +241,7 @@ RAW_VARIABLES: tuple[RawVar, ...] = (
 )
 
 # Provenance stamp separating this native-chart product from the interpolated WW3 reference.
-_RAW_DESCRIPTION = "CIS SIGRID-3 egg-code attribution (DEC-029/044); native daily charts, no interpolation"
+_RAW_DESCRIPTION = "CIS SIGRID-3 egg-code attribution; native daily charts, no interpolation"
 
 
 def _open_season_hypercube(path: Path, grid: Grid, *, season: int,
