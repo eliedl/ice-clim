@@ -41,6 +41,7 @@ from climatology.plot.layout import (
     PANEL_CBAR_PAD,
     PANEL_DECORATION_IN,
     PANEL_HIST_BINS,
+    PANEL_HIST_MINOR_NUMTICKS,
     PANEL_HIST_WIDTH,
     PANEL_HIST_XLIM,
     PANEL_HSPACE,
@@ -51,6 +52,9 @@ from climatology.plot.layout import (
     PANEL_WIDTH_IN,
     PORTRAIT_CBAR_GAP,
     PORTRAIT_CBAR_THICK,
+    PORTRAIT_DHIST_LABEL_PAD,
+    PORTRAIT_DHIST_TICK_PAD,
+    PORTRAIT_DHIST_TICK_PT,
     balance_margins,
     frame_axes,
     match_map_heights,
@@ -377,7 +381,7 @@ def plot_source_portrait(
 ) -> Figure:
     """One comparison's before / after / change portrait.
 
-    Baseline and candidate sit on the top row, sharing one sequential scale (a colour is the
+    Candidate and baseline sit on the top row, sharing one sequential scale (a colour is the
     same date/count in both panels, so the shift between them is legible); the delta spans the
     bottom row on its own diverging scale.
 
@@ -421,6 +425,13 @@ def plot_source_portrait(
         ):
             draw_distribution(axd[key], panel.layers, cmap=cmap, norm=norm,
                               tick_values=ticks, tick_labels=labels)
+        # The hero's distribution reads at the figure's scale, not a panel's — re-applied
+        # after draw_distribution, whose own tick_params would otherwise overwrite it.
+        dhist = axd["dhist"]
+        dhist.tick_params(axis="both", labelsize=PORTRAIT_DHIST_TICK_PT,
+                          pad=PORTRAIT_DHIST_TICK_PAD)
+        dhist.xaxis.label.set_size(PORTRAIT_DHIST_TICK_PT)
+        dhist.xaxis.labelpad = PORTRAIT_DHIST_LABEL_PAD
         match_map_heights(fig, [(ax_base, axd["bhist"]), (ax_cand, axd["chist"]),
                                 (ax_delta, axd["dhist"])])
 
@@ -477,7 +488,8 @@ def draw_distribution(hax, layers: list[RasterLayer], *, cmap: Colormap, norm: N
     hax.set_xlim(*PANEL_HIST_XLIM)
     hax.xaxis.set_major_locator(LogLocator(base=10.0, numticks=5))
     hax.xaxis.set_major_formatter(FuncFormatter(lambda v, _: f"{v:g}"))
-    hax.xaxis.set_minor_locator(LogLocator(base=10.0, subs=tuple(np.arange(2, 10) * 0.1)))
+    hax.xaxis.set_minor_locator(LogLocator(base=10.0, subs=tuple(np.arange(2, 10) * 0.1),
+                                           numticks=PANEL_HIST_MINOR_NUMTICKS))
     hax.xaxis.set_minor_formatter(NullFormatter())   # unlabelled, or the decades collide
 
     hax.set_xlabel("% of area (log)", fontsize=7, color=DARK_FG, labelpad=2)

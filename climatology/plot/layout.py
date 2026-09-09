@@ -28,6 +28,10 @@ PANEL_HIST_WIDTH = 0.30       # histogram column width, relative to its map colu
 # draw) to the whole region. Data-dependent limits would make a bar's length mean something
 # different in every panel — the same trap as a per-panel colour scale (probe 030).
 PANEL_HIST_XLIM = (0.01, 100.0)
+# Minor-tick budget, pinned rather than left on LogLocator's "auto". Auto reads the axis'
+# estimated tick space, which shrinks with the tick label size — at the hero's larger type the
+# stride goes to 2 and the locator returns *no* minor ticks, silently dropping the grid.
+PANEL_HIST_MINOR_NUMTICKS = 999
 PANEL_WIDTH_IN = 8.0          # one panel (map + histogram) across
 PANEL_DECORATION_IN = 0.85    # row height beyond the map itself: title + tick labels
 PANEL_HSPACE = 0.28           # gap between rows, as a fraction of a row's height
@@ -53,6 +57,13 @@ PORTRAIT_HSPACE = 0.42        # gap between row 1 and row 2 (fraction of average
 PORTRAIT_FIG_W_IN = 16.0      # figure width with no histogram columns (widened pro rata with them)
 PORTRAIT_CBAR_THICK = 0.010   # colourbar thickness (figure fraction)
 PORTRAIT_CBAR_GAP = 0.028     # gap between a map's bottom edge and its own colourbar
+PORTRAIT_DHIST_TICK_PT = 16   # the hero delta distribution's ticks, larger than a panel's
+PORTRAIT_DHIST_TICK_PAD = 10   # tick label offset, double a panel's — the larger type needs it
+PORTRAIT_DHIST_LABEL_PAD = 4  # ditto for the "% of area" caption under it
+# The histogram layout carries the enlarged ticks between a map and its distribution, so its
+# columns sit further apart than the plain layout's. The figure widens by the extra gap
+# (see `portrait_grid`), leaving the maps their own size.
+PORTRAIT_HIST_WSPACE = 0.20
 
 
 @dataclass(frozen=True)
@@ -64,12 +75,13 @@ class PortraitGrid:
     hero_ratio: float
     fig_w_in: float
     fig_h_in: float
+    wspace: float
 
     @property
     def gridspec_kw(self) -> dict:
         """Everything ``subplot_mosaic`` needs to place this grid in the fixed margins."""
         return {"height_ratios": [1, self.hero_ratio], "width_ratios": self.width_ratios,
-                "wspace": PORTRAIT_WSPACE, "hspace": PORTRAIT_HSPACE,
+                "wspace": self.wspace, "hspace": PORTRAIT_HSPACE,
                 "left": PORTRAIT_LEFT, "right": PORTRAIT_RIGHT,
                 "top": PORTRAIT_TOP, "bottom": PORTRAIT_BOTTOM}
 
@@ -89,18 +101,21 @@ def portrait_grid(extent: GridBounds, *, distribution: bool) -> PortraitGrid:
     ncols = 4 if distribution else 2
     width_ratios = [1.0, PANEL_HIST_WIDTH] * 2 if distribution else [1.0, 1.0]
     span = ncols - 1 if distribution else ncols          # columns the hero covers
-    mosaic = ([["base", "bhist", "cand", "chist"], ["delta", "delta", "delta", "dhist"]]
-              if distribution else [["base", "cand"], ["delta", "delta"]])
+    # Candidate first, baseline second — each map followed by its own histogram column.
+    mosaic = ([["cand", "chist", "base", "bhist"], ["delta", "delta", "delta", "dhist"]]
+              if distribution else [["cand", "base"], ["delta", "delta"]])
 
     # wspace is a fraction of the *mean* column width, so one gap is that fraction of the
     # ratio total over the column count.
-    gap = PORTRAIT_WSPACE * sum(width_ratios) / ncols
+    wspace = PORTRAIT_HIST_WSPACE if distribution else PORTRAIT_WSPACE
+    gap = wspace * sum(width_ratios) / ncols
     block_ratio = sum(width_ratios) + (ncols - 1) * gap
     # The hero spans its columns *and* the gaps between them, so it needs a matching height
     # to fill that width at equal aspect.
     hero_ratio = sum(width_ratios[:span]) + (span - 1) * gap
-    # Histogram columns widen the figure by exactly the width they add, leaving the maps their
-    # own size rather than squeezing them.
+    # Histogram columns — and the wider gaps they sit in — widen the figure by exactly the
+    # width they add, leaving the maps their own size rather than squeezing them. The
+    # denominator is the plain two-map block, the reference both layouts are sized against.
     fig_w_in = PORTRAIT_FIG_W_IN * block_ratio / (2.0 + PORTRAIT_WSPACE)
 
     # column width -> row-1 height -> the row stack -> the usable band between the margins.
@@ -110,7 +125,8 @@ def portrait_grid(extent: GridBounds, *, distribution: bool) -> PortraitGrid:
                   * col_w_in * (ymax - ymin) / (xmax - xmin))
     return PortraitGrid(mosaic=mosaic, width_ratios=width_ratios, hero_ratio=hero_ratio,
                         fig_w_in=fig_w_in,
-                        fig_h_in=stack_h_in / (PORTRAIT_TOP - PORTRAIT_BOTTOM))
+                        fig_h_in=stack_h_in / (PORTRAIT_TOP - PORTRAIT_BOTTOM),
+                        wspace=wspace)
 
 
 # --- axes framing and post-draw geometry -------------------------------------
