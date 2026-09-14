@@ -36,16 +36,17 @@ OUTPUT_DIR = Path(__file__).parents[1] / "output"
 NETCDF_FILL = -9999.0
 
 
-def product_path(region_slug: str, metric_slug: str, period_slug: str,
-                 source_slug: str, label: str, ext: str) -> Path:
+def product_path(description: tuple[str, str, str, str], *, label: str, ext: str) -> Path:
     """Output path for a product of this run, tagged ``label``, with extension ``ext``.
 
-    The single path builder for every writer (each supplies its own ``ext``) and
+    ``description`` is ``RunContext.describe()``: the (region, metric, period, source)
+    slugs. The single path builder for every writer (each supplies its own ``ext``) and
     for the archive naming key — replacing the per-format ``output_*`` wrappers.
     """
-    dir = Path(OUTPUT_DIR / region_slug / metric_slug / period_slug / source_slug)
-    file = f"{metric_slug}_{region_slug}_{period_slug}_{source_slug}_{label}.{ext}"
-    return dir / file
+    region, metric, period, source = description
+    product_dir = Path(OUTPUT_DIR / region / metric / period / source)
+    file = f"{metric}_{region}_{period}_{source}_{label}.{ext}"
+    return product_dir / file
 
 
 def _git_state() -> dict:
@@ -289,7 +290,7 @@ def write_raw_netcdf(product: "RawProduct", ctx: "RunContext") -> list[Path]:
     paths: list[Path] = []
     try:
         for season in product.seasons:
-            path = product_path(ctx.region.slug, ctx.metric.slug, ctx.period.slug, ctx.source.slug, label=str(season), ext="nc")
+            path = product_path(ctx.describe(), label=str(season), ext="nc")
             files[season] = _open_season_hypercube(path, grid, season=season,
                                                    extent=product.season_extents[season])
             paths.append(path)
