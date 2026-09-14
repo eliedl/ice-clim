@@ -36,18 +36,6 @@ OUTPUT_DIR = Path(__file__).parents[1] / "output"
 NETCDF_FILL = -9999.0
 
 
-def log_distribution(values: DataGrid) -> None:
-    """Diagnostic: percentiles + range of a (H, W) result raster."""
-    finite = values[np.isfinite(values)]
-    if not finite.size:
-        return
-    pcts = np.percentile(finite, [1, 5, 25, 50, 75, 95, 99])
-    log.info("Result distribution:")
-    log.info("  min=%.1f  max=%.1f  mean=%.1f  std=%.1f",
-             finite.min(), finite.max(), finite.mean(), finite.std())
-    log.info("  p01=%.1f p05=%.1f p25=%.1f p50=%.1f p75=%.1f p95=%.1f p99=%.1f", *pcts)
-
-
 def _product_dir(slug: str, metric_slug: str, *, period_slug: str, source_slug: str) -> Path:
     """Directory holding every product of one (region, metric, period, source)."""
     return OUTPUT_DIR / slug / metric_slug / period_slug / source_slug
