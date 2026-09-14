@@ -31,7 +31,6 @@ from climatology.services.export import (
     default_outputs,
     product_path,
     save_figure,
-    write_raw_netcdf,
 )
 
 log = logging.getLogger(__name__)
@@ -241,16 +240,6 @@ def _produce(metric: MetricSpec, fetch: FetchResult, ctx: RunContext,
 def _(metric: ClimatologicalMetricSpec, fetch: FetchResult, ctx: RunContext,
       outputs: list[str], plot: bool) -> None:
     _export(_compute_tiers(fetch, ctx), ctx, fetch, outputs=outputs, plot=plot)
-
-
-@_produce.register
-def _(metric: RawMetricSpec, fetch: FetchResult, ctx: RunContext,
-      outputs: list[str], plot: bool) -> None:
-    if len(ctx.region.tiers) != 1:
-        raise ValueError(f"Raw hypercube needs a single-grid region; '{ctx.region.slug}' "
-                         f"has {len(ctx.region.tiers)} tiers.")
-    df = fetch.prepare(metric.conversion)
-    write_raw_netcdf(metric.compute(df, ctx.region.tiers[0]), ctx)
 
 
 def run(metric_slug: str, region_slug: str, source_slug: str, period_slug: str,

@@ -272,38 +272,6 @@ def _fill_hypercubes(files: dict, product: "RawProduct", *, cell_area: float,
                      i, n_days, 100.0 * i / n_days)
 
 
-def write_raw_netcdf(product: "RawProduct", ctx: "RunContext") -> list[Path]:
-    """Stream a raw run's per-season daily hypercube to one netCDF per season on the tier grid.
-
-    Each file carries the RAW_VARIABLES data variables over ``(time, y, x)``, the
-    time axis spanning the season's observed day-of-season extent (Sep-1-of-(y-1)
-    origin, matching ``day_of_season``), with -9999 on gap/uncovered cells. The
-    day-major stack stream is consumed once: for each day, each season's slice is
-    scattered to the grid and written at its ``time`` index — no full cube is
-    materialized (golfe / 3 vars / ~10 winters ≈ 18 GB if held in memory).
-    """
-    grid, wet_mask = product.tier.grid, product.tier.wet_mask
-    cell_area = abs(grid.transform.a * grid.transform.e)
-    shape = (grid.height, grid.width)
-
-    files: dict[int, netCDF4.Dataset] = {}
-    paths: list[Path] = []
-    try:
-        for season in product.seasons:
-            path = product_path(ctx.describe(), label=str(season), ext="nc")
-            files[season] = _open_season_hypercube(path, grid, season=season,
-                                                   extent=product.season_extents[season])
-            paths.append(path)
-        _fill_hypercubes(files, product, cell_area=cell_area, wet_mask=wet_mask, shape=shape)
-    finally:
-        for ds in files.values():
-            ds.close()
-
-    log.info("Raw hypercube: %d per-season netCDF(s) written to %s",
-             len(paths), paths[0].parent if paths else "-")
-    return paths
-
-
 # --- Writers: format registry over the serializers above -------------------
 
 @dataclass(frozen=True)
