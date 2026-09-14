@@ -64,7 +64,7 @@ def _parse_args() -> argparse.Namespace:
     p.add_argument("--output", nargs="+", choices=sorted(WRITERS), default=None, metavar="FMT",
                    help="Extra format(s) to write beside the always-on .npz archive, e.g. "
                         f"--output netcdf. Choices: {', '.join(sorted(WRITERS))}.")
-    p.add_argument("--no-plot", action="store_false", dest="plot",
+    p.add_argument("--plot", action="store_false", dest="plot", default=True,
                    help="Skip the run's figure (built from the archive by plot.build).")
     return p.parse_args()
 

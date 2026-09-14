@@ -110,12 +110,15 @@ def _build_manifest(ctx: RunContext, tier: Tier, *, n_rows: int) -> dict:
 
 # --- run stages ------------------------------------------------------------
 
-def _resolve(metric_slug: str, region_slug: str, source_slug: str,
-             period_slug: str, reduction_slug: str) -> RunContext:
+def _resolve(metric: str, region: str, source: str,
+             period: str, reduction: str) -> RunContext:
     """Resolve slugs to metric/source/region/period objects (the run's identity)."""
-    metric = METRICS[metric_slug].with_reduction(REDUCTIONS[reduction_slug])
-    ctx = RunContext(metric=metric, source=CHART_TABLES[source_slug],
-                     region=RegionSpec.build(region_slug), period=Period(period_slug))
+    
+    ctx = RunContext(METRICS[metric].with_reduction(REDUCTIONS[reduction]),
+                     RegionSpec.build(region), 
+                     Period(period),
+                     CHART_TABLES[source])
+    
     log.info("Region: %s (slug=%s) | Metric: %s | Reduction: %s | Source: %s | Winters: %s | %d tier(s)",
              ctx.region.display, ctx.region.slug, ctx.metric.slug, ctx.metric.reduction_slug,
              ctx.source.slug, ctx.period.slug, len(ctx.region.tiers))
@@ -225,9 +228,8 @@ def _(metric: ClimatologicalMetricSpec, fetch: FetchResult, ctx: RunContext,
     _export(_compute_tiers(fetch, ctx), ctx, fetch, outputs=outputs, plot=plot)
 
 
-def run(metric_slug: str, region_slug: str, source_slug: str, period_slug: str,
-        *, reduction_slug: str = MEDIAN_THEN_THRESHOLD.slug,
-        outputs: list[str] | None = None, plot: bool = True) -> None:
+def run(metric: str, region: str, source: str, period: str,
+        reduction: str, outputs: list[str] | None, plot: bool) -> None:
     """Produce the products for one (metric, region, source, period, reduction order).
 
     ``outputs`` names the extra formats to write (see ``services.export.WRITERS``);
@@ -235,7 +237,7 @@ def run(metric_slug: str, region_slug: str, source_slug: str, period_slug: str,
     is always written regardless. ``plot`` draws the run's figure from that archive
     afterwards, via ``plot.build``. The producer is dispatched on the metric spec's variant.
     """
-    context = _resolve(metric_slug, region_slug, source_slug, period_slug, reduction_slug)
+    context = _resolve(metric, region, source, period, reduction)
     resolved = list(outputs) if outputs else list(default_outputs(context.metric))
     _check_outputs(context.metric, resolved)
     fetch = _fetch(context)
