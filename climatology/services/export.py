@@ -36,26 +36,16 @@ OUTPUT_DIR = Path(__file__).parents[1] / "output"
 NETCDF_FILL = -9999.0
 
 
-def _product_dir(slug: str, metric_slug: str, *, period_slug: str, source_slug: str) -> Path:
-    """Directory holding every product of one (region, metric, period, source)."""
-    return OUTPUT_DIR / slug / metric_slug / period_slug / source_slug
-
-
-def _output_path(slug: str, metric_slug: str, *, period_slug: str,
+def product_path(region_slug: str, metric_slug: str, period_slug: str,
                  source_slug: str, label: str, ext: str) -> Path:
-    """Product path for a (region, metric, period, source, label) tuple."""
-    return (_product_dir(slug, metric_slug, period_slug=period_slug, source_slug=source_slug)
-            / f"{metric_slug}_{slug}_{period_slug}_{source_slug}_{label}.{ext}")
-
-
-def product_path(ctx: "RunContext", *, label: str, ext: str) -> Path:
     """Output path for a product of this run, tagged ``label``, with extension ``ext``.
 
     The single path builder for every writer (each supplies its own ``ext``) and
     for the archive naming key — replacing the per-format ``output_*`` wrappers.
     """
-    return _output_path(ctx.region.slug, ctx.metric.slug, period_slug=ctx.period.slug,
-                        source_slug=ctx.source.slug, label=label, ext=ext)
+    dir = Path(OUTPUT_DIR / region_slug / metric_slug / period_slug / source_slug)
+    file = f"{metric_slug}_{region_slug}_{period_slug}_{source_slug}_{label}.{ext}"
+    return dir / file
 
 
 def _git_state() -> dict:
@@ -89,13 +79,7 @@ def archive_product(values: DataGrid, stem: Path, manifest: dict) -> Path:
     return npz
 
 
-def archive_dir(slug: str, metric_slug: str, *, period_slug: str, source_slug: str) -> Path:
-    """Where ``archive_product`` parks a product's rasters and manifests."""
-    return _product_dir(slug, metric_slug, period_slug=period_slug,
-                        source_slug=source_slug) / "archive"
-
-
-def find_archived(slug: str, metric_slug: str, *, period_slug: str, source_slug: str,
+def find_archived(region_slug: str, metric_slug: str, *, period_slug: str, source_slug: str,
                   tier_level: str, reduction_slug: str) -> tuple[Path, dict]:
     """Newest archived raster for one product, selected on its manifest — never on its filename.
 
@@ -105,7 +89,7 @@ def find_archived(slug: str, metric_slug: str, *, period_slug: str, source_slug:
 
     Returns the ``.npz`` path and its manifest (bounds, grid_res_m, ... for the caller).
     """
-    arch = archive_dir(slug, metric_slug, period_slug=period_slug, source_slug=source_slug)
+    arch = OUTPUT_DIR / region_slug / metric_slug / period_slug / source_slug / "archive"
     if not arch.is_dir():
         raise FileNotFoundError(
             f"No archive at {arch} — run the climatology for this product first.")
@@ -305,7 +289,7 @@ def write_raw_netcdf(product: "RawProduct", ctx: "RunContext") -> list[Path]:
     paths: list[Path] = []
     try:
         for season in product.seasons:
-            path = product_path(ctx, label=str(season), ext="nc")
+            path = product_path(ctx.region.slug, ctx.metric.slug, ctx.period.slug, ctx.source.slug, label=str(season), ext="nc")
             files[season] = _open_season_hypercube(path, grid, season=season,
                                                    extent=product.season_extents[season])
             paths.append(path)
