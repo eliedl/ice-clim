@@ -167,7 +167,7 @@ def _compute_tiers(fetch: FetchResult, ctx: RunContext) -> list[TierProduct]:
 def _archive(products: list[TierProduct], ctx: RunContext, manifests: dict) -> None:
     """Persist each tier's raster + manifest — always on, independent of the requested formats."""
     for product in products:
-        stem = product_path(ctx, label=_label(ctx, [product], composite=False), ext="npz")
+        stem = product_path(ctx.region.slug, ctx.metric.slug, ctx.period.slug, ctx.source.slug, label=_label(ctx, [product], composite=False), ext="npz")
         archive_product(product.values, stem, manifests[product.tier.level])
 
 
@@ -176,7 +176,7 @@ def _emit(writer: Writer, products: list[TierProduct], ctx: RunContext,
     """Run one writer over the products at its declared granularity (per-tier or composite)."""
     groups = [products] if writer.composite else [[p] for p in products]
     for group in groups:
-        path = product_path(ctx, label=_label(ctx, group, composite=writer.composite),
+        path = product_path(ctx.region.slug, ctx.metric.slug, ctx.period.slug, ctx.source.slug, label=_label(ctx, group, composite=writer.composite),
                             ext=writer.ext)
         writer.serialize(WriteJob(path=path, products=group, ctx=ctx, meta=meta,
                                   manifest=manifests[group[0].tier.level]))
@@ -195,7 +195,7 @@ def _plot(ctx: RunContext) -> None:
                     (Product(period=ctx.period.slug, source=ctx.source.slug,
                              reduction=ctx.metric.reduction.slug),),
                     type="raw", layout="single", distribution=False)
-    path = product_path(ctx, label=_label(ctx, [], composite=True), ext="png")
+    path = product_path(ctx.region.slug, ctx.metric.slug, ctx.period.slug, ctx.source.slug, label=_label(ctx, [], composite=True), ext="png")
     save_figure(product.figure, path, tight=product.tight)
 
 
