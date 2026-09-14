@@ -36,16 +36,11 @@ OUTPUT_DIR = Path(__file__).parents[1] / "output"
 NETCDF_FILL = -9999.0
 
 
-def product_path(description: tuple[str, str, str, str], *, label: str, ext: str) -> Path:
-    """Output path for a product of this run, tagged ``label``, with extension ``ext``.
-
-    ``description`` is ``RunContext.describe()``: the (region, metric, period, source)
-    slugs. The single path builder for every writer (each supplies its own ``ext``) and
-    for the archive naming key — replacing the per-format ``output_*`` wrappers.
-    """
-    region, metric, period, source = description
+def product_path(description: tuple[str, str, str, str, str], *, ext: str) -> Path:
+    """Output path for a product of this run, with extension ``ext``."""
+    region, metric, period, source, reduction = description
     product_dir = Path(OUTPUT_DIR / region / metric / period / source)
-    file = f"{metric}_{region}_{period}_{source}_{label}.{ext}"
+    file = f"{metric}_{region}_{period}_{source}_{reduction}.{ext}"
     return product_dir / file
 
 
@@ -68,11 +63,11 @@ def archive_product(values: DataGrid, stem: Path, manifest: dict) -> Path:
     ``stem`` is any path in the product directory whose basename names the run
     (its extension is ignored); the archive keys off ``.stem`` and ``.parent``.
     """
-    stamp = datetime.now().strftime("%Y%m%d-%H%M%S")
+    stamp = datetime.now().strftime("%Y%m%d-%H%M%S-%f")  # µs: one run's tiers are ~85 ms apart
     git = _git_state()
     arch_dir = stem.parent / "archive"
     arch_dir.mkdir(parents=True, exist_ok=True)
-    npz = arch_dir / f"{stem.stem}_{stamp}_{git['git_sha'] or 'nogit'}.npz"
+    npz = arch_dir / f"{stem.stem}_{stamp}.npz"
     np.savez_compressed(npz, values=values)
     manifest = {**manifest, **git, "grid_crs": GRID_CRS, "created": stamp, "raster": npz.name}
     npz.with_suffix(".json").write_text(json.dumps(manifest, indent=2, default=str))
