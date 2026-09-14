@@ -121,10 +121,8 @@ class Product:
 class PlotContext:
     """Resolved, immutable identity of one figure: what to draw, and how to lay it out.
 
-    ``type``/``layout``/``distribution`` are the presentation axes the CLI sets; the rest
-    names the archived products the figure is built from. A delta reads its products pairwise
-    (candidate − baseline), so ``products`` is ordered and its length is layout-dependent —
-    ``_validate`` is what holds that rule.
+    region and metric are immutable but the reduction, period and source can differ, 
+    hence their attribution in the Product object.
     """
 
     region: RegionSpec
@@ -133,10 +131,12 @@ class PlotContext:
     type: str = RAW                 # raw | delta
     layout: str = MULTI             # single | multi | portrait
     distribution: bool = True
+    
 
-    @property
-    def tiers(self) -> list[str]:
-        return [tier.level for tier in self.region.tiers]
+    def describe(self, product: Product) -> tuple[str, str, str, str, str]:
+        """One product's run identity, in the order the output path spells it."""
+        return (self.region.slug, self.metric.slug,
+                product.period, product.source, product.reduction)
 
     @property
     def axes(self) -> tuple[str, ...]:
@@ -160,13 +160,16 @@ class ArchiveRef:
     """
 
     product: Product
-    tier: str
     npz: Path
     manifest: dict
 
     @property
     def source(self) -> ChartTable:
         return CHART_TABLES[self.product.source]
+
+    @property
+    def tier(self) -> str:
+        return self.manifest["tier"]
 
     @property
     def reduction(self) -> str:
@@ -347,7 +350,7 @@ def _validate(ctx: PlotContext) -> list[list[ArchiveRef]]:
     loads exactly what was approved here and nothing re-decides.
     """
     _assert_configured(ctx)
-    refs = [[_locate(ctx, product, tier) for tier in ctx.tiers] for product in ctx.products]
+    refs = [_locate(ctx, product) for product in ctx.products]
 
     flat = [ref for product_refs in refs for ref in product_refs]
     assert_comparable(flat, ctx.metric)      # step counts share one observation unit
@@ -356,12 +359,10 @@ def _validate(ctx: PlotContext) -> list[list[ArchiveRef]]:
     return refs
 
 
-def _locate(ctx: PlotContext, product: Product, tier: str) -> ArchiveRef:
-    """The newest archived raster for one (product, tier), with the manifest that selected it."""
-    npz, manifest = find_archived(ctx.region.slug, ctx.metric.slug,
-                                  period_slug=product.period, source_slug=product.source,
-                                  tier_level=tier, reduction_slug=product.reduction)
-    return ArchiveRef(product=product, tier=tier, npz=npz, manifest=manifest)
+def _locate(ctx: PlotContext, product: Product) -> list[ArchiveRef]:
+    """The newest archived raster per tier for one product, coarse first, each with the manifest that selected it."""
+    return [ArchiveRef(product=product, npz=npz, manifest=manifest)
+            for npz, manifest in find_archived(ctx.describe(product))]
 
 
 def _assert_shared_grid(refs: list[list[ArchiveRef]]) -> None:

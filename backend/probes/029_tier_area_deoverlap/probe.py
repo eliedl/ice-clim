@@ -72,14 +72,10 @@ def _wet_layers(region_slug: str) -> list[RasterLayer]:
 def _archived_layers(region: str, metric: str, period: str, source: str,
                      reduction: str) -> list[RasterLayer]:
     """The archived product rasters, coarse first — selected on the manifest, so the MTT and TTM products never get confused."""
-    layers = []
-    for tier in resolve_region(region).tiers:
-        npz, manifest = find_archived(region, metric, period_slug=period, source_slug=source,
-                                      tier_level=tier.level, reduction_slug=reduction)
-        layers.append(RasterLayer(np.load(npz)["values"],
-                                  tuple(manifest["bounds"]),
-                                  float(manifest["grid_res_m"])))
-    return layers
+    return [RasterLayer(np.load(npz)["values"],
+                        tuple(manifest["bounds"]),
+                        float(manifest["grid_res_m"]))
+            for npz, manifest in find_archived((region, metric, period, source, reduction))]
 
 
 def report_cell_size(layers: list[RasterLayer], region: str) -> list[str]:

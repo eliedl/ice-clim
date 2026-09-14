@@ -73,8 +73,8 @@ GROUP_SAMPLE = 200
 
 def product(reduction: str) -> Product:
     """The newest archived raster for one reduction, selected on its manifest."""
-    npz, _ = find_archived(REGION, METRIC, period_slug=PERIOD, source_slug=SOURCE,
-                           tier_level=TIER, reduction_slug=reduction)
+    npz, _ = next((npz, m) for npz, m in find_archived((REGION, METRIC, PERIOD, SOURCE, reduction))
+                  if m["tier"] == TIER)
     return Product(npz)
 
 

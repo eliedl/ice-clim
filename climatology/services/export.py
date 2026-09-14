@@ -9,6 +9,7 @@ from collections.abc import Callable
 from dataclasses import dataclass
 from datetime import datetime
 from functools import singledispatch
+from operator import itemgetter
 from pathlib import Path
 from typing import TYPE_CHECKING
 
@@ -36,12 +37,21 @@ OUTPUT_DIR = Path(__file__).parents[1] / "output"
 NETCDF_FILL = -9999.0
 
 
-def product_path(description: tuple[str, str, str, str, str], *, ext: str) -> Path:
-    """Output path for a product of this run, with extension ``ext``."""
+def _product_dir(description: tuple[str, str, str, str, str]) -> Path:
+    """Directory holding every product and archive of one run identity."""
+    region, metric, period, source, _ = description
+    return OUTPUT_DIR / region / metric / period / source
+
+
+def _product_name(description: tuple[str, str, str, str, str]) -> str:
+    """Basename shared by every product of one run identity, extension aside."""
     region, metric, period, source, reduction = description
-    product_dir = Path(OUTPUT_DIR / region / metric / period / source)
-    file = f"{metric}_{region}_{period}_{source}_{reduction}.{ext}"
-    return product_dir / file
+    return f"{metric}_{region}_{period}_{source}_{reduction}"
+
+
+def product_path(description: tuple[str, str, str, str, str], ext: str) -> Path:
+    """Output path for a product of this run, with extension ``ext``."""
+    return _product_dir(description) / f"{_product_name(description)}.{ext}"
 
 
 def _git_state() -> dict:
@@ -57,53 +67,36 @@ def _git_state() -> dict:
         return {"git_sha": None, "git_dirty": None}
 
 
-def archive_product(values: DataGrid, stem: Path, manifest: dict) -> Path:
-    """Persist the product raster + run manifest under ``<product-dir>/archive/``.
-
-    ``stem`` is any path in the product directory whose basename names the run
-    (its extension is ignored); the archive keys off ``.stem`` and ``.parent``.
-    """
+def archive_product(values: DataGrid, description: tuple[str, str, str, str, str], manifest: dict) -> Path:
+    """Persist the product raster + run manifest under ``<product-dir>/archive/``."""
     stamp = datetime.now().strftime("%Y%m%d-%H%M%S-%f")  # µs: one run's tiers are ~85 ms apart
     git = _git_state()
-    arch_dir = stem.parent / "archive"
+
+    arch_dir = _product_dir(description) / "archive"
     arch_dir.mkdir(parents=True, exist_ok=True)
-    npz = arch_dir / f"{stem.stem}_{stamp}.npz"
+
+    npz = arch_dir / f"{_product_name(description)}_{stamp}.npz"
     np.savez_compressed(npz, values=values)
+
     manifest = {**manifest, **git, "grid_crs": GRID_CRS, "created": stamp, "raster": npz.name}
     npz.with_suffix(".json").write_text(json.dumps(manifest, indent=2, default=str))
+
     log.info("Archived product raster: %s", npz)
+
     return npz
 
 
-def find_archived(region_slug: str, metric_slug: str, *, period_slug: str, source_slug: str,
-                  tier_level: str, reduction_slug: str) -> tuple[Path, dict]:
-    """Newest archived raster for one product, selected on its manifest — never on its filename.
+def find_archived(description: tuple[str, str, str, str, str]) -> list[tuple[Path, dict]]:
+    """Newest archived raster per tier for one run identity, coarsest grid first."""
+    arch_dir = _product_dir(description) / "archive"
+    *_, reduction = description
 
-    A filename glob cannot separate the reduction orders: the default label (``fine_100m``) is a
-    *prefix* of every other (``fine_100m_ttmpo``), so ``*_fine_*`` matches both and the newest
-    hit may be the wrong reduction. The manifest states ``tier`` and ``reduction`` outright.
-
-    Returns the ``.npz`` path and its manifest (bounds, grid_res_m, ... for the caller).
-    """
-    arch = OUTPUT_DIR / region_slug / metric_slug / period_slug / source_slug / "archive"
-    if not arch.is_dir():
-        raise FileNotFoundError(
-            f"No archive at {arch} — run the climatology for this product first.")
-
-    matches = []
-    for manifest_path in arch.glob("*.json"):
-        manifest = json.loads(manifest_path.read_text())
-        if manifest.get("tier") == tier_level and manifest.get("reduction") == reduction_slug:
-            matches.append((manifest["created"], arch / manifest["raster"], manifest))
-    if not matches:
-        seen = sorted({(m.get("tier"), m.get("reduction"))
-                       for m in (json.loads(p.read_text()) for p in arch.glob("*.json"))})
-        raise FileNotFoundError(
-            f"No archived raster in {arch} for tier={tier_level!r} "
-            f"reduction={reduction_slug!r}. Present: {seen}")
-
-    _, npz, manifest = max(matches)   # 'created' stamps sort oldest -> newest
-    return npz, manifest
+    manifests = (json.loads(p.read_text()) for p in arch_dir.glob("*.json"))
+    by_age = sorted((m for m in manifests if m["reduction"] == reduction), key=itemgetter("created"))
+    newest = {m["tier"]: m for m in by_age}        # overwrite on iteration on manifest
+    
+    return [(arch_dir / m["raster"], m)
+            for m in sorted(newest.values(), key=itemgetter("grid_res_m"), reverse=True)] # coarse first
 
 
 def save_figure(fig, png_path: Path, *, tight: bool = True) -> None:

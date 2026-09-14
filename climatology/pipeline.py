@@ -156,8 +156,7 @@ def _compute_tiers(fetch: FetchResult, ctx: RunContext) -> list[TierProduct]:
 def _archive(products: list[TierProduct], ctx: RunContext, manifests: dict) -> None:
     """Persist each tier's raster + manifest — always on, independent of the requested formats."""
     for product in products:
-        stem = product_path(ctx.describe(), ext="npz")
-        archive_product(product.values, stem, manifests[product.tier.level])
+        archive_product(product.values, ctx.describe(), manifests[product.tier.level])
 
 
 def _emit(writer: Writer, products: list[TierProduct], ctx: RunContext,
