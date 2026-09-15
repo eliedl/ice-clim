@@ -14,7 +14,7 @@ Measured, per candidate fine resolution:
     work actually needed if the fine tier is tiled rather than one raster).
 
 Geometry is pulled from the production region builder
-(climatology.processing.regions) so the probe measures exactly what the
+(climatology.core.regions) so the probe measures exactly what the
 pipeline would grid. All polygons are run through make_valid first — the raw
 MRC/buffer/landmask layers have self-intersections that break set ops.
 
@@ -38,7 +38,7 @@ from shapely.geometry import box
 PROJECT_ROOT = Path(__file__).parents[3]
 sys.path.insert(0, str(PROJECT_ROOT))
 
-from climatology.processing.regions import (  # noqa: E402
+from climatology.core.regions import (  # noqa: E402
     MINGANIE_GRID_CRS,
     _coastline_buffer,
     _minganie_polygon,

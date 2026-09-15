@@ -8,9 +8,8 @@ from dataclasses import dataclass
 from datetime import timedelta
 from typing import TYPE_CHECKING
 
-from climatology.processing.reduction.temporal import (
+from climatology.core.reduction.temporal import (
     MPO_MIN_SEASON_COVERAGE,
-    REDUCTIONS,
     StatThenThreshold,
     ThresholdDate,
     ThresholdDateDelta,
@@ -21,7 +20,7 @@ from climatology.utils._types import GRID_CRS
 from climatology.plot.colors import DARK_MUTED
 
 if TYPE_CHECKING:
-    from climatology.processing.metrics import MetricSpec
+    from climatology.core.metrics import Metric
 
 
 def _date_ticks(tick_values: list[float]) -> list[str]:
@@ -143,12 +142,12 @@ PLOT_STYLES: dict[str, PlotStyle] = {
 }
 
 
-def metric_title(metric: MetricSpec) -> str:
+def metric_title(metric: Metric) -> str:
     """The metric's display name — the figure title, independent of reduction order."""
     return PLOT_STYLES[metric.slug].title
 
 
-def metric_label(metric: MetricSpec) -> str:
+def metric_label(metric: Metric) -> str:
     """The metric's colourbar label for the reduction order it was computed under, naming that order's statistic."""
     labels = PLOT_STYLES[metric.slug].label
     reduction = metric.reduction
@@ -160,14 +159,14 @@ def metric_label(metric: MetricSpec) -> str:
     return labels[reduction.order].format(stat=stat, Stat=stat[0].upper() + stat[1:])
 
 
-def panel_metric_label(metric: MetricSpec, reduction_slug: str) -> str:
+def panel_metric_label(metric: Metric, reduction_slug: str) -> str:
     """One panel's colourbar label, under the reduction order that panel was computed under.
 
     A figure branching on reduction draws one bar per map precisely so each can say what its
     own map means: the orders phrase the quantity differently (see ``PlotStyle``) and no single
     string describes both.
     """
-    return metric_label(metric.with_reduction(REDUCTIONS[reduction_slug]))
+    return metric_label(metric.with_reduction(reduction_slug))
 
 
 # Threshold direction, read off the kernel rather than restated: ThresholdDate says which
@@ -207,12 +206,12 @@ def reduction_notes(slugs: Iterable[str]) -> str:
     return " | ".join(REDUCTION_NOTES[s] for s in dict.fromkeys(slugs))
 
 
-def reduction_note(metric: MetricSpec) -> str:
+def reduction_note(metric: Metric) -> str:
     """Footer note naming the reduction order the product was computed under."""
     return reduction_notes([metric.reduction.slug])
 
 
-def threshold_label(metric: MetricSpec) -> str:
+def threshold_label(metric: Metric) -> str:
     """The threshold a metric is actually computed on, taken from its spec."""
     field = metric.fields[0]
     if field != "CT":

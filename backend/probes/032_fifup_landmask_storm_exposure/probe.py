@@ -36,15 +36,15 @@ sys.path.insert(0, str(PROJECT_ROOT))
 load_dotenv(PROJECT_ROOT / ".env")
 
 from climatology import pipeline  # noqa: E402
-from climatology.pipeline import (  # noqa: E402
-    RunContext, _build_manifest, _compute_tiers, _fetch,
-)
-from climatology.processing.metrics import METRICS  # noqa: E402
-from climatology.processing.regions import resolve_region  # noqa: E402
+from climatology.core.context import RunContext  # noqa: E402
+from climatology.core.export import _build_manifest  # noqa: E402
+from climatology.pipeline import _compute_tiers, _fetch  # noqa: E402
+from climatology.core.metrics import Metric  # noqa: E402
+from climatology.core.regions import resolve_region  # noqa: E402
 from climatology.services.sources import CHART_TABLES  # noqa: E402
 from climatology.services.calendar import Period  # noqa: E402
 from climatology.utils import polygons  # noqa: E402
-from climatology.services.export import archive_product  # noqa: E402
+from climatology.core.export import archive_product  # noqa: E402
 from climatology.tests import diff_map_regression_test as diff  # noqa: E402
 
 OUTPUT_DIR = Path(__file__).parent / "output"
@@ -80,7 +80,7 @@ def _run_under_mask(mask: Path, *, label: str, fetch=None):
     """
     _set_mask(mask)
     region = resolve_region(REGION)
-    ctx = RunContext(metric=METRICS[METRIC], source=CHART_TABLES[SOURCE],
+    ctx = RunContext(metric=Metric.build(METRIC), source=CHART_TABLES[SOURCE],
                      region=region, period=Period(PERIOD))
     fetch = fetch or _fetch(ctx)
     product = _compute_tiers(fetch, ctx)[-1]   # single 'full' tier

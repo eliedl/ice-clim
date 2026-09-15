@@ -12,18 +12,17 @@ import numpy as np
 import pandas as pd
 from shapely.geometry import box
 
-from dataclasses import replace
-
-from climatology.pipeline import FetchResult, _compute_raster
-from climatology.processing.metrics import METRICS
-from climatology.processing.reduction.temporal import (
+from climatology.core.context import FetchResult
+from climatology.pipeline import _compute_raster
+from climatology.core.metrics import Metric
+from climatology.core.reduction.temporal import (
     MEAN_THEN_THRESHOLD,
     THRESHOLD_THEN_MEAN,
     THRESHOLD_THEN_MEDIAN,
     THRESHOLD_THEN_MPO_MEAN,
 )
-from climatology.processing.rasterize import build_grid
-from climatology.processing.regions import Tier
+from climatology.core.rasterize import build_grid
+from climatology.core.regions import Tier
 from climatology.services.calendar import day_of_season
 
 
@@ -57,7 +56,7 @@ def _duration_fixture():
 def test_season_duration_median_then_threshold():
     """Duration = count of admissible HDs with median CT >= 4/10; ice-free water -> 0, not NaN."""
     df = _duration_fixture()
-    out = _raster(METRICS["season_duration"], df, _synthetic_tier(land_mask=None))
+    out = _raster(Metric.build("season_duration"), df, _synthetic_tier(land_mask=None))
     assert np.all(out[:, :2] == 2), "ice on both HDs must count 2"
     assert np.all(out[:, 2:] == 0), "observed ice-free water must count 0"
 
@@ -67,7 +66,7 @@ def test_season_duration_land_mask_nan():
     df = _duration_fixture()
     land = np.zeros((4, 4), dtype=bool)
     land[0, :] = True
-    out = _raster(METRICS["season_duration"], df, _synthetic_tier(land_mask=land))
+    out = _raster(Metric.build("season_duration"), df, _synthetic_tier(land_mask=land))
     assert np.all(np.isnan(out[0, :])), "land row must be NaN"
     assert np.all(out[1:, :2] == 2) and np.all(out[1:, 2:] == 0), \
         "water cells must be unaffected by the mask"
@@ -76,7 +75,7 @@ def test_season_duration_land_mask_nan():
 def test_storm_exposure_inverse_threshold():
     """Exposure = count of admissible HDs with median CT <= 3/10 (DEC-037)."""
     df = _duration_fixture()
-    out = _raster(METRICS["storm_exposure_duration"], df, _synthetic_tier(land_mask=None))
+    out = _raster(Metric.build("storm_exposure_duration"), df, _synthetic_tier(land_mask=None))
     assert np.all(out[:, :2] == 0), "compact ice must never count as exposed"
     assert np.all(out[:, 2:] == 1), "observed open water counts; unobserved step does not"
 
@@ -86,7 +85,7 @@ def test_storm_exposure_land_mask_nan():
     df = _duration_fixture()
     land = np.zeros((4, 4), dtype=bool)
     land[0, :] = True
-    out = _raster(METRICS["storm_exposure_duration"], df, _synthetic_tier(land_mask=land))
+    out = _raster(Metric.build("storm_exposure_duration"), df, _synthetic_tier(land_mask=land))
     assert np.all(np.isnan(out[0, :])), "land row must be NaN"
     assert np.all(out[1:, :2] == 0) and np.all(out[1:, 2:] == 1), \
         "water cells must be unaffected by the mask"
@@ -95,7 +94,7 @@ def test_storm_exposure_land_mask_nan():
 def test_freeze_up_first_above():
     """Freeze-up = first admissible HD where median CT >= 4/10 (first_above)."""
     df = _duration_fixture()
-    out = _raster(METRICS["freeze_up_date"], df, _synthetic_tier(land_mask=None))
+    out = _raster(Metric.build("freeze_up_date"), df, _synthetic_tier(land_mask=None))
     assert np.all(out[:, :2] == day_of_season("01-01")), "ice freezes on the first HD"
     assert np.all(np.isnan(out[:, 2:])), "never-crossing water stays NaN"
 
@@ -114,7 +113,7 @@ def _breakup_fixture():
 def test_breakup_first_below():
     """Break-up = the clearing day: first admissible HD below 4/10 after the last crossing above (probe 028 — the CIS `break` convention)."""
     df = _breakup_fixture()
-    out = _raster(METRICS["breakup_date"], df, _synthetic_tier(land_mask=None))
+    out = _raster(Metric.build("breakup_date"), df, _synthetic_tier(land_mask=None))
     assert np.all(out[:, :2] == day_of_season("01-15")), \
         "break-up is the HD the ice clears, not the last HD it is present"
     assert np.all(np.isnan(out[:, 2:])), \
@@ -127,7 +126,7 @@ def test_breakup_ignores_pre_ice_open_water():
     rows = [{"obs_date": d, "ct_code": ct, "geometry": left}
             for yr in (2001, 2002)
             for d, ct in ((f"{yr}-01-01", "00"), (f"{yr}-01-08", "92"), (f"{yr}-01-15", "00"))]
-    out = _raster(METRICS["breakup_date"], pd.DataFrame(rows), _synthetic_tier(land_mask=None))
+    out = _raster(Metric.build("breakup_date"), pd.DataFrame(rows), _synthetic_tier(land_mask=None))
     assert np.all(out[:, :2] == day_of_season("01-15")), \
         "open water on 01-01 precedes any crossing above — only the post-ice clearing counts"
 
@@ -137,7 +136,7 @@ def test_feb29_rows_dropped_by_season_calendar():
     left = box(0, 0, 2, 4)
     rows = [{"obs_date": d, "ct_code": "92", "geometry": left}
             for d in ("2012-01-01", "2012-01-08", "2012-02-29", "2013-01-01", "2013-01-08")]
-    metric = METRICS["season_duration"]
+    metric = Metric.build("season_duration")
     prepared = FetchResult(pd.DataFrame(rows)).prepare(metric.conversion)
     assert set(prepared["day_of_season"]) == {day_of_season("01-01"), day_of_season("01-08")}, \
         "02-29 must be excluded (no ordinal); the other days survive the calendar"
@@ -155,7 +154,7 @@ def test_filter_admissible_days_drops_under_covered_days():
 
 def _reduced(metric, reduction):
     """A registry metric under another reduction order — mirrors pipeline._resolve."""
-    return replace(metric, reduction=reduction)
+    return metric.with_reduction(reduction.slug)
 
 
 def _order_split_fixture():
@@ -183,7 +182,7 @@ def test_ttmpo_freeze_up_full_coverage_mean():
         2001          #     #      Jan 1
         2002          .     #      Jan 8      -> (1 + 8)/2 = 4.5 -> Jan 4.5
     """
-    out = _raster(_reduced(METRICS["freeze_up_date"], THRESHOLD_THEN_MPO_MEAN), _order_split_fixture(),
+    out = _raster(_reduced(Metric.build("freeze_up_date"), THRESHOLD_THEN_MPO_MEAN), _order_split_fixture(),
                   _synthetic_tier(land_mask=None))
     mid = (day_of_season("01-01") + day_of_season("01-08")) / 2
     assert np.all(out[:, :2] == mid), "mean of the two per-season dates"
@@ -192,7 +191,7 @@ def test_ttmpo_freeze_up_full_coverage_mean():
 
 def test_mediantt_freeze_up_disagrees_with_ttmpo():
     """Same rows, stat-first order: the upper-middle median CT already crosses on the first HD."""
-    out = _raster(METRICS["freeze_up_date"], _order_split_fixture(), _synthetic_tier(land_mask=None))
+    out = _raster(Metric.build("freeze_up_date"), _order_split_fixture(), _synthetic_tier(land_mask=None))
     assert np.all(out[:, :2] == day_of_season("01-01"))
 
 
@@ -203,7 +202,7 @@ def test_ttmpo_duration_mean_of_counts():
         2001          #     #       2
         2002          .     #       1        -> (2 + 1)/2 = 1.5
     """
-    out = _raster(_reduced(METRICS["season_duration"], THRESHOLD_THEN_MPO_MEAN), _order_split_fixture(),
+    out = _raster(_reduced(Metric.build("season_duration"), THRESHOLD_THEN_MPO_MEAN), _order_split_fixture(),
                   _synthetic_tier(land_mask=None))
     assert np.all(out[:, :2] == 1.5), "mean of {2, 1}"
     assert np.all(out[:, 2:] == 0), "observed ice-free water counts 0"
@@ -225,7 +224,7 @@ def test_ttmpo_season_coverage_rule():
     for yr, right_ct in ((2001, "92"), (2002, "00"), (2003, "00")):
         rows.append({"obs_date": f"{yr}-01-01", "ct_code": "92", "geometry": left})
         rows.append({"obs_date": f"{yr}-01-01", "ct_code": right_ct, "geometry": right})
-    out = _raster(_reduced(METRICS["freeze_up_date"], THRESHOLD_THEN_MPO_MEAN), pd.DataFrame(rows),
+    out = _raster(_reduced(Metric.build("freeze_up_date"), THRESHOLD_THEN_MPO_MEAN), pd.DataFrame(rows),
                   _synthetic_tier(land_mask=None))
     assert np.all(out[:, :2] == day_of_season("01-01")), "3/3 seasons -> kept"
     assert np.all(np.isnan(out[:, 2:])), "1/3 seasons < 50% -> masked"
@@ -272,7 +271,7 @@ def test_ttmpo_date_dilutes_event_less_seasons_toward_dec_31():
     A mean over the contributing seasons only would say Jan 15; summing raw season
     ordinals with no zero-point would say Nov 21, earlier than any observation on record.
     """
-    out = _raster(_reduced(METRICS["first_occurrence_date"], THRESHOLD_THEN_MPO_MEAN),
+    out = _raster(_reduced(Metric.build("first_occurrence_date"), THRESHOLD_THEN_MPO_MEAN),
                   _sparse_fixture({"01-15": "92"}, ice_seasons=(2001, 2002, 2003)),
                   _synthetic_tier(land_mask=None))
     assert np.all(out[:, :2] == day_of_season("01-09")), "45/5 = 9 -> Jan 9"
@@ -286,7 +285,7 @@ def test_ttmpo_date_equals_a_plain_mean_at_full_coverage():
         left half   01-15   crossing
         2001-2005     #      Jan 15    -> 15 x 5 / 5 = 15 -> Jan 15
     """
-    out = _raster(_reduced(METRICS["first_occurrence_date"], THRESHOLD_THEN_MPO_MEAN),
+    out = _raster(_reduced(Metric.build("first_occurrence_date"), THRESHOLD_THEN_MPO_MEAN),
                   _sparse_fixture({"01-15": "92"}, ice_seasons=(2001, 2002, 2003, 2004, 2005)),
                   _synthetic_tier(land_mask=None))
     assert np.all(out[:, :2] == day_of_season("01-15"))
@@ -317,7 +316,7 @@ def test_the_three_threshold_first_statistics_disagree():
         ttmpo     (1 + 8)/3, fixed denominator    -> Jan 3    the ice-free winter dilutes it
     """
     fixture, tier = _split_fixture(), _synthetic_tier(land_mask=None)
-    metric = METRICS["first_occurrence_date"]
+    metric = Metric.build("first_occurrence_date")
     value = {r.slug: _raster(_reduced(metric, r), fixture, tier)[0, 0]
              for r in (THRESHOLD_THEN_MEDIAN, THRESHOLD_THEN_MEAN, THRESHOLD_THEN_MPO_MEAN)}
     assert value["ttmedian"] == day_of_season("01-08"), "sorted[n // 2] of 2 values (DEC-035)"
@@ -329,7 +328,7 @@ def test_only_the_median_returns_a_date_the_archive_could_have_published():
     """The DEC-035 argument carries past the CT series to the dates themselves: a mean lands between two weekly charts, on a day no chart exists for."""
     fixture, tier = _split_fixture(), _synthetic_tier(land_mask=None)
     charted = {day_of_season("01-01"), day_of_season("01-08")}
-    metric = METRICS["first_occurrence_date"]
+    metric = Metric.build("first_occurrence_date")
     assert _raster(_reduced(metric, THRESHOLD_THEN_MEDIAN), fixture, tier)[0, 0] in charted
     for reduction in (THRESHOLD_THEN_MEAN, THRESHOLD_THEN_MPO_MEAN):
         assert _raster(_reduced(metric, reduction), fixture, tier)[0, 0] not in charted
@@ -343,7 +342,7 @@ def test_ttmean_and_ttmpo_agree_when_every_season_carries_the_crossing():
     """
     fixture = _sparse_fixture({"01-15": "92"}, ice_seasons=(2001, 2002, 2003, 2004, 2005))
     tier = _synthetic_tier(land_mask=None)
-    metric = METRICS["first_occurrence_date"]
+    metric = Metric.build("first_occurrence_date")
     assert np.array_equal(_raster(_reduced(metric, THRESHOLD_THEN_MEAN), fixture, tier),
                           _raster(_reduced(metric, THRESHOLD_THEN_MPO_MEAN), fixture, tier),
                           equal_nan=True)
@@ -363,7 +362,7 @@ def test_meantt_and_mediantt_cross_on_different_days():
                             for yr, days in left_ct.items() for md, ct in days.items()
                             for geom, code in ((left, ct), (right, "00"))])
     tier = _synthetic_tier(land_mask=None)
-    metric = METRICS["freeze_up_date"]
+    metric = Metric.build("freeze_up_date")
     assert _raster(metric, fixture, tier)[0, 0] == day_of_season("01-01"), "mediantt (default)"
     assert _raster(_reduced(metric, MEAN_THEN_THRESHOLD), fixture, tier)[0, 0] \
         == day_of_season("01-08")
@@ -379,7 +378,7 @@ def test_ttmpo_duration_needs_no_zero_point():
         2004          .     .       0
         2005          .     .       0        -> 6/5 = 1.2 steps
     """
-    out = _raster(_reduced(METRICS["season_duration_10"], THRESHOLD_THEN_MPO_MEAN),
+    out = _raster(_reduced(Metric.build("season_duration_10"), THRESHOLD_THEN_MPO_MEAN),
                   _sparse_fixture({"01-01": "92", "01-08": "92"}, ice_seasons=(2001, 2002, 2003)),
                   _synthetic_tier(land_mask=None))
     assert np.allclose(out[:, :2], 1.2)
@@ -395,7 +394,7 @@ def test_ttmpo_lag_needs_no_zero_point():
         2004          .     .     none
         2005          .     .     none       -> 21/5 = 4.2 d
     """
-    out = _raster(_reduced(METRICS["formation_lag"], THRESHOLD_THEN_MPO_MEAN),
+    out = _raster(_reduced(Metric.build("formation_lag"), THRESHOLD_THEN_MPO_MEAN),
                   _sparse_fixture({"01-01": "10", "01-08": "40"}, ice_seasons=(2001, 2002, 2003)),
                   _synthetic_tier(land_mask=None))
     assert np.allclose(out[:, :2], 4.2), "applying the date zero-point here would give 60.4 d"
@@ -417,7 +416,7 @@ def test_prepare_overhead_is_negligible():
     """FetchResult.prepare (temporal + conversion) must be a small fraction of a metric's total compute time."""
     df = _large_fixture()
     tier = _synthetic_tier(land_mask=None)
-    metric = METRICS["season_duration"]
+    metric = Metric.build("season_duration")
     fetch = FetchResult(df)
     reps = 50
 

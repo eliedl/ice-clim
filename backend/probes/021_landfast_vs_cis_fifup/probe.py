@@ -37,14 +37,15 @@ PROJECT_ROOT = Path(__file__).parents[3]
 sys.path.insert(0, str(PROJECT_ROOT))
 load_dotenv(PROJECT_ROOT / ".env")
 
-from climatology.pipeline import RunContext, _compute_tiers, _fetch  # noqa: E402
-from climatology.processing.metrics import EventDate, MetricSpec  # noqa: E402
-from climatology.processing.rasterize import burn_values  # noqa: E402
+from climatology.core.context import RunContext  # noqa: E402
+from climatology.pipeline import _compute_tiers, _fetch  # noqa: E402
+from climatology.core.metrics import EventDate, Metric  # noqa: E402
+from climatology.core.rasterize import burn_values  # noqa: E402
 from climatology.utils._types import GRID_CRS  # noqa: E402
-from climatology.processing.regions import resolve_region  # noqa: E402
+from climatology.core.regions import resolve_region  # noqa: E402
 from climatology.services.sources import CHART_TABLES  # noqa: E402
 from climatology.services.calendar import SEASON_ORIGIN, Period, day_of_season  # noqa: E402
-from climatology.processing.conversion import CT_CONVERSION  # noqa: E402
+from climatology.core.conversion import CT_CONVERSION  # noqa: E402
 
 OUTPUT_DIR = Path(__file__).parent / "output"
 OURS_CACHE = OUTPUT_DIR / "ours_values.npy"
@@ -60,7 +61,7 @@ def compute_ours(region, *, recompute: bool) -> np.ndarray:
     if OURS_CACHE.exists() and not recompute:
         print(f"Using cached proxy raster: {OURS_CACHE} (pass --recompute to rebuild)")
         return np.load(OURS_CACHE)
-    metric = MetricSpec(EventDate(1.0, "first_above"), fields=("CT",),
+    metric = Metric(EventDate(1.0, "first_above"), fields=("CT",),
                         conversion=CT_CONVERSION)
     ctx = RunContext(metric=metric, source=CHART_TABLES[SOURCE], region=region,
                      period=Period(PERIOD))

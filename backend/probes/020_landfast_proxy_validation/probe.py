@@ -35,12 +35,13 @@ PROJECT_ROOT = Path(__file__).parents[3]
 sys.path.insert(0, str(PROJECT_ROOT))
 load_dotenv(PROJECT_ROOT / ".env")
 
-from climatology.pipeline import RunContext, _compute_tiers, _fetch  # noqa: E402
-from climatology.processing.metrics import EventDate, MetricSpec, ThresholdCount  # noqa: E402
-from climatology.processing.regions import resolve_region  # noqa: E402
+from climatology.core.context import RunContext  # noqa: E402
+from climatology.pipeline import _compute_tiers, _fetch  # noqa: E402
+from climatology.core.metrics import EventDate, Metric, ThresholdCount  # noqa: E402
+from climatology.core.regions import resolve_region  # noqa: E402
 from climatology.services.sources import CHART_TABLES  # noqa: E402
 from climatology.services.calendar import Period  # noqa: E402
-from climatology.processing.conversion import (  # noqa: E402
+from climatology.core.conversion import (  # noqa: E402
     CT_CONVERSION,
     ConversionStrategy,
 )
@@ -70,12 +71,12 @@ def parse_args():
     return p.parse_args()
 
 
-def _ctx(metric: MetricSpec, args) -> RunContext:
+def _ctx(metric: Metric, args) -> RunContext:
     return RunContext(metric=metric, source=CHART_TABLES[args.source],
                       region=resolve_region(args.region), period=Period(args.period))
 
 
-def _raster(fetch, metric: MetricSpec, args) -> np.ndarray:
+def _raster(fetch, metric: Metric, args) -> np.ndarray:
     """Finest-tier raster for a metric computed on an already-fetched frame."""
     return _compute_tiers(fetch, _ctx(metric, args))[-1].values
 
@@ -111,9 +112,9 @@ def main():
     args = parse_args()
     logging.basicConfig(level=logging.INFO, format="%(message)s")
 
-    ct_metric = MetricSpec(ThresholdCount(1.0, operator.ge), fields=("CT",),
+    ct_metric = Metric(ThresholdCount(1.0, operator.ge), fields=("CT",),
                            conversion=CT_CONVERSION)
-    fa_metric = MetricSpec(ThresholdCount(0.5, operator.ge), fields=("FA",),
+    fa_metric = Metric(ThresholdCount(0.5, operator.ge), fields=("FA",),
                            conversion=LANDFAST_CONVERSION)
     fetch_ct = _fetch(_ctx(ct_metric, args))
     fetch_fa = _fetch(_ctx(fa_metric, args))
@@ -126,9 +127,9 @@ def main():
         "",
     ]
     for name, proxy_kernel, direct_kernel in COMPARISONS:
-        proxy = _raster(fetch_ct, MetricSpec(proxy_kernel, fields=("CT",),
+        proxy = _raster(fetch_ct, Metric(proxy_kernel, fields=("CT",),
                                              conversion=CT_CONVERSION), args)
-        direct = _raster(fetch_fa, MetricSpec(direct_kernel, fields=("FA",),
+        direct = _raster(fetch_fa, Metric(direct_kernel, fields=("FA",),
                                               conversion=LANDFAST_CONVERSION), args)
         lines += _diff_lines(name, proxy, direct) + [""]
 

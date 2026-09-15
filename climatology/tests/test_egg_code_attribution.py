@@ -10,7 +10,7 @@ import pandas as pd
 
 sys.path.insert(0, str(Path(__file__).parents[2]))
 
-from climatology.processing.conversion import (
+from climatology.core.conversion import (
     TRACE_CONCENTRATION as TR,
     egg_code_units,
     parse_concentration,
@@ -18,7 +18,7 @@ from climatology.processing.conversion import (
     parse_stage_thickness,
 )
 
-LOGGER = "climatology.processing.conversion"
+LOGGER = "climatology.core.conversion"
 
 _CODE_COLS = ("ct_code", "ca_code", "cb_code", "cc_code",
               "cn_code", "sa_code", "sb_code", "sc_code", "cd_code")

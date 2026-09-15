@@ -7,8 +7,6 @@ the prose stayed at ``>=``), so the invariant is pinned here rather than left to
 
 from __future__ import annotations
 
-from dataclasses import replace
-
 import pytest
 
 from climatology.plot.labels import (
@@ -19,22 +17,19 @@ from climatology.plot.labels import (
     reduction_note,
     threshold_label,
 )
-from climatology.processing.metrics import METRICS, ClimatologicalMetricSpec
-from climatology.processing.reduction.temporal import REDUCTIONS
-from climatology.services.sources import CHART_TABLES
+from climatology.core.metrics import Metric
+from climatology.core.reduction.temporal import REDUCTIONS
+from climatology.services.sources import ChartSource
 
-# Plot labels are a climatological concern; raw metrics carry no reduction / plot style.
-CLIMATOLOGICAL_METRICS = {slug: m for slug, m in METRICS.items()
-                          if isinstance(m, ClimatologicalMetricSpec)}
-SPECS = [(slug, red) for slug in CLIMATOLOGICAL_METRICS for red in REDUCTIONS]
+SPECS = [(slug, red) for slug in Metric.slugs() for red in REDUCTIONS]
 
 
 def _spec(slug: str, reduction: str):
-    return replace(METRICS[slug], reduction=REDUCTIONS[reduction])
+    return Metric.build(slug, reduction)
 
 
 def test_plot_styles_cover_every_metric():
-    assert set(PLOT_STYLES) == set(CLIMATOLOGICAL_METRICS)
+    assert set(PLOT_STYLES) == set(Metric.slugs())
 
 
 def test_reduction_notes_cover_every_reduction():
@@ -53,7 +48,7 @@ def test_titles_are_unique():
     assert len(titles) == len(set(titles))
 
 
-@pytest.mark.parametrize("slug", sorted(CLIMATOLOGICAL_METRICS))
+@pytest.mark.parametrize("slug", Metric.slugs())
 def test_title_states_the_value_type(slug: str):
     """Count metrics say what the number is ('duration' / 'lag'); date metrics are named for the event itself, so a literal 'date' would be redundant (title reformat, e8b5cce)."""
     title = PLOT_STYLES[slug].title.lower()
@@ -82,21 +77,21 @@ def test_every_reducer_gets_its_own_label(slug: str, reduction: str):
     assert len(labels) == len(REDUCTIONS)
 
 
-@pytest.mark.parametrize("slug", sorted(CLIMATOLOGICAL_METRICS))
+@pytest.mark.parametrize("slug", Metric.slugs())
 def test_stat_then_threshold_labels_name_the_series(slug: str):
     """Under a stat-first order the number is a crossing of the collapsed *series* — the label says which statistic collapsed it."""
     for reduction, stat in (("mediantt", "median"), ("meantt", "mean")):
         assert stat in metric_label(_spec(slug, reduction)).lower()
 
 
-@pytest.mark.parametrize("slug", sorted(CLIMATOLOGICAL_METRICS))
+@pytest.mark.parametrize("slug", Metric.slugs())
 def test_threshold_then_stat_labels_open_on_the_statistic(slug: str):
     """Under a threshold-first order the number *is* a statistic of per-season values, so the label leads with which one — and MPO's fixed-denominator mean is neither a median nor a plain mean."""
     for reduction, stat in (("ttmedian", "median"), ("ttmean", "mean"), ("ttmpo", "mpo mean")):
         assert metric_label(_spec(slug, reduction)).lower().startswith(stat)
 
 
-@pytest.mark.parametrize("slug", sorted(CLIMATOLOGICAL_METRICS))
+@pytest.mark.parametrize("slug", Metric.slugs())
 def test_label_agrees_with_the_kernel_threshold(slug: str):
     """A label must not claim a crossing the kernel does not compute (the drift that bit twice)."""
     spec = _spec(slug, "mediantt")
@@ -127,8 +122,8 @@ def test_ttmpo_note_states_the_fixed_denominator():
 
 def test_developed_ice_labels_name_both_criteria():
     """Developed ice is a joint CT + thickness state — every label must state both of the kernel's thresholds."""
-    for slug in (s for s in METRICS if s.startswith("developed_ice")):
-        ct_t, thk_t = METRICS[slug].kernel.threshold
+    for slug in (s for s in Metric.slugs() if s.startswith("developed_ice")):
+        ct_t, thk_t = Metric.build(slug).kernel.threshold
         for reduction in REDUCTIONS:
             label = metric_label(_spec(slug, reduction))
             assert f"{round(ct_t * 10)}/10" in label and f"{thk_t} m" in label, (
@@ -137,7 +132,7 @@ def test_developed_ice_labels_name_both_criteria():
 
 def test_landfast_labels_name_fa_not_ct():
     """Landfast metrics run on FA (form of ice), never on CT — the old labels said 'CT = 10/10'."""
-    for slug in (s for s in METRICS if s.startswith("landfast")):
+    for slug in (s for s in Metric.slugs() if s.startswith("landfast")):
         for reduction in REDUCTIONS:
             label = metric_label(_spec(slug, reduction))
             assert "FA" in label and "CT" not in label
@@ -147,4 +142,4 @@ def test_labels_do_not_depend_on_the_source():
     """TierProduct scales step counts to days, so a label is the same for every chart table."""
     for slug, reduction in SPECS:
         spec = _spec(slug, reduction)
-        assert len({metric_label(spec) for _ in CHART_TABLES}) == 1
+        assert len({metric_label(spec) for _ in ChartSource}) == 1

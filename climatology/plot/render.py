@@ -61,13 +61,13 @@ from climatology.plot.layout import (
     portrait_grid,
 )
 from climatology.plot.validate import assert_comparable, assert_one_reduction
-from climatology.processing.reduction.spatial import RasterLayer, area_weights
-from climatology.processing.reduction.temporal import MEDIAN_THEN_THRESHOLD
+from climatology.core.reduction.spatial import RasterLayer, area_weights
+from climatology.core.reduction.temporal import MEDIAN_THEN_THRESHOLD
 from climatology.utils._types import GRID_CRS, DataGrid, GridBounds
 
 if TYPE_CHECKING:
-    from climatology.processing.metrics import MetricSpec
-    from climatology.services.sources import ChartTable
+    from climatology.core.metrics import Metric
+    from climatology.services.sources import ChartSource
 
 
 # --- shared rendering primitives -------------------------------------------
@@ -94,7 +94,7 @@ def _draw_layers(ax, layers: list[tuple[DataGrid, GridBounds]],
 def plot_metric(
     layers: list[tuple[DataGrid, GridBounds]],
     *,
-    metric: MetricSpec,
+    metric: Metric,
     region_display: str,
     res_label: str,
     period_slug: str,
@@ -148,7 +148,7 @@ class MetricPanel:
 
     title: str
     period: str
-    source: ChartTable
+    source: ChartSource
     layers: list[RasterLayer]
     reduction: str = MEDIAN_THEN_THRESHOLD.slug   # order the archives were produced under
 
@@ -161,7 +161,7 @@ class MetricPanel:
 def plot_metric_panels(
     panels: list[MetricPanel],
     *,
-    metric: MetricSpec,
+    metric: Metric,
     region_display: str,
     res_label: str,
     ncols: int = PANEL_NCOLS,
@@ -262,7 +262,7 @@ def _delta_reductions(panels: list[DeltaPanel]) -> list[str]:
 def plot_delta_panels(
     panels: list[DeltaPanel],
     *,
-    metric: MetricSpec,
+    metric: Metric,
     region_display: str,
     res_label: str,
     source_label: str,
@@ -373,7 +373,7 @@ def plot_source_portrait(
     candidate: MetricPanel,
     delta: DeltaPanel,
     *,
-    metric: MetricSpec,
+    metric: Metric,
     region_display: str,
     res_label: str,
     subtitle: str,

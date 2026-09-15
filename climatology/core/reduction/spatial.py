@@ -20,7 +20,7 @@ import numpy as np
 from climatology.utils._types import DataGrid, GridBounds
 
 if TYPE_CHECKING:
-    from climatology.processing.regions import Tier
+    from climatology.core.regions import Tier
 
 # ``Tier.res_m`` is the *requested* resolution: build_grid rounds the cell count up
 # (ceil) and then stretches the cells to span the wet bbox exactly, so true cells are

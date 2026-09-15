@@ -49,8 +49,8 @@ from shapely import wkt as swkt
 from sqlalchemy import text
 
 from climatology.services.calendar import SEASON_ORIGIN, day_of_season
-from climatology.processing.metrics import FreezeUpDateMetric
-from climatology.processing.pipeline import (
+from climatology.core.metrics import FreezeUpDateMetric
+from climatology.core.pipeline import (
     GRID_CRS,
     build_grid,
     build_land_mask,
@@ -63,7 +63,7 @@ from climatology.processing.pipeline import (
 )
 from climatology.services.sources import CHART_TABLES
 from climatology.utils.polygons import LAND_MASK
-from climatology.processing.conversion import CONCENTRATION_FRACTION
+from climatology.core.conversion import CONCENTRATION_FRACTION
 
 load_dotenv(PROJECT_ROOT / ".env")
 
@@ -94,7 +94,7 @@ def compute_ours(transform, h, w, *, recompute: bool,
         print(f"Using cached UQAR raster: {cache} (pass --recompute to rebuild)")
         return np.load(cache)
     if median == "interp":
-        import climatology.processing.event_detection as ed
+        import climatology.core.event_detection as ed
         assert hasattr(ed, "_nanmedian_high"), \
             "monkeypatch seam gone: event_detection._nanmedian_high was renamed"
         ed._nanmedian_high = lambda a: np.nanmedian(a, axis=0)

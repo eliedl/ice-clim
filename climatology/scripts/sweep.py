@@ -31,10 +31,10 @@ load_dotenv(Path(__file__).parents[2] / ".env")
 sys.path.insert(0, str(Path(__file__).parents[2]))
 
 from climatology.pipeline import run
-from climatology.processing.metrics import METRICS
-from climatology.processing.reduction.temporal import MEDIAN_THEN_THRESHOLD, REDUCTIONS
-from climatology.processing.regions import REGIONS
-from climatology.services.export import WRITERS
+from climatology.core.metrics import Metric
+from climatology.core.reduction.temporal import MEDIAN_THEN_THRESHOLD, REDUCTIONS
+from climatology.core.regions import REGIONS
+from climatology.core.export import WRITERS
 
 logging.basicConfig(
     level=logging.INFO,
@@ -78,7 +78,7 @@ def _parse_args() -> argparse.Namespace:
                    metavar="YYYY-YYYY", dest="periods",
                    help="Restrict to these periods (space-separated and/or repeatable; "
                         "default: all).")
-    p.add_argument("--metric", action="extend", nargs="+", choices=sorted(METRICS),
+    p.add_argument("--metric", action="extend", nargs="+", choices=Metric.slugs(),
                    metavar="SLUG", dest="metrics",
                    help="Restrict to these metrics (space-separated and/or repeatable; "
                         "default: all).")
@@ -149,7 +149,7 @@ def _report(outcomes: list[RunOutcome]) -> None:
 
 if __name__ == "__main__":
     args = _parse_args()
-    plan = _plan(args.metrics or sorted(METRICS),
+    plan = _plan(args.metrics or Metric.slugs(),
                  args.periods or sorted(PERIOD_SOURCES),
                  args.reductions or [MEDIAN_THEN_THRESHOLD.slug])
 

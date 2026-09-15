@@ -77,18 +77,15 @@ from climatology.plot.render import (
     plot_source_portrait,
 )
 from climatology.plot.validate import assert_comparable
-from climatology.processing.metrics import METRICS
-from climatology.processing.reduction.spatial import RasterLayer
-from climatology.processing.reduction.temporal import MEDIAN_THEN_THRESHOLD, REDUCTIONS
-from climatology.processing.regions import REGIONS, RegionSpec
-from climatology.services.export import find_archived
-from climatology.services.sources import CHART_TABLES
+from climatology.core.metrics import Metric
+from climatology.core.reduction.spatial import RasterLayer
+from climatology.core.reduction.temporal import MEDIAN_THEN_THRESHOLD, REDUCTIONS
+from climatology.core.regions import REGIONS, Region
+from climatology.core.export import find_archived
+from climatology.services.sources import ChartSource
 
 if TYPE_CHECKING:
     from matplotlib.figure import Figure
-
-    from climatology.processing.metrics import MetricSpec
-    from climatology.services.sources import ChartTable
 
 log = logging.getLogger(__name__)
 
@@ -125,13 +122,13 @@ class PlotContext:
     hence their attribution in the Product object.
     """
 
-    region: RegionSpec
-    metric: MetricSpec
+    region: Region
+    metric: Metric
     products: tuple[Product, ...]
     type: str = RAW                 # raw | delta
     layout: str = MULTI             # single | multi | portrait
     distribution: bool = True
-    
+
 
     def describe(self, product: Product) -> tuple[str, str, str, str, str]:
         """One product's run identity, in the order the output path spells it."""
@@ -164,8 +161,8 @@ class ArchiveRef:
     manifest: dict
 
     @property
-    def source(self) -> ChartTable:
-        return CHART_TABLES[self.product.source]
+    def source(self) -> ChartSource:
+        return ChartSource[self.product.source]
 
     @property
     def tier(self) -> str:
@@ -312,8 +309,8 @@ def _resolve(region_slug: str, metric_slug: str, products: tuple[Product, ...], 
     the order-dependent labels are taken per panel, from that panel's own reduction.
     """
     ctx = PlotContext(
-        region=RegionSpec.build(region_slug),
-        metric=METRICS[metric_slug].with_reduction(REDUCTIONS[products[0].reduction]),
+        region=Region.build(region_slug),
+        metric=Metric.build(metric_slug, products[0].reduction),
         products=products, type=type, layout=layout, distribution=distribution,
     )
     log.info("Figure: %s %s/%s | Metric: %s | Region: %s | Branching on: %s | Products: %s",
@@ -397,7 +394,7 @@ def _fetch(ctx: PlotContext, refs: list[list[ArchiveRef]]) -> list[MetricPanel]:
                   for r in product_refs]
         product = product_refs[0].product
         panels.append(MetricPanel(title=_panel_title(ctx, product), period=product.period,
-                                  source=CHART_TABLES[product.source], layers=layers,
+                                  source=ChartSource[product.source], layers=layers,
                                   reduction=product.reduction))
     log.info("Loaded %d raster(s).", sum(len(p.layers) for p in panels))
     return panels
@@ -409,13 +406,13 @@ def _render(ctx: PlotContext, panels: list[MetricPanel]) -> PlotProduct:
     return PlotProduct(figure=renderer.draw(ctx, panels), tight=renderer.tight)
 
 
-def build(region_slug: str, metric_slug: str, products: tuple[Product, ...], *,
+def build_figure(region_slug: str, metric_slug: str, products: tuple[Product, ...], *,
           type: str = RAW, layout: str = MULTI,
           distribution: bool = True) -> PlotProduct:
     """Build one figure from the archive; the caller writes it via ``export.save_figure``.
 
     Returns the figure rather than a path so the write stays one concern in one place —
-    ``services.export`` owns where a product lands, this module owns what it looks like.
+    ``core.export`` owns where a product lands, this module owns what it looks like.
     """
     ctx = _resolve(region_slug, metric_slug, products,
                    type=type, layout=layout, distribution=distribution)
@@ -460,16 +457,16 @@ def _broadcast(periods: tuple[str, ...], sources: tuple[str, ...],
 
 def _parse_args() -> argparse.Namespace:
     p = argparse.ArgumentParser(description=__doc__.splitlines()[0])
-    p.add_argument("metric", choices=sorted(METRICS), metavar="METRIC")
+    p.add_argument("metric", choices=Metric.slugs(), metavar="METRIC")
     p.add_argument("--region", choices=REGIONS, required=True, metavar="REGION",
                    help="Pinned across the figure — panels must overlay on one grid.")
     p.add_argument("--period", type=_axis("period"), default=("2011-2020",),
                    metavar="YYYY-YYYY[:...]",
                    help="Climatology period(s) in winters; colon-separated to branch.")
-    p.add_argument("--source", type=_axis("source", tuple(CHART_TABLES)),
+    p.add_argument("--source", type=_axis("source", tuple(ChartSource.slugs())),
                    default=("sgrda",), metavar="SOURCE[:...]",
                    help=f"Chart table(s); colon-separated to branch. "
-                        f"Choices: {', '.join(sorted(CHART_TABLES))}.")
+                        f"Choices: {', '.join(ChartSource.slugs())}.")
     p.add_argument("--reduction", type=_axis("reduction", tuple(REDUCTIONS)),
                    default=(MEDIAN_THEN_THRESHOLD.slug,), metavar="REDUCTION[:...]",
                    help=f"Reduction order(s) whose archives to read; colon-separated to "
@@ -488,7 +485,7 @@ def _parse_args() -> argparse.Namespace:
 def main() -> None:
     from dotenv import load_dotenv
 
-    from climatology.services.export import save_figure
+    from climatology.core.export import save_figure
 
     # Only on the CLI path: MAPBOX_TOKEN reaches `plot.basemap` through the environment, and
     # importing this module (as `pipeline` does) must not have the side effect of setting it.
@@ -499,7 +496,7 @@ def main() -> None:
                         format="%(asctime)s %(levelname)s %(message)s")
     args = _parse_args()
     products = _broadcast(args.period, args.source, args.reduction)
-    product = build(args.region, args.metric, products, type=args.type,
+    product = build_figure(args.region, args.metric, products, type=args.type,
                     layout=args.layout, distribution=args.distribution)
     save_figure(product.figure, args.out, tight=product.tight)
 

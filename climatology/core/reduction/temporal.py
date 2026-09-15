@@ -8,9 +8,9 @@ from dataclasses import dataclass
 
 import numpy as np
 
-from climatology.processing.conversion import value_columns
-from climatology.processing.rasterize import burn_value_stack
-from climatology.processing.regions import Tier
+from climatology.core.conversion import value_columns
+from climatology.core.rasterize import burn_value_stack
+from climatology.core.regions import Tier
 from climatology.services.calendar import day_of_season
 from climatology.utils._types import (
     BoolVector, ConvertedPolygons, DataGrid, DateConvertedPolygons,

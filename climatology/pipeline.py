@@ -3,109 +3,22 @@
 from __future__ import annotations
 
 import logging
-from dataclasses import dataclass
-from functools import singledispatch
 
 import numpy as np
 
-from climatology.processing.metrics import (
-    METRICS,
-    ClimatologicalMetricSpec,
-    MetricSpec,
-    RawMetricSpec,
-)
-from climatology.processing.reduction.temporal import MEDIAN_THEN_THRESHOLD, REDUCTIONS
-from climatology.processing.regions import RegionSpec, Tier
-from climatology.services.sources import CHART_TABLES, ChartTable
+from climatology.core.context import FetchResult, Result, RunContext
+from climatology.core.metrics import Metric
+from climatology.core.regions import Tier
 from climatology.services.db import load_polygons
-from climatology.services.calendar import Period, attach_season_calendar
-from climatology.processing.conversion import ConversionStrategy
-from climatology.utils._types import ConvertedPolygons, DataGrid, RawPolygons
-from climatology.utils.polygons import LAND_MASK
-from climatology.services.export import (
-    WRITERS,
-    VarMeta,
-    Writer,
-    WriteJob,
+from climatology.utils._types import ConvertedPolygons, DataGrid
+from climatology.core.export import (
     archive_product,
-    default_outputs,
     product_path,
     save_figure,
 )
+from climatology.plot.build import Product, build_figure
 
 log = logging.getLogger(__name__)
-
-
-@dataclass(frozen=True)
-class RunContext:
-    """Resolved, immutable identity of one climatology run."""
-
-    region: RegionSpec
-    metric: MetricSpec
-    period: Period
-    source: ChartTable
-
-    def describe(self) -> tuple[str, str, str, str, str]:
-        """The run's identifying slugs, in the order the output path spells them."""
-        return (self.region.slug, self.metric.slug, self.period.slug,
-                self.source.slug, self.metric.reduction.slug)
-
-
-@dataclass(frozen=True)
-class FetchResult:
-    """The chart-polygon rows fetched once for a run (the fetch-stage output)."""
-
-    df: RawPolygons
-
-    @property
-    def n_rows(self) -> int:
-        return len(self.df)
-
-    @property
-    def is_empty(self) -> bool:
-        return self.df.empty
-
-    def prepare(self, conversion: ConversionStrategy) -> ConvertedPolygons:
-        """Fetched rows with the season calendar attached and the metric's value column computed (tier-agnostic, once per run)."""
-        return conversion.prepare(attach_season_calendar(self.df))
-
-
-@dataclass(frozen=True)
-class TierProduct:
-    """One tier's computed result: the metric output raster + the tier it's for."""
-
-    tier: Tier
-    values: DataGrid
-
-    @classmethod
-    def build(cls, tier: Tier, values: DataGrid, ctx: RunContext) -> "TierProduct":
-        """The tier's raster in its final unit: step counts scaled from charts to days.
-
-        A step-count kernel ticks once per chart, so a weekly source counts weeks and a
-        daily source counts days. Scaling here — at the product boundary, before archive,
-        GeoTIFF and plot — means every consumer sees days and durations from different
-        sources are directly comparable.
-        """
-        if ctx.metric.counts_steps:
-            values = values * ctx.source.step_days
-        return cls(tier=tier, values=values)
-
-
-# --- product naming + metadata helpers -------------------------------------
-
-def _build_manifest(ctx: RunContext, tier: Tier, *, n_rows: int) -> dict:
-    """Self-describing run manifest persisted alongside each tier product."""
-    clim_start, clim_end = ctx.period.window
-    grid = tier.grid
-    return {
-        "metric": ctx.metric.slug, "region": ctx.region.slug, "source": ctx.source.slug,
-        "reduction": ctx.metric.reduction.slug,
-        "period": ctx.period.slug, "climatology_start": clim_start,
-        "climatology_end": clim_end, "tier": tier.level, "grid_res_m": tier.res_m,
-        "bounds": [float(b) for b in grid.bounds],
-        "grid_shape": [grid.height, grid.width], "land_mask": str(LAND_MASK),
-        "n_rows": n_rows,
-    }
 
 
 # --- run stages ------------------------------------------------------------
@@ -114,10 +27,7 @@ def _resolve(metric: str, region: str, source: str,
              period: str, reduction: str) -> RunContext:
     """Resolve slugs to metric/source/region/period objects (the run's identity)."""
     
-    ctx = RunContext(METRICS[metric].with_reduction(REDUCTIONS[reduction]),
-                     RegionSpec.build(region), 
-                     Period(period),
-                     CHART_TABLES[source])
+    ctx = RunContext.build(region, metric, period, source, reduction)
     
     log.info("Region: %s (slug=%s) | Metric: %s | Reduction: %s | Source: %s | Winters: %s | %d tier(s)",
              ctx.region.display, ctx.region.slug, ctx.metric.slug, ctx.metric.reduction_slug,
@@ -126,50 +36,31 @@ def _resolve(metric: str, region: str, source: str,
 
 
 def _fetch(ctx: RunContext) -> FetchResult:
-    """Pull chart polygons once over tiers[0]'s wet domain (covers every tier)."""
-    bbox_wkt = ctx.region.tiers[0].fetch_wkt
-    clim_start, clim_end = ctx.period.window
-    sql = ctx.metric.sql(table=ctx.source.table, bbox_wkt=bbox_wkt,
-                         climatology_start_date=clim_start, climatology_end_date=clim_end)
+    """Pull chart polygons once over tiers[0]'s (coarse or full) wet domain (covers every tier)."""
+    bbox = ctx.region.tiers[0].fetch_wkt
+    
+    sql = ctx.metric.sql(table=ctx.source.table, bbox=bbox, period=ctx.period.window)
     fetch = FetchResult(load_polygons(sql))
-    log.info("Fetched %s rows.", f"{fetch.n_rows:,}")
-    if fetch.is_empty:
-        raise ValueError("No rows returned — check metric SQL, region bounds, "
+    log.info("Fetched %s polygons.", f"{len(fetch.df):,}")
+    if fetch.df.empty:
+        raise ValueError("No polygons returned — check metric SQL, region bounds, "
                          "climatology time window.")
     return fetch
 
 
-def _compute_raster(metric: MetricSpec, df: ConvertedPolygons, tier: Tier) -> DataGrid:
+def _compute_raster(metric: Metric, df: ConvertedPolygons, tier: Tier) -> DataGrid:
     """Run a metric's kernel on prepared rows and mask it to the tier's wet domain."""
     values = metric.compute(df, tier)
-    values[~tier.wet_mask] = np.nan
-    grid = tier.grid
-    log.info("  Tier '%s' cells with data: %s / %s", tier.level,
-             f"{int((~np.isnan(values)).sum()):,}", f"{grid.height * grid.width:,}")
+    values[~tier.wet_mask] = np.nan # supprimer ?
+    log.info(f"Raster computed - tier {tier}")
     return values
 
 
-def _compute_tiers(fetch: FetchResult, ctx: RunContext) -> list[TierProduct]:
+def _compute_tiers(fetch: FetchResult, ctx: RunContext) -> list[Result]:
     """Compute one product per region tier."""
     df = fetch.prepare(ctx.metric.conversion)
-    return [TierProduct.build(tier, _compute_raster(ctx.metric, df, tier), ctx)
+    return [Result.build(_compute_raster(ctx.metric, df, tier), ctx, tier)
             for tier in ctx.region.tiers]
-
-
-def _archive(products: list[TierProduct], ctx: RunContext, manifests: dict) -> None:
-    """Persist each tier's raster + manifest — always on, independent of the requested formats."""
-    for product in products:
-        archive_product(product.values, ctx.describe(), manifests[product.tier.level])
-
-
-def _emit(writer: Writer, products: list[TierProduct], ctx: RunContext,
-          meta: VarMeta, manifests: dict) -> None:
-    """Run one writer over the products at its declared granularity (per-tier or composite)."""
-    groups = [products] if writer.composite else [[p] for p in products]
-    for group in groups:
-        path = product_path(ctx.describe(), ext=writer.ext)
-        writer.serialize(WriteJob(path=path, products=group, ctx=ctx, meta=meta,
-                                  manifest=manifests[group[0].tier.level]))
 
 
 def _plot(ctx: RunContext) -> None:
@@ -179,66 +70,32 @@ def _plot(ctx: RunContext) -> None:
     path, so a figure is reproducible from the archive alone and the run's PNG is the same
     artefact a later CLI invocation would produce.
     """
-    from climatology.plot.build import Product, build
-
-    product = build(ctx.region.slug, ctx.metric.slug,
-                    (Product(period=ctx.period.slug, source=ctx.source.slug,
-                             reduction=ctx.metric.reduction.slug),),
+    
+    region, metric, period, source, reduction = ctx.describe()
+    product = build_figure(region, metric,
+                    (Product(period=period, source=source,
+                             reduction=reduction),),
                     type="raw", layout="single", distribution=False)
+    
     path = product_path(ctx.describe(), ext="png")
     save_figure(product.figure, path, tight=product.tight)
 
 
-def _export(products: list[TierProduct], ctx: RunContext, fetch: FetchResult,
-            *, outputs: list[str], plot: bool) -> None:
-    """Archive every tier (always), run each requested writer, then draw from the archive."""
-    manifests = {p.tier.level: _build_manifest(ctx, p.tier, n_rows=fetch.n_rows)
-                 for p in products}
-    _archive(products, ctx, manifests)
-    meta = VarMeta.of(ctx)
-    for name in outputs:
-        _emit(WRITERS[name], products, ctx, meta, manifests)
-    if plot:
-        _plot(ctx)
-
-
-@singledispatch
-def _check_outputs(metric: MetricSpec, outputs: list[str]) -> None:
-    """Resolve-time guard that a metric's requested output formats are admissible (climatological: any registered writer, already constrained by the CLI)."""
-
-
-@_check_outputs.register
-def _(metric: RawMetricSpec, outputs: list[str]) -> None:
-    bad = [o for o in outputs if o != "netcdf"]
-    if bad:
-        raise ValueError(f"Raw metric '{metric.slug}' emits netCDF only; drop {bad} "
-                         "(the raw hypercube has no PNG/GeoTIFF form).")
-
-
-@singledispatch
-def _produce(metric: MetricSpec, fetch: FetchResult, ctx: RunContext,
-             outputs: list[str], plot: bool) -> None:
-    """Compute and emit a run's products — the one dispatch seam between the metric variants."""
-    raise TypeError(f"No producer for metric spec {type(metric).__name__}")
-
-
-@_produce.register
-def _(metric: ClimatologicalMetricSpec, fetch: FetchResult, ctx: RunContext,
-      outputs: list[str], plot: bool) -> None:
-    _export(_compute_tiers(fetch, ctx), ctx, fetch, outputs=outputs, plot=plot)
-
-
 def run(metric: str, region: str, source: str, period: str,
-        reduction: str, outputs: list[str] | None, plot: bool) -> None:
+        reduction: str, plot: bool) -> None:
     """Produce the products for one (metric, region, source, period, reduction order).
 
-    ``outputs`` names the extra formats to write (see ``services.export.WRITERS``);
+    ``outputs`` names the extra formats to write (see ``core.export.WRITERS``);
     when None it defaults to the metric spec's ``default_outputs``. The ``.npz`` archive
     is always written regardless. ``plot`` draws the run's figure from that archive
     afterwards, via ``plot.build``. The producer is dispatched on the metric spec's variant.
     """
     context = _resolve(metric, region, source, period, reduction)
-    resolved = list(outputs) if outputs else list(default_outputs(context.metric))
-    _check_outputs(context.metric, resolved)
     fetch = _fetch(context)
-    _produce(context.metric, fetch, context, resolved, plot)
+    results = _compute_tiers(fetch, context)
+
+    for r in results:
+        archive_product(r, context)
+
+    if plot:
+        _plot(context)

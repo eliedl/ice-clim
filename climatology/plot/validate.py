@@ -15,11 +15,11 @@ from __future__ import annotations
 from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
-    from climatology.processing.metrics import MetricSpec
+    from climatology.core.metrics import Metric
     from climatology.plot.render import MetricPanel
 
 
-def assert_comparable(panels: list[MetricPanel], metric: MetricSpec) -> None:
+def assert_comparable(panels: list[MetricPanel], metric: Metric) -> None:
     """Reject a shared colour scale over mixed observation units.
 
     Step-count metrics only land on a common unit because ``TierProduct`` scales them to

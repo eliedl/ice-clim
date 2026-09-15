@@ -30,17 +30,16 @@ Run:
 from __future__ import annotations
 
 import argparse
-from dataclasses import replace
 from datetime import datetime, timedelta
 from pathlib import Path
 
 import numpy as np
 
 from climatology.plot.labels import threshold_label
-from climatology.processing.metrics import METRICS
-from climatology.processing.reduction.spatial import area_weights
-from climatology.processing.reduction.temporal import MEDIAN_THEN_THRESHOLD, REDUCTIONS
-from climatology.processing.regions import resolve_region
+from climatology.core.metrics import Metric
+from climatology.core.reduction.spatial import area_weights
+from climatology.core.reduction.temporal import MEDIAN_THEN_THRESHOLD
+from climatology.core.regions import resolve_region
 from climatology.plot.render import plot_metric_panels
 from climatology.scripts.metric_per_era_composite import _load_panel
 from climatology.services.sources import PERIOD_SOURCES
@@ -57,7 +56,7 @@ KM2 = 1e6
 
 def _spec(metric: str):
     """The metric resolved against the reduction these archives were produced under."""
-    return replace(METRICS[metric], reduction=REDUCTIONS[MEDIAN_THEN_THRESHOLD.slug])
+    return Metric.build(metric, MEDIAN_THEN_THRESHOLD.slug)
 
 
 def _scorecard(region: str, metric: str, panels: list) -> list[str]:
@@ -110,7 +109,7 @@ def _render(region: str, metric: str, stamp: str) -> tuple[Path, list[str]]:
 def _parse_args() -> argparse.Namespace:
     p = argparse.ArgumentParser(description=__doc__.splitlines()[0])
     p.add_argument("--region", default=REGION)
-    p.add_argument("--metric", action="append", choices=sorted(METRICS), dest="metrics",
+    p.add_argument("--metric", action="append", choices=Metric.slugs(), dest="metrics",
                    metavar="SLUG", help="Repeatable; default: one date + one count metric.")
     return p.parse_args()
 

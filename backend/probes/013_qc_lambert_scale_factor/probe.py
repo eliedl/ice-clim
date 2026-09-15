@@ -47,7 +47,7 @@ PROJECT_ROOT = Path(__file__).parents[3]
 sys.path.insert(0, str(PROJECT_ROOT))
 
 from climatology.plot.basemap import LAND_DISPLAY_PATH  # noqa: E402
-from climatology.processing.regions import REGION_SLUGS, resolve_region  # noqa: E402
+from climatology.core.regions import REGION_SLUGS, resolve_region  # noqa: E402
 
 OUTPUT_DIR = Path(__file__).parent / "output"
 

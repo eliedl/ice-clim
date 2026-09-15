@@ -7,7 +7,7 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).parents[2]))
 
-from climatology.processing.rasterize import build_grid
+from climatology.core.rasterize import build_grid
 
 
 def test_build_grid_cell_count_math():
@@ -51,26 +51,26 @@ def test_minganie_tiers():
     if not _regions_inputs_present():
         print("    (skip: input layers absent)")
         return
-    from climatology.processing.regions import RegionSpec
-    _assert_adaptive(RegionSpec.build("minganie"), "Minganie")
+    from climatology.core.regions import Region
+    _assert_adaptive(Region.build("minganie"), "Minganie")
 
 
 def test_manicouagan_tiers():
     if not _regions_inputs_present():
         print("    (skip: input layers absent)")
         return
-    from climatology.processing.regions import REGIONS, RegionSpec
+    from climatology.core.regions import REGIONS, Region
     assert "manicouagan" in REGIONS, "manicouagan must be CLI-selectable"
-    _assert_adaptive(RegionSpec.build("manicouagan"), "Manicouagan")
+    _assert_adaptive(Region.build("manicouagan"), "Manicouagan")
 
 
 def test_sept_rivieres_tiers():
     if not _regions_inputs_present():
         print("    (skip: input layers absent)")
         return
-    from climatology.processing.regions import REGIONS, RegionSpec
+    from climatology.core.regions import REGIONS, Region
     assert "sept-rivieres" in REGIONS, "sept-rivieres must be CLI-selectable"
-    _assert_adaptive(RegionSpec.build("sept-rivieres"), "Sept-Rivières")
+    _assert_adaptive(Region.build("sept-rivieres"), "Sept-Rivières")
 
 
 if __name__ == "__main__":

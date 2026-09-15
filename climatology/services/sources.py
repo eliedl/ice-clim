@@ -13,34 +13,42 @@ sgrdr currently holds ec only).
 
 from __future__ import annotations
 
-from dataclasses import dataclass, replace
+from enum import Enum
+
+_SRID = 32198   # NAD83 / MTM zone 8 — the CRS both chart tables are stored in
 
 
-@dataclass(frozen=True)
-class ChartTable:
-    table: str
-    display_label: str        # plot footer source attribution
-    obs_unit: str             # unit of the season-duration count, after step_days scaling
-    step_days: int            # days one chart stands for; scales step counts to days
-    slug: str = ""
+class ChartSource(Enum):
+    """A CIS chart source, built from its slug: ``ChartSource["sgrda"]``.
 
+    A closed family — the two CIS chart types are known at write time — so the slug is
+    the member name rather than a key into a registry, and the enum is its own lookup.
+    Step-count kernels tick once per chart, so a weekly chart's count is in weeks and a
+    daily chart's in days; ``step_days`` converts both to days at the product boundary
+    (TierProduct), which is what makes durations comparable across sources.
+    """
 
-# Step-count kernels tick once per chart, so a weekly chart's count is in weeks and a daily
-# chart's in days. ``step_days`` converts both to days at the product boundary (TierProduct),
-# which is what makes durations comparable across sources.
-_TABLES: dict[str, ChartTable] = {
-    "sgrda": ChartTable(
-        table="sgrda_32198",
-        display_label="CIS SIGRID3 daily charts (SGRDA)",
-        obs_unit="days", step_days=1,
-    ),
-    "sgrdr": ChartTable(
-        table="sgrdr_32198",
-        display_label="CIS SIGRID3 weekly historical charts (SGRDR)",
-        obs_unit="days", step_days=7,
-    ),
-}
-CHART_TABLES: dict[str, ChartTable] = {slug: replace(ct, slug=slug)
-                                       for slug, ct in _TABLES.items()}
+    sgrda = ("CIS SIGRID3 daily charts (SGRDA)", 1)
+    sgrdr = ("CIS SIGRID3 weekly historical charts (SGRDR)", 7)
 
+    def __init__(self, display_label: str, step_days: int) -> None:
+        self.display_label = display_label   # plot footer source attribution
+        self.step_days = step_days           # days one chart stands for
 
+    @property
+    def slug(self) -> str:
+        return self.name
+
+    @property
+    def table(self) -> str:
+        return f"{self.name}_{_SRID}"
+
+    @property
+    def obs_unit(self) -> str:
+        """Unit of the season-duration count, after ``step_days`` scaling."""
+        return "days"
+
+    @classmethod
+    def slugs(cls) -> list[str]:
+        """The selectable source slugs, for CLI choices and help strings."""
+        return [s.name for s in cls]

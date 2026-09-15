@@ -6,7 +6,7 @@ reproduces is recomputed through the production pipeline on one shared
 RunContext spec (sept-iles / sgrdr / 1991-2020 / mtt) and diff-mapped, cell by
 cell, against its CIS counterpart on the tier grid.
 
-    ours : METRICS[<slug>] via RunContext -> _fetch -> _compute_tiers
+    ours : Metric.build(<slug>) via RunContext -> _fetch -> _compute_tiers
     CIS  : the product's MMDD week class -> the same Sep-1-anchored
            day-of-season ordinal (services.calendar.SEASON_ORIGIN)
     diff : ours - CIS (days; positive = ours later)
@@ -49,11 +49,12 @@ PROJECT_ROOT = Path(__file__).parents[3]
 sys.path.insert(0, str(PROJECT_ROOT))
 load_dotenv(PROJECT_ROOT / ".env")
 
-from climatology.pipeline import RunContext, _compute_tiers, _fetch  # noqa: E402
-from climatology.processing.metrics import METRICS  # noqa: E402
-from climatology.processing.rasterize import burn_values  # noqa: E402
+from climatology.core.context import RunContext  # noqa: E402
+from climatology.pipeline import _compute_tiers, _fetch  # noqa: E402
+from climatology.core.metrics import Metric  # noqa: E402
+from climatology.core.rasterize import burn_values  # noqa: E402
 from climatology.utils._types import GRID_CRS, Grid  # noqa: E402
-from climatology.processing.regions import resolve_region  # noqa: E402
+from climatology.core.regions import resolve_region  # noqa: E402
 from climatology.services.sources import CHART_TABLES  # noqa: E402
 from climatology.services.calendar import SEASON_ORIGIN, Period, day_of_season  # noqa: E402
 
@@ -105,7 +106,7 @@ def compute_ours(product: CisProduct, region, *, recompute: bool) -> np.ndarray:
     if cache.exists() and not recompute:
         print(f"  cached: {cache.name}")
         return np.load(cache)
-    ctx = RunContext(metric=METRICS[product.metric_slug],
+    ctx = RunContext(metric=Metric.build(product.metric_slug),
                      source=CHART_TABLES[SOURCE], region=region, period=Period(PERIOD))
     values = _compute_tiers(_fetch(ctx), ctx)[-1].values
     np.save(cache, values)

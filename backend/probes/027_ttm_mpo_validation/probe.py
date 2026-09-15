@@ -57,15 +57,15 @@ from rasterio.transform import from_bounds, rowcol
 
 load_dotenv(Path(__file__).parents[3] / ".env")
 
-from climatology.processing.conversion import CONCENTRATION_FRACTION
-from climatology.processing.metrics import METRICS
+from climatology.core.conversion import CONCENTRATION_FRACTION
+from climatology.core.metrics import Metric
 from climatology.utils._types import Grid
-from climatology.processing.reduction.temporal import (
+from climatology.core.reduction.temporal import (
     ThresholdDate,
     ThresholdDuration,
     _stream_day_stacks,
 )
-from climatology.processing.regions import Tier
+from climatology.core.regions import Tier
 from climatology.services.db import load_polygons
 from climatology.services.calendar import Period, attach_season_calendar
 
@@ -154,7 +154,7 @@ def fetch_prepared(tier: Tier, *, source: str = "sgrdr"):
     """
     if source == "gec_h":
         df = load_gec_h_polygons()
-        return METRICS["first_occurrence_date"].conversion.prepare(attach_season_calendar(df))
+        return Metric.build("first_occurrence_date").conversion.prepare(attach_season_calendar(df))
     start, end = Period(PERIOD).window
     bbox = tier.fetch_wkt
     sql = f"""
@@ -167,7 +167,7 @@ def fetch_prepared(tier: Tier, *, source: str = "sgrdr"):
         ORDER BY obs_date;
     """
     df = load_polygons(sql)
-    return METRICS["first_occurrence_date"].conversion.prepare(attach_season_calendar(df))
+    return Metric.build("first_occurrence_date").conversion.prepare(attach_season_calendar(df))
 
 
 # --- Phase B': MPO's own source — the GEC_H shapefiles, read straight from disk ---
@@ -504,7 +504,7 @@ def cell_series(lon: float, lat: float) -> pd.DataFrame:
           AND "T1" >= '{start}' AND "T1" < '{end}'
         ORDER BY obs_date;
     """
-    return METRICS["first_occurrence_date"].conversion.prepare(
+    return Metric.build("first_occurrence_date").conversion.prepare(
         attach_season_calendar(load_polygons(sql)))
 
 

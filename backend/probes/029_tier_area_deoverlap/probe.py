@@ -41,11 +41,11 @@ from pathlib import Path
 
 import numpy as np
 
-from climatology.processing.reduction.spatial import RasterLayer, _deposit, area_weights
-from climatology.processing.reduction.temporal import MEDIAN_THEN_THRESHOLD, REDUCTIONS
-from climatology.processing.regions import resolve_region
+from climatology.core.reduction.spatial import RasterLayer, _deposit, area_weights
+from climatology.core.reduction.temporal import MEDIAN_THEN_THRESHOLD, REDUCTIONS
+from climatology.core.regions import resolve_region
 from climatology.services.calendar import SEASON_ORIGIN
-from climatology.services.export import find_archived
+from climatology.core.export import find_archived
 
 OUTPUT_DIR_PROBE = Path(__file__).parent / "output"
 

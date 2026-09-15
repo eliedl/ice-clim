@@ -41,14 +41,14 @@ from scipy import ndimage
 load_dotenv(Path(__file__).parents[3] / ".env")
 
 from climatology.pipeline import _fetch, _resolve
-from climatology.processing.metrics import METRICS
-from climatology.processing.reduction.temporal import (
+from climatology.core.metrics import Metric
+from climatology.core.reduction.temporal import (
     MPO_MIN_SEASON_COVERAGE,
     _stream_day_stacks,
 )
-from climatology.processing.regions import Tier
+from climatology.core.regions import Tier
 from climatology.services.calendar import SEASON_ORIGIN, filter_admissible_days
-from climatology.services.export import find_archived
+from climatology.core.export import find_archived
 from climatology.tests.diff_map_regression_test import Product, _stats
 from climatology.utils._types import WetVector
 from climatology.utils.arithmetics import _nanmean, _nanmedian_high
@@ -278,7 +278,7 @@ def reducer_arithmetic(cube: np.ndarray, days: list[int], step_days: int) -> dic
     stacks (threshold-first) and on the statistic-compressed slices (stat-first), so a
     line of the report that disagrees with the product above it is a real discrepancy.
     """
-    kernel = METRICS[METRIC].kernel
+    kernel = Metric.build(METRIC).kernel
     stacks = [(d, cube[:, i, None, :]) for i, d in enumerate(days)]   # (n_seasons, 1, n_cells)
     compressed = lambda stat: (lambda: iter([(d, stat(s)) for d, s in stacks]))
     per_season = kernel.reduce(lambda: iter(stacks)) * step_days      # (n_seasons, n_cells)

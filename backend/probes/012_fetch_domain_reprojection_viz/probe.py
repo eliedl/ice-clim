@@ -51,8 +51,8 @@ sys.path.insert(0, str(PROJECT_ROOT))
 load_dotenv(PROJECT_ROOT / ".env")
 
 from climatology.services.db import get_engine  # noqa: E402
-from climatology.processing.rasterize import build_grid, fetch_domain_wkt  # noqa: E402
-from climatology.processing.regions import resolve_region  # noqa: E402
+from climatology.core.rasterize import build_grid, fetch_domain_wkt  # noqa: E402
+from climatology.core.regions import resolve_region  # noqa: E402
 
 OUTPUT_DIR = Path(__file__).parent / "output"
 

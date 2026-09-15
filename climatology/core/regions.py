@@ -1,4 +1,4 @@
-"""Region definitions: each slug resolves through the ``REGIONS`` table to a ``RegionSpec`` of ``Tier``s, each deriving a wet analysis domain (``domain − landmask``) for its fetch and mask; the grid spans the wet domain (adaptive tiers) or the full bbox (full tier, for grid comparability)."""
+"""Region definitions: each slug resolves through the ``REGIONS`` table to a ``Region`` of ``Tier``s, each deriving a wet analysis domain (``domain − landmask``) for its fetch and mask; the grid spans the wet domain (adaptive tiers) or the full bbox (full tier, for grid comparability)."""
 
 from __future__ import annotations
 
@@ -10,11 +10,9 @@ import numpy as np
 import shapely
 from shapely.geometry.base import BaseGeometry
 
-from climatology.utils.polygons import (
-    _bbox_envelope, _coastline_buffer, _landmask, _mrc_polygon,
-)
-from climatology.processing.rasterize import build_grid, burn_mask
-from climatology.utils._types import GRID_RES, Grid
+from climatology.core.rasterize import build_grid, burn_mask
+from climatology.utils.polygons import _bbox_envelope, _coastline_buffer, _landmask, _mrc_polygon
+from climatology.utils._types import Grid
 
 log = logging.getLogger(__name__)
 
@@ -107,7 +105,7 @@ class Tier:
 
 
 @dataclass(frozen=True)
-class RegionSpec:
+class Region:
     """A resolved region: identity (slug/display) + ordered tiers (coarse -> fine)."""
 
     slug: str
@@ -115,7 +113,7 @@ class RegionSpec:
     tiers: list[Tier]
 
     @classmethod
-    def build(cls, slug: str) -> "RegionSpec":
+    def build(cls, slug: str) -> Region:
         """Assemble a region from its slug: one table lookup, one polygon read, one Tier per planned level."""
         defn = REGIONS[slug]   # unknown slug -> KeyError; argparse choices gate the CLI
         polygon = (_mrc_polygon(defn.mrc_fid) if defn.mrc_fid is not None

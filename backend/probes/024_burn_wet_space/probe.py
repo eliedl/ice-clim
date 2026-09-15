@@ -45,7 +45,7 @@ import numpy as np  # noqa: E402
 from rasterio.features import rasterize as rio_rasterize  # noqa: E402
 
 from climatology.pipeline import _resolve, _fetch  # noqa: E402
-from climatology.processing.rasterize import burn_values  # noqa: E402
+from climatology.core.rasterize import burn_values  # noqa: E402
 from climatology.utils.arithmetics import _nanmedian_high  # noqa: E402
 
 OUTPUT_DIR = Path(__file__).parent / "output"
