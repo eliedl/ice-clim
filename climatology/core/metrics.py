@@ -24,7 +24,6 @@ from climatology.core.conversion import (
     STAGE_OF_DEVELOPMENT_THICKNESS,
     ConversionStrategy,
 )
-from climatology.services.calendar import filter_admissible_days
 from climatology.utils._types import GRID_CRS, ConvertedPolygons, DataGrid
 
 
@@ -37,9 +36,9 @@ class Metric:
     registry itself.
     """
 
-    kernel: Kernel
-    fields: tuple[str, ...] = ("CT",)
     slug: str = ""
+    fields: tuple[str, ...] = ("CT",)
+    kernel: Kernel
     conversion: ConversionStrategy = CT_CONVERSION
     reduction: Reduction = MEDIAN_THEN_THRESHOLD
 
@@ -84,21 +83,18 @@ class Metric:
         return f"""
             SELECT
                 ST_AsBinary(ST_Intersection(geom, ST_GeomFromText('{bbox}', {GRID_CRS}))) AS geom_wkb,
-                "T1"::date AS obs_date,
+                "T1"::date AS "T1",
                 {code_cols}
             FROM {table}
             WHERE ST_Intersects(geom, ST_GeomFromText('{bbox}', {GRID_CRS}))
               AND "T1" >= '{period[0]}'
               AND "T1" <  '{period[1]}'
-            ORDER BY obs_date;
+            ORDER BY "T1";
         """
 
     def compute(self, df: ConvertedPolygons, tier: Tier) -> DataGrid:
-        """Fold the prepared rows into this metric's (H, W) grid via the reduction order.
-
-        The WMO admissible-day filter is applied here, where it protects the
-        cross-season median (DEC-025/027)."""
-        return self.reduction(self.kernel, filter_admissible_days(df), tier)
+        """Apply the kernel and the reduction on the prepared df for a given Tier."""
+        return self.reduction(self.kernel, df, tier)
 
 
 DEVELOPED_ICE_THRESHOLDS = (0.8, STAGE_OF_DEVELOPMENT_THICKNESS["85"]) # 80% of concentration and grey-white (blanchâtre) ice
@@ -136,7 +132,7 @@ _SPECS: dict[str, Metric] = {
                                       fields=_EGG_FIELDS, conversion=DEVELOPED_ICE_CONVERSION),
     "developed_ice_duration":       M(ThresholdDuration(DEVELOPED_ICE_THRESHOLDS, operator.ge),
                                       fields=_EGG_FIELDS, conversion=DEVELOPED_ICE_CONVERSION),
-    # lt + any: the De Morgan complement of duration's ge + all (see ThresholdDuration).
+    # lt + any: the complement of duration's ge + all (see ThresholdDuration).
     "developed_ice_exposure":       M(ThresholdDuration(DEVELOPED_ICE_THRESHOLDS, operator.lt,
                                                         combine=np.any),
                                       fields=_EGG_FIELDS, conversion=DEVELOPED_ICE_CONVERSION),

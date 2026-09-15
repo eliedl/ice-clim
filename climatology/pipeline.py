@@ -83,12 +83,8 @@ def _plot(ctx: RunContext) -> None:
 
 def run(metric: str, region: str, source: str, period: str,
         reduction: str, plot: bool) -> None:
-    """Produce the products for one (metric, region, source, period, reduction order).
-
-    ``outputs`` names the extra formats to write (see ``core.export.WRITERS``);
-    when None it defaults to the metric spec's ``default_outputs``. The ``.npz`` archive
-    is always written regardless. ``plot`` draws the run's figure from that archive
-    afterwards, via ``plot.build``. The producer is dispatched on the metric spec's variant.
+    """Compute climatologies for one (metric, region, source, period, reduction order). 
+        Archives a .npz and .json manifest and plots if wanted.
     """
     context = _resolve(metric, region, source, period, reduction)
     fetch = _fetch(context)

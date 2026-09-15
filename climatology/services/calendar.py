@@ -40,20 +40,16 @@ def winter_season(obs_date: pd.Series) -> pd.Series:
 
 
 def attach_season_calendar(df: RawPolygons) -> RawPolygons:
-    """Attach season / day_of_season columns, drop 02-29 (no ordinal), and order rows by day_of_season (temporal single source, DEC-027).
-
-    The WMO data-availability filter is *not* applied here — it protects the
-    cross-season median on the climatological path only (``filter_admissible_days``),
-    while the raw per-season product keeps every observed day.
-    """
+    """ Branches T1 into winter season and day of season (from sept 1st) columns"""
     df = df.copy()
-    df["month_day"] = pd.to_datetime(df["obs_date"]).dt.strftime("%m-%d")
-    df["season"] = winter_season(df["obs_date"])
-    # 02-29 has no ordinal (the winter reference year is non-leap — see the
-    # SEASON_ORIGIN invariant); drop it before mapping day_of_season.
+    df["month_day"] = pd.to_datetime(df["T1"]).dt.strftime("%m-%d")
+    df["season"] = winter_season(df["T1"])
+    
     df = df[df["month_day"] != "02-29"]
+
     df = df.assign(day_of_season=df["month_day"].map(day_of_season))
-    return df.sort_values("day_of_season").drop(columns=["month_day"])
+
+    return df
 
 
 def filter_admissible_days(df: RawPolygons, *, coverage: float = 0.8) -> RawPolygons:
