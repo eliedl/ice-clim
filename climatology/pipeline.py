@@ -41,17 +41,20 @@ def _fetch(ctx: RunContext) -> FetchResult:
     
     sql = ctx.metric.sql(table=ctx.source.table, bbox=bbox, period=ctx.period.window)
     fetch = FetchResult(load_polygons(sql))
-    log.info("Fetched %s polygons.", f"{len(fetch.df):,}")
+
     if fetch.df.empty:
-        raise ValueError("No polygons returned — check metric SQL, region bounds, "
-                         "climatology time window.")
+            raise ValueError("No polygons returned — check metric SQL, region bounds, "
+                             "climatology time window.")
+    else: 
+        log.info("Fetched %s polygons.", f"{len(fetch.df):,}")
+    
     return fetch
 
 
 def _compute_raster(metric: Metric, df: ConvertedPolygons, tier: Tier) -> DataGrid:
     """Run a metric's kernel on prepared rows and mask it to the tier's wet domain."""
     values = metric.compute(df, tier)
-    values[~tier.wet_mask] = np.nan # supprimer ?
+
     log.info(f"Raster computed - tier {tier.level}")
     return values
 
