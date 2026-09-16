@@ -80,7 +80,7 @@ from climatology.plot.validate import assert_comparable
 from climatology.core.metrics import Metric
 from climatology.core.reduction.spatial import RasterLayer
 from climatology.core.reduction.temporal import MEDIAN_THEN_THRESHOLD, REDUCTIONS
-from climatology.core.regions import REGIONS, Region
+from climatology.core.regions import Region
 from climatology.core.export import find_archived
 from climatology.services.sources import ChartSource
 
@@ -458,7 +458,7 @@ def _broadcast(periods: tuple[str, ...], sources: tuple[str, ...],
 def _parse_args() -> argparse.Namespace:
     p = argparse.ArgumentParser(description=__doc__.splitlines()[0])
     p.add_argument("metric", choices=Metric.slugs(), metavar="METRIC")
-    p.add_argument("--region", choices=REGIONS, required=True, metavar="REGION",
+    p.add_argument("--region", choices=Region.slugs(), required=True, metavar="REGION",
                    help="Pinned across the figure — panels must overlay on one grid.")
     p.add_argument("--period", type=_axis("period"), default=("2011-2020",),
                    metavar="YYYY-YYYY[:...]",

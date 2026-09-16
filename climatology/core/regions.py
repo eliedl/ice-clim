@@ -120,3 +120,8 @@ class Region:
                    else _bbox_envelope(slug))
         return cls(slug, defn.display,
                    [Tier(level, res_m, polygon) for level, res_m in defn.tiers])
+
+    @classmethod
+    def slugs(cls) -> list[str]:
+        """The selectable region slugs, for CLI choices and help strings (table order is geographic)."""
+        return list(REGIONS)

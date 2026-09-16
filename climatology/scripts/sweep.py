@@ -33,7 +33,7 @@ sys.path.insert(0, str(Path(__file__).parents[2]))
 from climatology.pipeline import run
 from climatology.core.metrics import Metric
 from climatology.core.reduction.temporal import MEDIAN_THEN_THRESHOLD, REDUCTIONS
-from climatology.core.regions import REGIONS
+from climatology.core.regions import Region
 from climatology.core.export import WRITERS
 
 logging.basicConfig(
@@ -72,7 +72,7 @@ class RunOutcome:
 
 def _parse_args() -> argparse.Namespace:
     p = argparse.ArgumentParser(description=__doc__.splitlines()[0])
-    p.add_argument("--region", choices=REGIONS, default=DEFAULT_REGION,
+    p.add_argument("--region", choices=Region.slugs(), default=DEFAULT_REGION,
                    help=f"Region slug (default: {DEFAULT_REGION}).")
     p.add_argument("--period", action="extend", nargs="+", choices=sorted(PERIOD_SOURCES),
                    metavar="YYYY-YYYY", dest="periods",
