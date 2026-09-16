@@ -1,14 +1,7 @@
 """Region-scale climatology — CLI entrypoint.
 
-Parses arguments and delegates to ``pipeline.run``; all orchestration lives in
-``climatology/pipeline.py``.
-
 Usage:
     python climatology/main.py <metric-slug> <region-slug> [--source sgrda|sgrdr] [--period YYYY-YYYY]
-
-Period semantics: winters. ``--period 1991-2020`` fetches charts in the
-half-open T1 window [1990-09-01, 2020-09-01) — the 30 winter seasons 1991..2020
-(each labelled by its winter year; see ``services.calendar.winter_season``).
 """
 
 import argparse
