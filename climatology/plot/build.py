@@ -6,7 +6,7 @@ stage before any raster is read, then the work.
     build() -> _resolve -> _validate -> _fetch -> _render -> PlotProduct
                PlotContext  manifests   rasters   dispatch
 
-``_validate`` reads each product's ``.json`` manifest and rejects both an incoherent plot
+``_validate`` reads each run's ``.json`` manifest and rejects both an incoherent plot
 configuration and an incoherent archive; ``_fetch`` then loads only the ``.npz`` files those
 manifests already located. Splitting it that way keeps the cheap check ahead of the megabytes,
 and leaves each stage one concern: locate-and-check, load, draw.
@@ -18,13 +18,13 @@ reproducible from the archive alone.
 Usage:
     python -m climatology.plot.build METRIC --region R --period P --source S --reduction X
 
-A product is identified by region, period, source and reduction. Region is pinned — panels
+A run is identified by region, metric, period, source and reduction. Region is pinned — panels
 must overlay on one grid — so the figure branches on the other three: pass ``a:b:c`` to any
 of ``--period``, ``--source``, ``--reduction`` and it becomes the axis of comparison, with the
-pinned coordinates broadcast across it. Run the sweep first; every product named must already
+pinned coordinates broadcast across it. Run the sweep first; every run named must already
 be archived.
 
-    # one product, one map: the same figure the pipeline emits per run
+    # one run, one map: the same figure the pipeline emits per run
     python -m climatology.plot.build freeze_up_date --region manicouagan \\
         --period 2011-2020 --source sgrda --layout single --no-distribution \\
         --out freeze_up_manicouagan_2011-2020.png
@@ -77,6 +77,7 @@ from climatology.plot.render import (
     plot_source_portrait,
 )
 from climatology.plot.validate import assert_comparable
+from climatology.core.context import RunContext
 from climatology.core.metrics import Metric
 from climatology.core.reduction.spatial import RasterLayer
 from climatology.core.reduction.temporal import MEDIAN_THEN_THRESHOLD, Reduction
@@ -102,45 +103,34 @@ GRID_MATCH_CELLS = 0.01   # bounds within 1/100 of a cell are the same grid
 # --- context ----------------------------------------------------------------
 
 @dataclass(frozen=True)
-class Product:
-    """One archived product's coordinates — a figure's unit of comparison."""
-
-    period: str
-    source: str
-    reduction: str = MEDIAN_THEN_THRESHOLD.slug
-
-    @property
-    def label(self) -> str:
-        return f"{self.period} {self.source.upper()} {self.reduction}"
-
-
-@dataclass(frozen=True)
 class PlotContext:
-    """Resolved, immutable identity of one figure: what to draw, and how to lay it out.
+    """How to lay out one figure, over the runs it draws.
 
-    region and metric are immutable but the reduction, period and source can differ, 
-    hence their attribution in the Product object.
+    A ``RunContext`` already *is* a figure's unit of comparison — it names the region, metric,
+    period, source and reduction one archived product was written under. So this holds the runs
+    and nothing but the presentation: region and metric are read off the first run, since region
+    is pinned across the figure and the metric is bound to that run's reduction.
     """
 
-    region: Region
-    metric: Metric
-    products: tuple[Product, ...]
+    runs: tuple[RunContext, ...]
     type: str = RAW                 # raw | delta
     layout: str = MULTI             # single | multi | portrait
     distribution: bool = True
 
+    @property
+    def region(self) -> Region:
+        return self.runs[0].region
 
-    def describe(self, product: Product) -> tuple[str, str, str, str, str]:
-        """One product's run identity, in the order the output path spells it."""
-        return (self.region.slug, self.metric.slug,
-                product.period, product.source, product.reduction)
+    @property
+    def metric(self) -> Metric:
+        return self.runs[0].metric
 
     @property
     def axes(self) -> tuple[str, ...]:
-        """The coordinates that actually differ across the products — what a panel title must
+        """The coordinates that actually differ across the runs — what a panel title must
         name, and by complement what the subtitle can state once for the whole figure."""
         return tuple(name for name in COORDS
-                     if len({getattr(p, name) for p in self.products}) > 1)
+                     if len({_coords(run)[name] for run in self.runs}) > 1)
 
     @property
     def key(self) -> tuple[str, str, bool]:
@@ -156,13 +146,13 @@ class ArchiveRef:
     read those two — can run on manifests, ahead of the load.
     """
 
-    product: Product
+    run: RunContext
     npz: Path
     manifest: dict
 
     @property
     def source(self) -> ChartSource:
-        return ChartSource[self.product.source]
+        return self.run.source
 
     @property
     def tier(self) -> str:
@@ -202,17 +192,28 @@ class PlotProduct:
 # titles are decided here and handed to the renderers as data. Varying coordinates title the
 # panels; pinned ones are stated once, in the subtitle.
 
-def _coord_text(product: Product) -> dict[str, str]:
+def _coords(run: RunContext) -> dict[str, str]:
+    """A run's branchable coordinates, as the slugs the CLI names them by."""
+    return {"period": run.period.slug, "source": run.source.slug,
+            "reduction": run.metric.reduction_slug}
+
+
+def _label(run: RunContext) -> str:
+    """One run named in a log line or an error message."""
+    text = _coords(run)
+    return f"{text['period']} {text['source'].upper()} {text['reduction']}"
+
+
+def _coord_text(run: RunContext) -> dict[str, str]:
     """Each coordinate as it should read, already cased — the source and reduction are slugs
     and stay lowercase, so the assembled title must never be re-cased as a whole."""
-    return {"period": f"Winters {product.period}", "source": product.source,
-            "reduction": product.reduction}
+    return {**_coords(run), "period": f"Winters {run.period.slug}"}
 
 
-def _panel_title(ctx: PlotContext, product: Product) -> str:
-    """Panel heading: the coordinates that distinguish this product from the figure's others."""
-    named = ctx.axes or ("period", "source")   # a lone product still says what it is
-    text = _coord_text(product)
+def _panel_title(ctx: PlotContext, run: RunContext) -> str:
+    """Panel heading: the coordinates that distinguish this run from the figure's others."""
+    named = ctx.axes or ("period", "source")   # a lone run still says what it is
+    text = _coord_text(run)
     # "·", not an em dash: a delta title joins two of these with "−", and the two dashes
     # are indistinguishable at title size.
     return " · ".join(text[name] for name in COORDS if name in named)
@@ -220,7 +221,7 @@ def _panel_title(ctx: PlotContext, product: Product) -> str:
 
 def _subtitle(ctx: PlotContext) -> str:
     """Figure subtitle: the coordinates every panel shares (the varying ones title the panels)."""
-    text = _coord_text(ctx.products[0])
+    text = _coord_text(ctx.runs[0])
     return " · ".join(text[name] for name in COORDS if name not in ctx.axes)
 
 
@@ -233,12 +234,12 @@ class Renderer:
     """How one configuration turns fetched panels into a figure."""
 
     draw: object                    # (ctx, panels) -> Figure
-    n_products: int | None          # required product count; None = any
+    n_runs: int | None              # required run count; None = any
     tight: bool = False
 
 
 def _draw_single(ctx: PlotContext, panels: list[MetricPanel]) -> Figure:
-    """One product, one map, no distribution — the per-run product the pipeline emits."""
+    """One run, one map, no distribution — the per-run product the pipeline emits."""
     panel = panels[0]
     return plot_metric([(l.values, l.bounds) for l in panel.layers],
                        metric=ctx.metric, region_display=ctx.region.display,
@@ -247,14 +248,14 @@ def _draw_single(ctx: PlotContext, panels: list[MetricPanel]) -> Figure:
 
 
 def _draw_multi(ctx: PlotContext, panels: list[MetricPanel]) -> Figure:
-    """Every product side by side on one colour scale and one extent."""
+    """Every run side by side on one colour scale and one extent."""
     return plot_metric_panels(panels, metric=ctx.metric,
                               region_display=ctx.region.display,
                               res_label=_res_label(panels[0]))
 
 
 def _draw_delta(ctx: PlotContext, panels: list[MetricPanel]) -> Figure:
-    """Consecutive products differenced pairwise, on one diverging zero-centred scale."""
+    """Consecutive runs differenced pairwise, on one diverging zero-centred scale."""
     deltas = [_delta_panel(base, cand)
               for base, cand in zip(panels, panels[1:])]
     sources = sorted({p.source.display_label for p in panels})
@@ -265,7 +266,7 @@ def _draw_delta(ctx: PlotContext, panels: list[MetricPanel]) -> Figure:
 
 
 def _draw_portrait(ctx: PlotContext, panels: list[MetricPanel]) -> Figure:
-    """Baseline and candidate over their change — two products, two scales, one figure."""
+    """Baseline and candidate over their change — two runs, two scales, one figure."""
     base, cand = panels
     return plot_source_portrait(base, cand, _delta_panel(base, cand),
                                 metric=ctx.metric,
@@ -276,11 +277,11 @@ def _draw_portrait(ctx: PlotContext, panels: list[MetricPanel]) -> Figure:
 
 
 RENDERERS: dict[tuple[str, str, bool], Renderer] = {
-    (RAW,   SINGLE,   False): Renderer(_draw_single,   n_products=1,    tight=True),
-    (RAW,   MULTI,    True):  Renderer(_draw_multi,    n_products=None),
-    (DELTA, SINGLE,   True):  Renderer(_draw_delta,    n_products=None),
-    (DELTA, PORTRAIT, False): Renderer(_draw_portrait, n_products=2),
-    (DELTA, PORTRAIT, True):  Renderer(_draw_portrait, n_products=2),
+    (RAW,   SINGLE,   False): Renderer(_draw_single,   n_runs=1,    tight=True),
+    (RAW,   MULTI,    True):  Renderer(_draw_multi,    n_runs=None),
+    (DELTA, SINGLE,   True):  Renderer(_draw_delta,    n_runs=None),
+    (DELTA, PORTRAIT, False): Renderer(_draw_portrait, n_runs=2),
+    (DELTA, PORTRAIT, True):  Renderer(_draw_portrait, n_runs=2),
 }
 
 
@@ -300,28 +301,25 @@ def _delta_panel(base: MetricPanel, cand: MetricPanel) -> DeltaPanel:
 
 # --- stages -----------------------------------------------------------------
 
-def _resolve(region_slug: str, metric_slug: str, products: tuple[Product, ...], *,
+def _resolve(runs: tuple[RunContext, ...], *,
              type: str, layout: str, distribution: bool) -> PlotContext:
-    """Resolve slugs to the figure's identity (mirrors ``pipeline._resolve``).
+    """Bind the runs to a layout, and announce the figure (mirrors ``pipeline._resolve``).
 
-    ``metric`` is bound to the first product's reduction. Everything the metric is asked for
-    downstream — its title, its tick formatter, whether it counts steps — is order-independent;
-    the order-dependent labels are taken per panel, from that panel's own reduction.
+    ``ctx.metric`` is the first run's — so it is bound to that run's reduction. Everything the
+    metric is asked for downstream — its title, its tick formatter, whether it counts steps —
+    is order-independent; the order-dependent labels are taken per panel, from that panel's
+    own reduction.
     """
-    ctx = PlotContext(
-        region=Region.build(region_slug),
-        metric=Metric.build(metric_slug, products[0].reduction),
-        products=products, type=type, layout=layout, distribution=distribution,
-    )
-    log.info("Figure: %s %s/%s | Metric: %s | Region: %s | Branching on: %s | Products: %s",
+    ctx = PlotContext(runs=runs, type=type, layout=layout, distribution=distribution)
+    log.info("Figure: %s %s/%s | Metric: %s | Region: %s | Branching on: %s | Runs: %s",
              ctx.type, ctx.layout, "dist" if ctx.distribution else "nodist",
              ctx.metric.slug, ctx.region.slug, ", ".join(ctx.axes) or "nothing",
-             ", ".join(p.label for p in ctx.products))
+             ", ".join(_label(run) for run in ctx.runs))
     return ctx
 
 
 def _assert_configured(ctx: PlotContext) -> None:
-    """The configuration half: the layout must exist, and the product count must suit it."""
+    """The configuration half: the layout must exist, and the run count must suit it."""
     renderer = RENDERERS.get(ctx.key)
     if renderer is None:
         available = ", ".join(f"{t}/{l}/{'dist' if d else 'nodist'}"
@@ -330,12 +328,12 @@ def _assert_configured(ctx: PlotContext) -> None:
             f"No renderer for type={ctx.type!r} layout={ctx.layout!r} "
             f"distribution={ctx.distribution} — available: {available}.")
 
-    labels = [p.label for p in ctx.products]
-    if renderer.n_products is not None and len(labels) != renderer.n_products:
-        raise ValueError(f"Layout {ctx.layout!r} takes exactly {renderer.n_products} "
-                         f"product(s); got {len(labels)}: {labels}.")
+    labels = [_label(run) for run in ctx.runs]
+    if renderer.n_runs is not None and len(labels) != renderer.n_runs:
+        raise ValueError(f"Layout {ctx.layout!r} takes exactly {renderer.n_runs} "
+                         f"run(s); got {len(labels)}: {labels}.")
     if ctx.type == DELTA and len(labels) < 2:
-        raise ValueError(f"A delta needs at least two products to difference; got {labels}.")
+        raise ValueError(f"A delta needs at least two runs to difference; got {labels}.")
 
 
 def _validate(ctx: PlotContext) -> list[list[ArchiveRef]]:
@@ -343,33 +341,33 @@ def _validate(ctx: PlotContext) -> list[list[ArchiveRef]]:
 
     Two halves, both answerable without loading anything: the *configuration*, from the
     context alone, and the *archive*, from the ``.json`` manifests ``find_archived`` already
-    reads to select a product. Returns the refs per product, coarse tier first, so ``_fetch``
+    reads to select a product. Returns the refs per run, coarse tier first, so ``_fetch``
     loads exactly what was approved here and nothing re-decides.
     """
     _assert_configured(ctx)
-    refs = [_locate(ctx, product) for product in ctx.products]
+    refs = [_locate(run) for run in ctx.runs]
 
-    flat = [ref for product_refs in refs for ref in product_refs]
+    flat = [ref for run_refs in refs for ref in run_refs]
     assert_comparable(flat, ctx.metric)      # step counts share one observation unit
     _assert_shared_grid(refs)                # a delta subtracts cell-wise; panels share an extent
     log.info("Validated %d archived product(s).", len(flat))
     return refs
 
 
-def _locate(ctx: PlotContext, product: Product) -> list[ArchiveRef]:
-    """The newest archived raster per tier for one product, coarse first, each with the manifest that selected it."""
-    return [ArchiveRef(product=product, npz=npz, manifest=manifest)
-            for npz, manifest in find_archived(ctx.describe(product))]
+def _locate(run: RunContext) -> list[ArchiveRef]:
+    """The newest archived raster per tier for one run, coarse first, each with the manifest that selected it."""
+    return [ArchiveRef(run=run, npz=npz, manifest=manifest)
+            for npz, manifest in find_archived(run)]
 
 
 def _assert_shared_grid(refs: list[list[ArchiveRef]]) -> None:
-    """Every product must describe the same grid per tier, or the panels do not overlay.
+    """Every run must describe the same grid per tier, or the panels do not overlay.
 
     The region+tier grid is source-, period- and reduction-invariant by construction, so a
     mismatch means the archives were written against different region definitions — which a
     delta would silently subtract cell-for-cell into nonsense. Corners closer than
     ``GRID_MATCH_CELLS`` of a cell are the same grid: bounds are recomputed per run and
-    round-tripped through JSON, so the same corner drifts in its last bits across products.
+    round-tripped through JSON, so the same corner drifts in its last bits across runs.
     """
     for tier_refs in zip(*refs):
         first = tier_refs[0]
@@ -379,23 +377,23 @@ def _assert_shared_grid(refs: list[list[ArchiveRef]]) -> None:
                     for r in tier_refs for a, b in zip(first.bounds, r.bounds))
         if len(shapes) > 1 or moved:
             raise ValueError(
-                f"Tier {first.tier!r} archives disagree on the grid across products "
-                f"({', '.join(r.product.label for r in tier_refs)}): shapes={sorted(shapes)}, "
+                f"Tier {first.tier!r} archives disagree on the grid across runs "
+                f"({', '.join(_label(r.run) for r in tier_refs)}): shapes={sorted(shapes)}, "
                 f"bounds={sorted({r.bounds for r in tier_refs})}. The region+tier grid must "
-                "be product-invariant.")
+                "be run-invariant.")
 
 
 def _fetch(ctx: PlotContext, refs: list[list[ArchiveRef]]) -> list[MetricPanel]:
-    """Load each approved ``.npz`` into its product's panel, coarse tier first."""
+    """Load each approved ``.npz`` into its run's panel, coarse tier first."""
     panels = []
-    for product_refs in refs:
+    for run_refs in refs:
         layers = [RasterLayer(values=np.load(r.npz)["values"],
                               bounds=r.bounds, res_m=r.res_m)
-                  for r in product_refs]
-        product = product_refs[0].product
-        panels.append(MetricPanel(title=_panel_title(ctx, product), period=product.period,
-                                  source=ChartSource[product.source], layers=layers,
-                                  reduction=product.reduction))
+                  for r in run_refs]
+        run = run_refs[0].run
+        panels.append(MetricPanel(title=_panel_title(ctx, run), period=run.period.slug,
+                                  source=run.source, layers=layers,
+                                  reduction=run.metric.reduction_slug))
     log.info("Loaded %d raster(s).", sum(len(p.layers) for p in panels))
     return panels
 
@@ -406,7 +404,7 @@ def _render(ctx: PlotContext, panels: list[MetricPanel]) -> PlotProduct:
     return PlotProduct(figure=renderer.draw(ctx, panels), tight=renderer.tight)
 
 
-def build_figure(region_slug: str, metric_slug: str, products: tuple[Product, ...], *,
+def build_figure(runs: tuple[RunContext, ...], *,
           type: str = RAW, layout: str = MULTI,
           distribution: bool = True) -> PlotProduct:
     """Build one figure from the archive; the caller writes it via ``export.save_figure``.
@@ -414,8 +412,7 @@ def build_figure(region_slug: str, metric_slug: str, products: tuple[Product, ..
     Returns the figure rather than a path so the write stays one concern in one place —
     ``core.export`` owns where a product lands, this module owns what it looks like.
     """
-    ctx = _resolve(region_slug, metric_slug, products,
-                   type=type, layout=layout, distribution=distribution)
+    ctx = _resolve(runs, type=type, layout=layout, distribution=distribution)
     refs = _validate(ctx)
     return _render(ctx, _fetch(ctx, refs))
 
@@ -423,7 +420,7 @@ def build_figure(region_slug: str, metric_slug: str, products: tuple[Product, ..
 # --- CLI --------------------------------------------------------------------
 
 def _axis(name: str, choices: tuple[str, ...] | None = None):
-    """An argparse type for one product coordinate as a branch: ``a`` or ``a:b:c``."""
+    """An argparse type for one run coordinate as a branch: ``a`` or ``a:b:c``."""
     def parse(spec: str) -> tuple[str, ...]:
         values = tuple(spec.split(":"))
         if choices is not None:
@@ -435,9 +432,9 @@ def _axis(name: str, choices: tuple[str, ...] | None = None):
     return parse
 
 
-def _broadcast(periods: tuple[str, ...], sources: tuple[str, ...],
-               reductions: tuple[str, ...]) -> tuple[Product, ...]:
-    """Zip the coordinate axes into products, broadcasting the pinned (length-1) ones.
+def _broadcast(region: str, metric: str, periods: tuple[str, ...], sources: tuple[str, ...],
+               reductions: tuple[str, ...]) -> tuple[RunContext, ...]:
+    """Zip the coordinate axes into runs, broadcasting the pinned (length-1) ones.
 
     One branch length is allowed beside 1: a coordinate is either held across the figure or
     carries one value per panel. ``--reduction a:b`` against ``--period x:y:z`` is a mistake,
@@ -451,8 +448,9 @@ def _broadcast(periods: tuple[str, ...], sources: tuple[str, ...],
             f"Coordinate axes must be length 1 or {n}; got "
             + ", ".join(f"--{k} with {len(v)}" for k, v in ragged.items())
             + ". Pin a coordinate to one value, or give it one value per panel.")
-    return tuple(Product(**{k: v[0] if len(v) == 1 else v[i] for k, v in axes.items()})
-                 for i in range(n))
+    picked = ({k: v[0] if len(v) == 1 else v[i] for k, v in axes.items()} for i in range(n))
+    return tuple(RunContext.build(region, metric, p["period"], p["source"], p["reduction"])
+                 for p in picked)
 
 
 def _parse_args() -> argparse.Namespace:
@@ -495,8 +493,8 @@ def main() -> None:
     logging.basicConfig(level=logging.INFO, datefmt="%H:%M:%S",
                         format="%(asctime)s %(levelname)s %(message)s")
     args = _parse_args()
-    products = _broadcast(args.period, args.source, args.reduction)
-    product = build_figure(args.region, args.metric, products, type=args.type,
+    runs = _broadcast(args.region, args.metric, args.period, args.source, args.reduction)
+    product = build_figure(runs, type=args.type,
                     layout=args.layout, distribution=args.distribution)
     save_figure(product.figure, args.out, tight=product.tight)
 

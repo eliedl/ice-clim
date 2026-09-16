@@ -16,7 +16,7 @@ from climatology.core.export import (
     product_path,
     save_figure,
 )
-from climatology.plot.build import Product, build_figure
+from climatology.plot.build import build_figure
 
 log = logging.getLogger(__name__)
 
@@ -52,7 +52,7 @@ def _compute_raster(metric: Metric, df: ConvertedPolygons, tier: Tier) -> DataGr
     """Run a metric's kernel on prepared rows and mask it to the tier's wet domain."""
     values = metric.compute(df, tier)
     values[~tier.wet_mask] = np.nan # supprimer ?
-    log.info(f"Raster computed - tier {tier}")
+    log.info(f"Raster computed - tier {tier.level}")
     return values
 
 
@@ -70,14 +70,10 @@ def _plot(ctx: RunContext) -> None:
     path, so a figure is reproducible from the archive alone and the run's PNG is the same
     artefact a later CLI invocation would produce.
     """
-    
-    region, metric, period, source, reduction = ctx.describe()
-    product = build_figure(region, metric,
-                    (Product(period=period, source=source,
-                             reduction=reduction),),
-                    type="raw", layout="single", distribution=False)
-    
-    path = product_path(ctx.describe(), ext="png")
+
+    product = build_figure((ctx,), type="raw", layout="single", distribution=False)
+
+    path = product_path(ctx, ext="png")
     save_figure(product.figure, path, tight=product.tight)
 
 
