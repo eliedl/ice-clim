@@ -10,10 +10,8 @@ from typing import TYPE_CHECKING
 
 from climatology.core.reduction.temporal import (
     MPO_MIN_SEASON_COVERAGE,
-    StatThenThreshold,
     ThresholdDate,
     ThresholdDateDelta,
-    ThresholdThenStat,
 )
 from climatology.services.calendar import SEASON_ORIGIN
 from climatology.utils._types import GRID_CRS
@@ -34,10 +32,11 @@ def _count_ticks(tick_values: list[float]) -> list[str]:
     return [f"{int(round(d))}" for d in tick_values]
 
 
-# The two reduction orders, as label-template keys. Which statistic did the collapsing
-# is a ``{stat}`` slot the reduction fills, so a new reducer costs no new label.
-STAT_TT = StatThenThreshold.order
-TT_STAT = ThresholdThenStat.order
+# The two reduction orders, as label-template keys: the shape of sentence an order needs.
+# Which statistic did the collapsing is a ``{stat}`` slot ``REDUCTION_STYLES`` fills, so a
+# new reducer costs no new label.
+STAT_TT = "stat_then_threshold"
+TT_STAT = "threshold_then_stat"
 
 
 @dataclass(frozen=True)
@@ -142,6 +141,38 @@ PLOT_STYLES: dict[str, PlotStyle] = {
 }
 
 
+_COVERAGE_CLAUSE = f"cells need ≥ {MPO_MIN_SEASON_COVERAGE:.0%} season coverage"
+
+
+@dataclass(frozen=True)
+class ReductionStyle:
+    """Presentation for one reduction order: the label template it reads, the name of its statistic, and its footer note."""
+
+    order: str   # which ``PlotStyle.label`` template applies
+    stat: str    # fills that template's {stat} / {Stat} slots
+    note: str    # method note for the provenance footer
+
+
+# Keyed by reduction slug: how an order *reads*, kept out of the reducer, which only
+# needs to know how it computes. ``Reduction.slugs()`` is the closed set this must cover.
+REDUCTION_STYLES: dict[str, ReductionStyle] = {
+    "mediantt": ReductionStyle(STAT_TT, "median",
+        "Method: median-then-threshold (cross-season median CT per day, then the crossing)"),
+    "meantt": ReductionStyle(STAT_TT, "mean",
+        "Method: mean-then-threshold (cross-season mean CT per day, then the crossing)"),
+    "ttmedian": ReductionStyle(TT_STAT, "median",
+        "Method: threshold-then-median (per-season crossing, then their cross-season "
+        f"median — a season without a crossing drops out; {_COVERAGE_CLAUSE})"),
+    "ttmean": ReductionStyle(TT_STAT, "mean",
+        "Method: threshold-then-mean (per-season crossing, then their cross-season "
+        f"mean — a season without a crossing drops out; {_COVERAGE_CLAUSE})"),
+    "ttmpo": ReductionStyle(TT_STAT, "MPO mean",
+        "Method: threshold-then-MPO-mean (per-season crossing, then the sum over the "
+        "seasons with a crossing divided by the full record length — a season without "
+        f"one counts as zero, i.e. Dec 31 for a date and 0 d for a count; {_COVERAGE_CLAUSE})"),
+}
+
+
 def metric_title(metric: Metric) -> str:
     """The metric's display name — the figure title, independent of reduction order."""
     return PLOT_STYLES[metric.slug].title
@@ -150,13 +181,13 @@ def metric_title(metric: Metric) -> str:
 def metric_label(metric: Metric) -> str:
     """The metric's colourbar label for the reduction order it was computed under, naming that order's statistic."""
     labels = PLOT_STYLES[metric.slug].label
-    reduction = metric.reduction
-    if reduction.order not in labels:
+    style = REDUCTION_STYLES[metric.reduction.slug]
+    if style.order not in labels:
         raise KeyError(f"No label for metric '{metric.slug}' under the "
-                       f"'{reduction.order}' order — PLOT_STYLES carries {sorted(labels)}.")
-    stat = reduction.stat_name
+                       f"'{style.order}' order — PLOT_STYLES carries {sorted(labels)}.")
+    stat = style.stat
     # `.capitalize()` would lowercase the rest and turn "MPO mean" into "Mpo mean".
-    return labels[reduction.order].format(stat=stat, Stat=stat[0].upper() + stat[1:])
+    return labels[style.order].format(stat=stat, Stat=stat[0].upper() + stat[1:])
 
 
 def panel_metric_label(metric: Metric, reduction_slug: str) -> str:
@@ -185,25 +216,9 @@ def _kernel_threshold(kernel, field: str) -> str:
     return f"{field} {op} {round(kernel.threshold[0] * 10)}/10"
 
 
-_COVERAGE_CLAUSE = f"cells need ≥ {MPO_MIN_SEASON_COVERAGE:.0%} season coverage"
-
-REDUCTION_NOTES: dict[str, str] = {
-    "mediantt": "Method: median-then-threshold (cross-season median CT per day, then the crossing)",
-    "meantt": "Method: mean-then-threshold (cross-season mean CT per day, then the crossing)",
-    "ttmedian": ("Method: threshold-then-median (per-season crossing, then their cross-season "
-                 f"median — a season without a crossing drops out; {_COVERAGE_CLAUSE})"),
-    "ttmean": ("Method: threshold-then-mean (per-season crossing, then their cross-season "
-               f"mean — a season without a crossing drops out; {_COVERAGE_CLAUSE})"),
-    "ttmpo": ("Method: threshold-then-MPO-mean (per-season crossing, then the sum over the "
-              "seasons with a crossing divided by the full record length — a season without "
-              "one counts as zero, i.e. Dec 31 for a date and 0 d for a count; "
-              f"{_COVERAGE_CLAUSE})"),
-}
-
-
 def reduction_notes(slugs: Iterable[str]) -> str:
     """Footer note naming every reduction order the figure draws, in order, deduped."""
-    return " | ".join(REDUCTION_NOTES[s] for s in dict.fromkeys(slugs))
+    return " | ".join(REDUCTION_STYLES[s].note for s in dict.fromkeys(slugs))
 
 
 def reduction_note(metric: Metric) -> str:

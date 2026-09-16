@@ -9,7 +9,6 @@ import numpy as np
 
 from climatology.core.reduction.temporal import (
     MEDIAN_THEN_THRESHOLD,
-    REDUCTIONS,
     Kernel,
     Reduction,
     ThresholdDate,
@@ -73,7 +72,7 @@ class Metric:
 
     def with_reduction(self, reduction: str) -> Metric:
         """This metric under a named reduction order (the CLI ``--reduction`` binding)."""
-        return replace(self, reduction=REDUCTIONS[reduction])
+        return replace(self, reduction=Reduction.build(reduction))
 
     def sql(self, *, table: str, bbox: str, period: tuple[str, str]) -> str:
         """Complete SQL for this metric's fields over every ice/water polygon, clipped to the fetch domain (pre-projected 32198 view), aliased ``<field>_code``."""

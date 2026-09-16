@@ -26,7 +26,7 @@ sys.path.insert(0, str(Path(__file__).parents[1]))
 
 from climatology.pipeline import run
 from climatology.core.metrics import Metric
-from climatology.core.reduction.temporal import REDUCTIONS
+from climatology.core.reduction.temporal import Reduction
 from climatology.core.regions import Region
 from climatology.services.sources import ChartSource
 
@@ -54,7 +54,7 @@ def _parse_args() -> argparse.Namespace:
     p.add_argument("--period", type=_parse_period, default="2011-2020",
                    metavar="YYYY-YYYY",
                    help="Climatology period in winters (default: 2011-2020).")
-    p.add_argument("--reduction", choices=sorted(REDUCTIONS), default="mediantt",
+    p.add_argument("--reduction", choices=Reduction.slugs(), default="mediantt",
                    help="Reduction order — {median,mean}tt collapses the seasons per day and "
                         "then folds the kernel (DEC-027); tt{median,mean,mpo} folds per season "
                         "and then collapses (DEC-049/053). Default: mediantt")

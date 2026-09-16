@@ -32,7 +32,7 @@ sys.path.insert(0, str(Path(__file__).parents[2]))
 
 from climatology.pipeline import run
 from climatology.core.metrics import Metric
-from climatology.core.reduction.temporal import MEDIAN_THEN_THRESHOLD, REDUCTIONS
+from climatology.core.reduction.temporal import MEDIAN_THEN_THRESHOLD, Reduction
 from climatology.core.regions import Region
 from climatology.core.export import WRITERS
 
@@ -82,13 +82,13 @@ def _parse_args() -> argparse.Namespace:
                    metavar="SLUG", dest="metrics",
                    help="Restrict to these metrics (space-separated and/or repeatable; "
                         "default: all).")
-    p.add_argument("--reduction", action="extend", nargs="+", choices=sorted(REDUCTIONS),
+    p.add_argument("--reduction", action="extend", nargs="+", choices=Reduction.slugs(),
                    metavar="SLUG", dest="reductions",
                    help="Reduction order(s) to sweep (space-separated and/or repeatable) — "
                         "{median,mean}tt collapses the seasons per day and then folds the "
                         "kernel (DEC-027); tt{median,mean,mpo} folds per season and then "
                         f"collapses (DEC-049/053). Default: {MEDIAN_THEN_THRESHOLD.slug} "
-                        f"alone. Choices: {', '.join(sorted(REDUCTIONS))}.")
+                        f"alone. Choices: {', '.join(Reduction.slugs())}.")
     p.add_argument("--output", nargs="+", choices=sorted(WRITERS), default=None,
                    metavar="FMT", dest="outputs",
                    help="Output format(s) to write, e.g. --output png netcdf. Default: the "

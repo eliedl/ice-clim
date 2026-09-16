@@ -79,7 +79,7 @@ from climatology.plot.render import (
 from climatology.plot.validate import assert_comparable
 from climatology.core.metrics import Metric
 from climatology.core.reduction.spatial import RasterLayer
-from climatology.core.reduction.temporal import MEDIAN_THEN_THRESHOLD, REDUCTIONS
+from climatology.core.reduction.temporal import MEDIAN_THEN_THRESHOLD, Reduction
 from climatology.core.regions import Region
 from climatology.core.export import find_archived
 from climatology.services.sources import ChartSource
@@ -467,10 +467,10 @@ def _parse_args() -> argparse.Namespace:
                    default=("sgrda",), metavar="SOURCE[:...]",
                    help=f"Chart table(s); colon-separated to branch. "
                         f"Choices: {', '.join(ChartSource.slugs())}.")
-    p.add_argument("--reduction", type=_axis("reduction", tuple(REDUCTIONS)),
+    p.add_argument("--reduction", type=_axis("reduction", tuple(Reduction.slugs())),
                    default=(MEDIAN_THEN_THRESHOLD.slug,), metavar="REDUCTION[:...]",
                    help=f"Reduction order(s) whose archives to read; colon-separated to "
-                        f"branch. Choices: {', '.join(sorted(REDUCTIONS))}.")
+                        f"branch. Choices: {', '.join(Reduction.slugs())}.")
     p.add_argument("--type", choices=(RAW, DELTA), default=RAW,
                    help="Absolute values, or the signed change between products.")
     p.add_argument("--layout", choices=(SINGLE, MULTI, PORTRAIT), default=MULTI,

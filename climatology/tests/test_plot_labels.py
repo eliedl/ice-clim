@@ -11,17 +11,17 @@ import pytest
 
 from climatology.plot.labels import (
     PLOT_STYLES,
-    REDUCTION_NOTES,
+    REDUCTION_STYLES,
     metric_label,
     metric_title,
     reduction_note,
     threshold_label,
 )
 from climatology.core.metrics import Metric
-from climatology.core.reduction.temporal import REDUCTIONS
+from climatology.core.reduction.temporal import Reduction
 from climatology.services.sources import ChartSource
 
-SPECS = [(slug, red) for slug in Metric.slugs() for red in REDUCTIONS]
+SPECS = [(slug, red) for slug in Metric.slugs() for red in Reduction.slugs()]
 
 
 def _spec(slug: str, reduction: str):
@@ -32,8 +32,8 @@ def test_plot_styles_cover_every_metric():
     assert set(PLOT_STYLES) == set(Metric.slugs())
 
 
-def test_reduction_notes_cover_every_reduction():
-    assert set(REDUCTION_NOTES) == set(REDUCTIONS)
+def test_reduction_styles_cover_every_reduction():
+    assert set(REDUCTION_STYLES) == set(Reduction.slugs())
 
 
 @pytest.mark.parametrize(("slug", "reduction"), SPECS)
@@ -73,8 +73,8 @@ def test_every_metric_has_a_label_per_reduction(slug: str, reduction: str):
 @pytest.mark.parametrize(("slug", "reduction"), SPECS)
 def test_every_reducer_gets_its_own_label(slug: str, reduction: str):
     """No two reducers share a label: they differ in order, in statistic, or in both."""
-    labels = {metric_label(_spec(slug, red)) for red in REDUCTIONS}
-    assert len(labels) == len(REDUCTIONS)
+    labels = {metric_label(_spec(slug, red)) for red in Reduction.slugs()}
+    assert len(labels) == len(Reduction.slugs())
 
 
 @pytest.mark.parametrize("slug", Metric.slugs())
@@ -124,7 +124,7 @@ def test_developed_ice_labels_name_both_criteria():
     """Developed ice is a joint CT + thickness state — every label must state both of the kernel's thresholds."""
     for slug in (s for s in Metric.slugs() if s.startswith("developed_ice")):
         ct_t, thk_t = Metric.build(slug).kernel.threshold
-        for reduction in REDUCTIONS:
+        for reduction in Reduction.slugs():
             label = metric_label(_spec(slug, reduction))
             assert f"{round(ct_t * 10)}/10" in label and f"{thk_t} m" in label, (
                 f"{slug}/{reduction}: label {label!r} must carry both criteria")
@@ -133,7 +133,7 @@ def test_developed_ice_labels_name_both_criteria():
 def test_landfast_labels_name_fa_not_ct():
     """Landfast metrics run on FA (form of ice), never on CT — the old labels said 'CT = 10/10'."""
     for slug in (s for s in Metric.slugs() if s.startswith("landfast")):
-        for reduction in REDUCTIONS:
+        for reduction in Reduction.slugs():
             label = metric_label(_spec(slug, reduction))
             assert "FA" in label and "CT" not in label
 
