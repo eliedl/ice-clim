@@ -91,7 +91,7 @@ def run(metric: str, region: str, source: str, period: str,
     results = _compute_tiers(fetch, context)
 
     for r in results:
-        archive_product(r, context)
+        archive_product(context, fetch, r)
 
     if plot:
         _plot(context)

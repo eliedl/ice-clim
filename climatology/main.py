@@ -4,7 +4,7 @@ Parses arguments and delegates to ``pipeline.run``; all orchestration lives in
 ``climatology/pipeline.py``.
 
 Usage:
-    python climatology/main.py <metric-slug> <region-slug> [--source sgrda|sgrdr] [--period YYYY-YYYY] [--geotiff]
+    python climatology/main.py <metric-slug> <region-slug> [--source sgrda|sgrdr] [--period YYYY-YYYY]
 
 Period semantics: winters. ``--period 1991-2020`` fetches charts in the
 half-open T1 window [1990-09-01, 2020-09-01) — the 30 winter seasons 1991..2020
@@ -54,7 +54,7 @@ def _parse_args() -> argparse.Namespace:
     p.add_argument("--period", type=_parse_period, default="2011-2020",
                    metavar="YYYY-YYYY",
                    help="Climatology period in winters (default: 2011-2020).")
-    p.add_argument("--reduction", choices=sorted(REDUCTIONS),
+    p.add_argument("--reduction", choices=sorted(REDUCTIONS), default="mediantt",
                    help="Reduction order — {median,mean}tt collapses the seasons per day and "
                         "then folds the kernel (DEC-027); tt{median,mean,mpo} folds per season "
                         "and then collapses (DEC-049/053). Default: mediantt")

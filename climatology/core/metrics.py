@@ -36,9 +36,9 @@ class Metric:
     registry itself.
     """
 
+    kernel: Kernel
     slug: str = ""
     fields: tuple[str, ...] = ("CT",)
-    kernel: Kernel
     conversion: ConversionStrategy = CT_CONVERSION
     reduction: Reduction = MEDIAN_THEN_THRESHOLD
 
