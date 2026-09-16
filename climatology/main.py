@@ -11,11 +11,8 @@ half-open T1 window [1990-09-01, 2020-09-01) — the 30 winter seasons 1991..202
 (each labelled by its winter year; see ``services.calendar.winter_season``).
 """
 
-from __future__ import annotations
-
 import argparse
 import logging
-import re
 import sys
 from pathlib import Path
 
@@ -25,10 +22,10 @@ load_dotenv(Path(__file__).parents[1] / ".env")
 sys.path.insert(0, str(Path(__file__).parents[1]))
 
 from climatology.pipeline import run
-from climatology.core.metrics import Metric
-from climatology.core.reduction.temporal import Reduction
 from climatology.core.regions import Region
+from climatology.core.metrics import Metric
 from climatology.services.sources import ChartSource
+from climatology.core.reduction.temporal import Reduction
 
 logging.basicConfig(
     level=logging.INFO,
@@ -37,35 +34,26 @@ logging.basicConfig(
 )
 
 
-def _parse_period(s: str) -> str:
-    if not re.fullmatch(r"(\d{4})-(\d{4})", s):
-        raise argparse.ArgumentTypeError(f"period must look like 1991-2020, got {s!r}")
-    return s
-
-
 def _parse_args() -> argparse.Namespace:
     p = argparse.ArgumentParser(description="Region-scale climatology by metric.")
     p.add_argument("metric", choices=Metric.slugs(),
                    help=f"Metric slug. Available: {', '.join(Metric.slugs())}.")
     p.add_argument("region", choices=Region.slugs(),
-                   help=f"Region slug. Available: {', '.join(Region.slugs())}.")
-    p.add_argument("--source", choices=ChartSource.slugs(), default="sgrda",
+                   help=f"Region slug - Available: {', '.join(Region.slugs())} - default : sgrdr")
+    p.add_argument("--source", default="sgrdr", choices=ChartSource.slugs(), 
                    help="Chart table (default: sgrda).")
-    p.add_argument("--period", type=_parse_period, default="2011-2020",
-                   metavar="YYYY-YYYY",
-                   help="Climatology period in winters (default: 2011-2020).")
-    p.add_argument("--reduction", choices=Reduction.slugs(), default="mediantt",
-                   help="Reduction order — {median,mean}tt collapses the seasons per day and "
-                        "then folds the kernel (DEC-027); tt{median,mean,mpo} folds per season "
-                        "and then collapses (DEC-049/053). Default: mediantt")
-    p.add_argument("--plot", action="store_false", dest="plot", default=True,
-                   help="Skip the run's figure (built from the archive by plot.build).")
+    p.add_argument("--period", default="1991-2020",
+                   help="Climatology period in winters - default: 1991-2020)")
+    p.add_argument("--reduction", default="mediantt", choices=Reduction.slugs(), 
+                   help=f"Reduction order - Available: {', '.join(Reduction.slugs())} - default: mediantt")
+    p.add_argument("--plot", default=True, 
+                   help="Skip the run's figure (built from the npz archives by plot.build).")
     return p.parse_args()
 
 
 if __name__ == "__main__":
     args = _parse_args()
     try:
-        run(args.metric, args.region, args.source, args.period, args.reduction, plot=args.plot)
+        run(args.metric, args.region, args.source, args.period, args.reduction, args.plot)
     except ValueError as e:
         sys.exit(f"ERROR: {e}")

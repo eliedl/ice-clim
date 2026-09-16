@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import calendar
+import re
 from dataclasses import dataclass
 from datetime import date
 
@@ -12,6 +13,8 @@ import pandas as pd
 from climatology.utils._types import RawPolygons
 
 SEASON_ORIGIN = date(2000, 9, 1)
+
+_PERIOD_RE = re.compile(r"(\d{4})-(\d{4})")
 
 # Fail loudly at import if a future epoch breaks the leap-safe invariant: a leap
 # winter half would silently shift every Mar 1+ ordinal by one day.
@@ -78,8 +81,10 @@ class Period:
     @property
     def years(self) -> tuple[int, int]:
         """The ``(y1, y2)`` winter bounds parsed from the slug."""
-        y1, y2 = self.slug.split("-")
-        return int(y1), int(y2)
+        match = _PERIOD_RE.fullmatch(self.slug)
+        if not match:
+            raise ValueError(f"period must look like 1991-2020, got {self.slug!r}")
+        return int(match[1]), int(match[2])
 
     @property
     def window(self) -> tuple[str, str]:
