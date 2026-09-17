@@ -21,21 +21,14 @@ from climatology.plot.basemap import draw_basemap_labels, draw_basemap_land, loa
 from climatology.plot.colors import (
     DARK_FG,
     DARK_LINE,
+    DARK_MUTED,
     DARK_OCEAN,
     delta_scale,
     metric_scale,
     style_axes,
     style_colorbar,
 )
-from climatology.plot.labels import (
-    PLOT_STYLES,
-    footer,
-    metric_label,
-    metric_title,
-    panel_metric_label,
-    reduction_note,
-    reduction_notes,
-)
+from climatology.plot.labels import PLOT_STYLES, metric_title
 from climatology.plot.layout import (
     PANEL_BOTTOM,
     PANEL_CBAR_PAD,
@@ -71,6 +64,11 @@ if TYPE_CHECKING:
 
 
 # --- shared rendering primitives -------------------------------------------
+
+def footer(fig, text: str, *, x: float = 0.01) -> None:
+    """Draw a figure's provenance strip; the text itself is assembled in ``labels``."""
+    fig.text(x, 0.01, text, fontsize=6, color=DARK_MUTED)
+
 
 def _union_extent(layers: list[tuple[DataGrid, GridBounds]]) -> GridBounds:
     """Bounds covering every layer, for axis limits and the land overlay read."""

@@ -1,24 +1,44 @@
-"""Figure text: per-metric titles and colourbar labels, reduction notes, and the provenance footer."""
+"""Figure text: every string a panel carries — titles, colourbar labels, provenance.
+
+One concern, one module: what a figure *says*. The renderers are handed ``Label``s and never
+assemble prose of their own, so ``PlotContext`` is needed here only as an annotation — the
+``TYPE_CHECKING`` import is what keeps ``build -> labels`` one-directional at runtime.
+"""
 
 from __future__ import annotations
 
 import operator
-from collections.abc import Callable, Iterable
+from collections.abc import Callable
 from dataclasses import dataclass
 from datetime import timedelta
 from typing import TYPE_CHECKING
 
 from climatology.core.reduction.temporal import (
-    MPO_MIN_SEASON_COVERAGE,
     ThresholdDate,
     ThresholdDateDelta,
 )
 from climatology.services.calendar import SEASON_ORIGIN
 from climatology.utils._types import GRID_CRS
-from climatology.plot.colors import DARK_MUTED
 
 if TYPE_CHECKING:
+    from climatology.core.context import RunContext
     from climatology.core.metrics import Metric
+    from climatology.core.reduction.spatial import RasterLayer
+    from climatology.plot.build import PlotContext
+
+
+RAW, DELTA = "raw", "delta"
+
+# Every coordinate a title can name, in reading order.
+TITLE_ORDER = ("region", "metric", "period", "source", "reduction")
+
+# The subset a figure can branch on — ``TITLE_ORDER`` less the two ``_validate`` pins.
+# Region is pinned because panels that do not share a grid cannot overlay, let alone be
+# differenced; metric because one colour scale can only mean one quantity. Pinned
+# coordinates never reach ``branch``, so they always read in the figure title.
+COORDS = ("period", "source", "reduction")
+
+_CREDIT = "© Mapbox © OpenStreetMap contributors"
 
 
 def _date_ticks(tick_values: list[float]) -> list[str]:
@@ -41,214 +61,287 @@ TT_STAT = "threshold_then_stat"
 
 @dataclass(frozen=True)
 class PlotStyle:
-    """Presentation for one metric: one colourbar label template **per reduction order**, and a tick formatter.
+    """The editorial half of a metric's naming — everything else is read off its kernel.
 
-    The two orders do not compute the same quantity, so one string cannot describe both.
-    Stat-then-threshold (DEC-027) collapses the seasons per day and *then* folds the kernel:
-    the result is a date read off a smoothed series, so a mid-season thaw is averaged out
-    before the kernel ever sees it — it is not a statistic over dates. Threshold-then-stat
-    (DEC-049) folds the kernel per season and *then* collapses: that one is. Hence
-    "First date the {stat} CT reaches ≥ 4/10" against "{Stat} date of freeze-up".
+    A colourbar label is a sentence about a thresholded state, and the state is already
+    written down in ``_SPECS``: the comparison, the threshold, the field, whether two
+    criteria are combined. Only the *names* are a judgement call, so only the names live
+    here; ``colorbar_labels`` derives the rest. A label can therefore not claim a crossing
+    its kernel does not compute.
+
+    The two reduction orders need different sentences, not different words. Stat-then-threshold
+    (DEC-027) collapses the seasons per day and *then* folds the kernel: the result is a date
+    read off a smoothed series, so a mid-season thaw is averaged out before the kernel ever
+    sees it — it is not a statistic over dates. Threshold-then-stat (DEC-049) folds the kernel
+    per season and *then* collapses: that one is. Hence "First date the median CT reaches
+    ≥ 4/10" against "Median date of freeze-up (CT ≥ 4/10)".
 
     Counts are always in days (``TierProduct`` scales a weekly source's step counts by
     ``step_days``), so no label has to interpolate the source's observation unit.
     """
 
-    title: str                   # metric name — the figure title; suffixed "date" / "duration"
-    label: dict[str, str]        # reduction order -> colourbar label template
-    format_ticks: Callable[[list[float]], list[str]]
+    title: str      # metric name — the figure title
+    subject: str    # the noun each sentence hangs on, lowercase: "freeze-up", "ice presence"
 
 
 PLOT_STYLES: dict[str, PlotStyle] = {
-    "freeze_up_date": PlotStyle("Freeze-up", {
-        STAT_TT: "First date the {stat} CT reaches ≥ 4/10",
-        TT_STAT: "{Stat} date of freeze-up (CT ≥ 4/10)",
-    }, _date_ticks),
-    "breakup_date": PlotStyle("Break-up", {
-        STAT_TT: "First date the {stat} CT falls < 4/10",
-        TT_STAT: "{Stat} date of break-up (CT < 4/10)",
-    }, _date_ticks),
-    "first_occurrence_date": PlotStyle("First occurrence", {
-        STAT_TT: "First date the {stat} CT reaches ≥ 1/10",
-        TT_STAT: "{Stat} date of first ice occurrence (CT ≥ 1/10)",
-    }, _date_ticks),
-    "last_occurrence_date": PlotStyle("Last occurrence", {
-        STAT_TT: "Last date the {stat} CT holds ≥ 1/10",
-        TT_STAT: "{Stat} date of last ice occurrence (CT ≥ 1/10)",
-    }, _date_ticks),
-    "closing_date": PlotStyle("Season closing (8/10)", {
-        STAT_TT: "First date the {stat} CT reaches ≥ 8/10",
-        TT_STAT: "{Stat} date of season closing (CT ≥ 8/10)",
-    }, _date_ticks),
-    "opening_date": PlotStyle("Season opening (8/10)", {
-        STAT_TT: "First date the {stat} CT falls < 8/10",
-        TT_STAT: "{Stat} date of season opening (CT < 8/10)",
-    }, _date_ticks),
-    "formation_lag": PlotStyle("Formation lag", {
-        STAT_TT: "Formation lag (days from {stat} CT ≥ 1/10 to {stat} CT ≥ 4/10)",
-        TT_STAT: "{Stat} formation lag (days from CT ≥ 1/10 to CT ≥ 4/10)",
-    }, _count_ticks),
-    "melt_lag": PlotStyle("Melt lag", {
-        STAT_TT: "Melt lag (days from {stat} CT < 4/10 to {stat} CT < 1/10)",
-        TT_STAT: "{Stat} melt lag (days from CT < 4/10 to CT < 1/10)",
-    }, _count_ticks),
-    "season_duration": PlotStyle("Season duration (4/10)", {
-        STAT_TT: "Ice presence (days with {stat} CT ≥ 4/10)",
-        TT_STAT: "{Stat} ice presence (days, CT ≥ 4/10)",
-    }, _count_ticks),
-    "season_duration_10": PlotStyle("Season duration (1/10)", {
-        STAT_TT: "Ice presence (days with {stat} CT ≥ 1/10)",
-        TT_STAT: "{Stat} ice presence (days, CT ≥ 1/10)",
-    }, _count_ticks),
-    "storm_exposure_duration": PlotStyle("Storm exposure duration", {
-        STAT_TT: "Storm exposure (days with {stat} CT ≤ 3/10)",
-        TT_STAT: "{Stat} storm exposure duration (days, CT ≤ 3/10)",
-    }, _count_ticks),
-    "landfast_freeze_up_date": PlotStyle("Landfast freeze-up", {
-        STAT_TT: "First date the {stat} FA = '08' > 0.5",
-        TT_STAT: "{Stat} date of landfast freeze-up (FA = '08')",
-    }, _date_ticks),
-    "landfast_breakup_date": PlotStyle("Landfast break-up", {
-        STAT_TT: "First date the {stat} FA = '08' falls < 0.5",
-        TT_STAT: "{Stat} date of landfast break-up (FA = '08')",
-    }, _date_ticks),
-    "landfast_duration": PlotStyle("Landfast ice duration", {
-        STAT_TT: "Landfast ice presence (days with {stat} FA = '08' > 0.5)",
-        TT_STAT: "{Stat} landfast ice presence (days, FA = '08')",
-    }, _count_ticks),
-    "landfast_exposure": PlotStyle("Landfast absence duration", {
-        STAT_TT: "Landfast exposure (days with {stat} FA = '08' < 0.5)",
-        TT_STAT: "{Stat} landfast exposure (days, FA ≠ '08')",
-    }, _count_ticks),
-    # Developed ice = the joint state CT ≥ 8/10 AND mean thickness ≥ 0.225 m (grey-white ice); its
-    # clearing/absence is the De Morgan complement (either criterion below).
-    "developed_ice_freeze_up_date": PlotStyle("Developed ice freeze-up", {
-        STAT_TT: "First date the {stat} CT reaches ≥ 8/10 with {stat} thickness ≥ 0.225 m",
-        TT_STAT: "{Stat} date of developed-ice freeze-up (CT ≥ 8/10, thickness ≥ 0.225 m)",
-    }, _date_ticks),
-    "developed_ice_breakup_date": PlotStyle("Developed ice break-up", {
-        STAT_TT: "First date the {stat} CT falls < 8/10 or {stat} thickness < 0.225 m",
-        TT_STAT: "{Stat} date of developed-ice break-up (CT < 8/10 or thickness < 0.225 m)",
-    }, _date_ticks),
-    "developed_ice_duration": PlotStyle("Developed ice duration", {
-        STAT_TT: "Developed ice presence (days with {stat} CT ≥ 8/10 and {stat} thickness ≥ 0.225 m)",
-        TT_STAT: "{Stat} developed ice presence (days, CT ≥ 8/10 and thickness ≥ 0.225 m)",
-    }, _count_ticks),
-    "developed_ice_exposure": PlotStyle("Developed ice absence duration", {
-        STAT_TT: "Developed ice absence (days with {stat} CT < 8/10 or {stat} thickness < 0.225 m)",
-        TT_STAT: "{Stat} developed ice absence (days, CT < 8/10 or thickness < 0.225 m)",
-    }, _count_ticks),
+    "freeze_up_date":               PlotStyle("Freeze-up", "freeze-up"),
+    "breakup_date":                 PlotStyle("Break-up", "break-up"),
+    "first_occurrence_date":        PlotStyle("First occurrence", "first ice occurrence"),
+    "last_occurrence_date":         PlotStyle("Last occurrence", "last ice occurrence"),
+    "closing_date":                 PlotStyle("Season closing (8/10)", "season closing"),
+    "opening_date":                 PlotStyle("Season opening (8/10)", "season opening"),
+    "formation_lag":                PlotStyle("Formation lag", "formation lag"),
+    "melt_lag":                     PlotStyle("Melt lag", "melt lag"),
+    "season_duration":              PlotStyle("Season duration (4/10)", "ice presence"),
+    "season_duration_10":           PlotStyle("Season duration (1/10)", "ice presence"),
+    "storm_exposure_duration":      PlotStyle("Storm exposure duration", "storm exposure"),
+    "landfast_freeze_up_date":      PlotStyle("Landfast freeze-up", "landfast freeze-up"),
+    "landfast_breakup_date":        PlotStyle("Landfast break-up", "landfast break-up"),
+    "landfast_duration":            PlotStyle("Landfast ice duration", "landfast ice presence"),
+    "landfast_exposure":            PlotStyle("Landfast absence duration", "landfast exposure"),
+    "developed_ice_freeze_up_date": PlotStyle("Developed ice freeze-up", "developed-ice freeze-up"),
+    "developed_ice_breakup_date":   PlotStyle("Developed ice break-up", "developed-ice break-up"),
+    "developed_ice_duration":       PlotStyle("Developed ice duration", "developed ice presence"),
+    "developed_ice_exposure":       PlotStyle("Developed ice absence duration", "developed ice absence"),
 }
-
-
-_COVERAGE_CLAUSE = f"cells need ≥ {MPO_MIN_SEASON_COVERAGE:.0%} season coverage"
 
 
 @dataclass(frozen=True)
 class ReductionStyle:
-    """Presentation for one reduction order: the label template it reads, the name of its statistic, and its footer note."""
+    """Presentation for one reduction order: the label template it reads, the name of its statistic, and its own display name."""
 
     order: str   # which ``PlotStyle.label`` template applies
     stat: str    # fills that template's {stat} / {Stat} slots
-    note: str    # method note for the provenance footer
+    label: str   # the slug as it reads in a title
 
 
 # Keyed by reduction slug: how an order *reads*, kept out of the reducer, which only
 # needs to know how it computes. ``Reduction.slugs()`` is the closed set this must cover.
 REDUCTION_STYLES: dict[str, ReductionStyle] = {
-    "mediantt": ReductionStyle(STAT_TT, "median",
-        "Method: median-then-threshold (cross-season median CT per day, then the crossing)"),
-    "meantt": ReductionStyle(STAT_TT, "mean",
-        "Method: mean-then-threshold (cross-season mean CT per day, then the crossing)"),
-    "ttmedian": ReductionStyle(TT_STAT, "median",
-        "Method: threshold-then-median (per-season crossing, then their cross-season "
-        f"median — a season without a crossing drops out; {_COVERAGE_CLAUSE})"),
-    "ttmean": ReductionStyle(TT_STAT, "mean",
-        "Method: threshold-then-mean (per-season crossing, then their cross-season "
-        f"mean — a season without a crossing drops out; {_COVERAGE_CLAUSE})"),
-    "ttmpo": ReductionStyle(TT_STAT, "MPO mean",
-        "Method: threshold-then-MPO-mean (per-season crossing, then the sum over the "
-        "seasons with a crossing divided by the full record length — a season without "
-        f"one counts as zero, i.e. Dec 31 for a date and 0 d for a count; {_COVERAGE_CLAUSE})"),
+    "mediantt": ReductionStyle(STAT_TT, "median", "Median-then-threshold"),
+    "meantt": ReductionStyle(STAT_TT, "mean", "Mean-then-threshold"),
+    "ttmedian": ReductionStyle(TT_STAT, "median", "Threshold-then-median"),
+    "ttmean": ReductionStyle(TT_STAT, "mean", "Threshold-then-mean"),
+    "ttmpo": ReductionStyle(TT_STAT, "MPO mean", "Threshold-then-MPO-mean"),
 }
 
 
-def metric_title(metric: Metric) -> str:
+def metric_title(metric: str) -> str:
     """The metric's display name — the figure title, independent of reduction order."""
-    return PLOT_STYLES[metric.slug].title
+    return PLOT_STYLES[metric].title
 
 
-def metric_label(metric: Metric) -> str:
-    """The metric's colourbar label for the reduction order it was computed under, naming that order's statistic."""
-    labels = PLOT_STYLES[metric.slug].label
-    style = REDUCTION_STYLES[metric.reduction.slug]
-    if style.order not in labels:
-        raise KeyError(f"No label for metric '{metric.slug}' under the "
-                       f"'{style.order}' order — PLOT_STYLES carries {sorted(labels)}.")
-    stat = style.stat
-    # `.capitalize()` would lowercase the rest and turn "MPO mean" into "Mpo mean".
-    return labels[style.order].format(stat=stat, Stat=stat[0].upper() + stat[1:])
+# --- derived label clauses ---------------------------------------------------
+# Every word below that is not a metric's name comes off its kernel, so a label cannot
+# describe a crossing the kernel does not compute.
 
+_LANDFAST_CODE = "'08'"   # the FA form code LANDFAST_CONVERSION burns to a 0/1 indicator
 
-def panel_metric_label(metric: Metric, reduction_slug: str) -> str:
-    """One panel's colourbar label, under the reduction order that panel was computed under.
-
-    A figure branching on reduction draws one bar per map precisely so each can say what its
-    own map means: the orders phrase the quantity differently (see ``PlotStyle``) and no single
-    string describes both.
-    """
-    return metric_label(metric.with_reduction(reduction_slug))
-
-
-# Threshold direction, read off the kernel rather than restated: ThresholdDate says which
-# crossing it takes, ThresholdDuration carries the comparison operator itself.
-_DATE_OPS = {"first_above": "≥", "last_above": "≥", "first_below": "<"}
+_CROSSING = {   # ThresholdDate.mode -> (which crossing, its verb, its comparison)
+    "first_above": ("First", "reaches", "≥"),
+    "first_below": ("First", "falls", "<"),
+    "last_above": ("Last", "holds", "≥"),
+}
 _DURATION_OPS = {operator.ge: "≥", operator.le: "≤", operator.lt: "<"}
 
 
-def _kernel_threshold_label(kernel, field: str) -> str:
-    """One kernel's threshold as ``FIELD op n/10``; a delta kernel reads ``early → late``."""
-    if isinstance(kernel, ThresholdDateDelta):
-        return (f"{_kernel_threshold_label(kernel.early, field)} → "
-                f"{_kernel_threshold_label(kernel.late, field)}")
-    op = (_DATE_OPS[kernel.mode] if isinstance(kernel, ThresholdDate)
-          else _DURATION_OPS[kernel.op])
-    return f"{field} {op} {round(kernel.threshold[0] * 10)}/10"
+def is_date_valued(metric: Metric) -> bool:
+    """True when the kernel returns a day-of-season ordinal rather than a count of days.
+
+    Not ``counts_steps``, which is about *scaling* a weekly source's steps: a lag is a
+    difference of two ordinals, so it needs no scaling yet still reads in days.
+    """
+    return isinstance(metric.kernel, ThresholdDate)
 
 
-def reduction_notes(slugs: Iterable[str]) -> str:
-    """Footer note naming every reduction order the figure draws, in order, deduped."""
-    return " | ".join(REDUCTION_STYLES[s].note for s in dict.fromkeys(slugs))
+def _is_indicator(metric: Metric) -> bool:
+    """True for the landfast metrics, whose value is a 0/1 form-code flag, not a concentration."""
+    return metric.fields[0] == "FA"
 
 
-def reduction_note(metric: Metric) -> str:
-    """Footer note naming the reduction order the product was computed under."""
-    return reduction_notes([metric.reduction.slug])
+def _cap(text: str) -> str:
+    """Leading capital only — ``.capitalize()`` would turn "MPO mean" into "Mpo mean"."""
+    return text[0].upper() + text[1:]
 
 
-def threshold_label(metric: Metric) -> str:
-    """The threshold a metric is actually computed on, taken from its spec."""
-    field = metric.fields[0]
-    if field != "CT":
-        # LANDFAST_CONVERSION turns the FA form code into a 0/1 landfast indicator, so the
-        # kernel's 0.5 is a boolean midpoint — not a concentration, and not "5/10".
-        return f"landfast ice ({field})"
+def _tenths(value: float) -> str:
+    return f"{round(value * 10)}/10"
+
+
+def _state(metric: Metric, kernel, cmp: str, *, stat: str = "", verb: str = "") -> str:
+    """The thresholded state as prose: ``CT ≥ 4/10``, the joint developed-ice state, or the flag."""
+    stat = f"{stat} " if stat else ""
+    verb = f"{verb} " if verb else ""
+    if _is_indicator(metric):
+        # The kernel's 0.5 is a boolean midpoint, not a concentration — never "5/10".
+        return f"{stat}FA {'=' if cmp == '≥' else '≠'} {_LANDFAST_CODE}"
     if len(metric.conversion.value_cols) > 1:
-        # Multi-variable kernels threshold a state, not a single crossing: name the
-        # state (the per-metric crossing direction lives in the colourbar label).
-        ct_t, thk_t = metric.kernel.threshold
-        return f"developed ice (CT ≥ {round(ct_t * 10)}/10, thickness ≥ {thk_t} m)"
-    return _kernel_threshold_label(metric.kernel, field)
+        # Joint state; its clearing is the De Morgan complement, hence the joiner follows cmp.
+        ct_t, thk_t = kernel.threshold
+        joiner = "or" if cmp == "<" else "and"
+        return (f"{stat}CT {verb}{cmp} {_tenths(ct_t)} {joiner} "
+                f"{stat}thickness {cmp} {thk_t} m")
+    return f"{stat}{metric.fields[0]} {verb}{cmp} {_tenths(kernel.threshold[0])}"
 
 
-def footer(fig, *, source_label: str, res_label: str, method: str, x: float = 0.01,
-            basemap: bool = False) -> None:
-    """Provenance strip: chart source, reduction order, grid resolution, CRS, land credit."""
-    # The render is requested with attribution=false, so the Mapbox credit is owed here.
-    credit = "© Mapbox © OpenStreetMap contributors" if basemap else "© OpenStreetMap contributors"
-    fig.text(
-        x, 0.01,
-        f"Source: {source_label} | {method} | Grid: {res_label} "
-        f"EPSG:{GRID_CRS} | Land: {credit} | ",
-        fontsize=6, color=DARK_MUTED,
-    )
+def _date_label(metric: Metric, stat: str, first: bool) -> str:
+    """A crossing date, under either order."""
+    kernel, subject = metric.kernel, PLOT_STYLES[metric.slug].subject
+    when, verb, cmp = _CROSSING[kernel.mode]
+    if not first:
+        return f"{_cap(stat)} date of {subject} ({_state(metric, kernel, cmp)})"
+    if _is_indicator(metric):
+        flag = "landfast" if cmp == "≥" else "no longer landfast"
+        return f"{when} date the {stat} cell is {flag} ({_state(metric, kernel, cmp)})"
+    return f"{when} date the {_state(metric, kernel, cmp, stat=stat, verb=verb)}"
+
+
+def _lag_label(metric: Metric, stat: str, first: bool) -> str:
+    """Days between two crossings of the same stream."""
+    kernel, subject = metric.kernel, PLOT_STYLES[metric.slug].subject
+    early = _state(metric, kernel.early, _CROSSING[kernel.early.mode][2])
+    late = _state(metric, kernel.late, _CROSSING[kernel.late.mode][2])
+    if first:
+        return f"{_cap(subject)} (days from {stat} {early} to {stat} {late})"
+    return f"{_cap(stat)} {subject} (days from {early} to {late})"
+
+
+def _duration_label(metric: Metric, stat: str, first: bool) -> str:
+    """Days spent in the thresholded state."""
+    kernel, subject = metric.kernel, PLOT_STYLES[metric.slug].subject
+    cmp = _DURATION_OPS[kernel.op]
+    if first:
+        return f"{_cap(subject)} (days with {_state(metric, kernel, cmp, stat=stat)})"
+    return f"{_cap(stat)} {subject} (days, {_state(metric, kernel, cmp)})"
+
+
+def colorbar_labels(metric: Metric) -> tuple[str, Callable[[list[float]], list[str]]]:
+    """One colourbar's label under the order that computed it, and its tick formatter.
+
+    Takes the resolved metric rather than the whole run: the kernel and the reduction are the
+    only things a colourbar says anything about. A figure branching on reduction draws one bar
+    per map precisely so each can say what its own map means — the orders phrase the quantity
+    differently (see ``PlotStyle``) and no single string describes both.
+    """
+    style = REDUCTION_STYLES[metric.reduction_slug]
+    first = style.order == STAT_TT     # did the statistic collapse before the kernel folded
+    kernel = metric.kernel
+
+    if isinstance(kernel, ThresholdDate):
+        text = _date_label(metric, style.stat, first)
+    elif isinstance(kernel, ThresholdDateDelta):
+        text = _lag_label(metric, style.stat, first)
+    else:
+        text = _duration_label(metric, style.stat, first)
+    return text, (_date_ticks if is_date_valued(metric) else _count_ticks)
+
+
+# --- naming -----------------------------------------------------------------
+# Which coordinates distinguish a panel depends on which one the figure branched on, so the
+# titles are decided here and handed to the renderers as data. Varying coordinates title the
+# panels; pinned ones are stated once, in the figure title.
+
+def _coords(run: RunContext) -> dict[str, str]:
+    """A run's branchable coordinates, as the slugs the CLI names them by."""
+    return {"period": run.period.slug, "source": run.source.slug,
+            "reduction": run.metric.reduction_slug}
+
+
+def run_label(run: RunContext) -> str:
+    """One run named in a log line or an error message."""
+    text = _coords(run)
+    return f"{text['period']} {text['source'].upper()} {text['reduction']}"
+
+
+def branch(runs: tuple[RunContext, ...]) -> tuple[str, ...]:
+    """The coordinates that differ across the runs — what a panel title must name, and by
+    complement what the figure title states once for the whole figure."""
+    return tuple(name for name in COORDS
+                 if len({_coords(run)[name] for run in runs}) > 1)
+
+
+def _coord_text(run: RunContext) -> dict[str, str]:
+    """Each coordinate as it should read, already cased — the source and reduction are slugs
+    and stay lowercase, so the assembled title must never be re-cased as a whole.
+
+    Carries region and metric on top of the branchable three: both are pinned across a
+    figure, so they never reach ``branch`` and only ever read in the figure title.
+    """
+    return {**_coords(run),
+            "region": run.region.display,
+            "metric": metric_title(run.metric.slug),
+            "period": f"Winters {run.period.slug}"}
+
+
+def _panel_title(run: RunContext, branched: tuple[str, ...]) -> str:
+    """Panel heading: the coordinates that distinguish this run from the figure's others."""
+    named = branched or ("period", "source")   # a lone run still says what it is
+    text = _coord_text(run)
+    # "·", not an em dash: a delta title joins two of these with "−", and the two dashes
+    # are indistinguishable at title size.
+    return " · ".join(text[name] for name in TITLE_ORDER if name in named)
+
+
+def _figure_title(runs: tuple[RunContext, ...]) -> str:
+    """Figure heading: the coordinates every panel shares (the varying ones title the panels).
+
+    Assembled off the first run, which is safe by construction rather than by luck: a
+    coordinate survives the filter only when ``branch`` found it identical across every run,
+    so each run spells the pinned coordinates the same way. Deriving the branch here rather
+    than taking it as an argument is what keeps that true — the two cannot be handed in
+    out of step.
+    """
+    text, branched = _coord_text(runs[0]), branch(runs)
+    return " · ".join(text[name] for name in TITLE_ORDER if name not in branched)
+
+
+def _footer_text(ctx: PlotContext, tiers: tuple[RasterLayer, ...]) -> str:
+    """Provenance strip: chart source, grid resolution, CRS, land credit."""
+    sources = sorted({run.source.display_label for run in ctx.runs})
+    res = " / ".join(f"{int(round(tier.res_m))} m" for tier in tiers)
+    return (f"Source: {' + '.join(sources)} | Grid: {res} "
+            f"EPSG:{GRID_CRS} | Land: {_CREDIT}")
+
+
+# --- panel text -------------------------------------------------------------
+
+@dataclass(frozen=True)
+class Label:
+    """Every piece of text one panel needs, resolved once from its run and the figure it sits in.
+
+    ``figure_title`` and ``footer`` are figure-level and therefore identical on every label of
+    one figure; the engine draws them once, off any panel's.
+    """
+
+    figure_title: str
+    axis_title: str
+    colorbar: str
+    distribution_y: str          # unit of observation on the distribution's value axis
+    footer: str
+    format_ticks: Callable[[list[float]], list[str]]
+
+
+def label(ctx: PlotContext, rasters: list[tuple[RasterLayer, ...]]) -> list[Label]:
+    """One Label per raster stack, index-aligned — a delta figure's last stack is the difference."""
+    branched = branch(ctx.runs)
+    title, foot = _figure_title(ctx.runs), _footer_text(ctx, rasters[0])
+    unit = "Date" if is_date_valued(ctx.metric) else "Days"
+
+    labels = []
+    for run in ctx.runs:
+        colorbar, format_ticks = colorbar_labels(run.metric)
+        labels.append(Label(title, _panel_title(run, branched), colorbar,
+                            unit, foot, format_ticks))
+
+    if ctx.type == DELTA:
+        base, cand = ctx.runs[0], ctx.runs[1]
+        labels.append(Label(
+            title,
+            f"{_panel_title(cand, branched)} − {_panel_title(base, branched)}",
+            f"Δ {metric_title(ctx.metric.slug)} (days, candidate − baseline)",
+            "Days",                 # a difference of two dates is a duration, not a date
+            foot,
+            _count_ticks,
+        ))
+    return labels

@@ -75,6 +75,7 @@ from climatology.plot.render import (
     plot_metric_panels,
     plot_source_portrait,
 )
+from climatology.plot.labels import COORDS, DELTA, RAW, branch, label, run_label
 from climatology.core.context import RunContext
 from climatology.core.metrics import Metric
 from climatology.core.reduction.spatial import RasterLayer
@@ -89,12 +90,7 @@ if TYPE_CHECKING:
 
 log = logging.getLogger(__name__)
 
-RAW, DELTA = "raw", "delta"
 SINGLE, MULTI, PORTRAIT = "single", "multi", "portrait"
-
-# The product coordinates a figure can branch on, in title order. Region is the fourth and
-# is pinned: panels that do not share a grid cannot overlay, let alone be differenced.
-COORDS = ("period", "source", "reduction")
 
 GRID_MATCH_CELLS = 0.01   # bounds within 1/100 of a cell are the same grid
 
@@ -146,13 +142,6 @@ class PlotContext:
         return self.runs[0].metric
 
     @property
-    def axes(self) -> tuple[str, ...]:
-        """The coordinates that actually differ across the runs — what a panel title must
-        name, and by complement what the subtitle can state once for the whole figure."""
-        return tuple(name for name in COORDS
-                     if len({_coords(run)[name] for run in self.runs}) > 1)
-
-    @property
     def key(self) -> tuple[str, str, bool]:
         """The renderer this configuration selects."""
         return (self.type, self.layout, self.distribution)
@@ -169,43 +158,63 @@ class PlotProduct:
     figure: Figure
     tight: bool
 
+# --- stages -----------------------------------------------------------------
 
-# --- naming -----------------------------------------------------------------
-# Which coordinates distinguish a panel depends on which one the figure branched on, so the
-# titles are decided here and handed to the renderers as data. Varying coordinates title the
-# panels; pinned ones are stated once, in the subtitle.
+def _resolve(runs: tuple[RunContext, ...], *,
+             type: str, layout: str, distribution: bool) -> PlotContext:
+    """Bind the runs to a layout, and announce the figure (mirrors ``pipeline._resolve``).
 
-def _coords(run: RunContext) -> dict[str, str]:
-    """A run's branchable coordinates, as the slugs the CLI names them by."""
-    return {"period": run.period.slug, "source": run.source.slug,
-            "reduction": run.metric.reduction_slug}
+    ``ctx.metric`` is the first run's — so it is bound to that run's reduction. Everything the
+    metric is asked for downstream — its title, its tick formatter, whether it counts steps —
+    is order-independent; the order-dependent labels are taken per panel, from that panel's
+    own reduction.
+    """
+    ctx = PlotContext(runs=runs, type=type, layout=layout, distribution=distribution)
+    log.info("Figure: %s %s/%s | Metric: %s | Region: %s | Branching on: %s | Runs: %s",
+             ctx.type, ctx.layout, "dist" if ctx.distribution else "nodist",
+             ctx.metric.slug, ctx.region.slug, ", ".join(branch(runs)) or "nothing",
+             ", ".join(run_label(run) for run in ctx.runs))
+    return ctx
 
+def _validate(ctx: PlotContext) -> None:
+    """Reject an incoherent figure before a single raster is read.
 
-def _label(run: RunContext) -> str:
-    """One run named in a log line or an error message."""
-    text = _coords(run)
-    return f"{text['period']} {text['source'].upper()} {text['reduction']}"
-
-
-def _coord_text(run: RunContext) -> dict[str, str]:
-    """Each coordinate as it should read, already cased — the source and reduction are slugs
-    and stay lowercase, so the assembled title must never be re-cased as a whole."""
-    return {**_coords(run), "period": f"Winters {run.period.slug}"}
-
-
-def _panel_title(ctx: PlotContext, run: RunContext) -> str:
-    """Panel heading: the coordinates that distinguish this run from the figure's others."""
-    named = ctx.axes or ("period", "source")   # a lone run still says what it is
-    text = _coord_text(run)
-    # "·", not an em dash: a delta title joins two of these with "−", and the two dashes
-    # are indistinguishable at title size.
-    return " · ".join(text[name] for name in COORDS if name in named)
+    Two halves, both answerable without loading anything: the *configuration*, from the
+    context alone, and the *archive*, from the ``.json`` manifests ``find_archived`` already
+    reads to select a product. Returns the refs per run, coarse tier first, so ``_fetch``
+    loads exactly what was approved here and nothing re-decides.
+    """
+    ctx.assert_shared_regions()
+    ctx.assert_shared_metrics()
 
 
-def _subtitle(ctx: PlotContext) -> str:
-    """Figure subtitle: the coordinates every panel shares (the varying ones title the panels)."""
-    text = _coord_text(ctx.runs[0])
-    return " · ".join(text[name] for name in COORDS if name not in ctx.axes)
+def _fetch(ctx: PlotContext) -> list[tuple[RasterLayer, ...]]:
+    """Load each run's archived tiers, coarse first; append the per-tier difference for a delta."""
+    rasters = [load_archived(run) for run in ctx.runs]
+    if ctx.type == DELTA:
+        base, cand = rasters[0], rasters[1]
+        rasters.append(tuple(RasterLayer(c.values - b.values, c.bounds, c.res_m)
+                              for b, c in zip(base, cand)))
+    log.info("Loaded %d raster(s).", sum(len(a) for a in rasters))
+    return rasters
+
+
+def _render(ctx: PlotContext, results: list[Result]) -> PlotProduct:
+    """Draw the figure this configuration selects — the one dispatch seam over the renderers."""
+    renderer = RENDERERS[ctx.key]
+    return PlotProduct(figure=renderer.draw(ctx, panels), tight=renderer.tight)
+
+
+def build_figure(runs: tuple[RunContext, ...], *,
+          type: str = RAW, layout: str = MULTI,
+          distribution: bool = True) -> PlotProduct:
+    """Build one figure from the archive; the caller writes it via ``export.save_figure``."""
+    ctx = _resolve(runs, type=type, layout=layout, distribution=distribution)
+    _validate(ctx)
+    rasters = _fetch(ctx)
+    labels = label(ctx, rasters)
+    return _render(ctx, results)
+
 
 
 # --- renderer registry ------------------------------------------------------
@@ -256,10 +265,6 @@ RENDERERS: dict[tuple[str, str, bool], Renderer] = {
 }
 
 
-def _res_label(panel: MetricPanel) -> str:
-    return " / ".join(f"{int(round(layer.res_m))} m" for layer in panel.layers)
-
-
 def _delta_panel(base: MetricPanel, cand: MetricPanel) -> DeltaPanel:
     """Candidate − baseline per tier, on the shared region+tier grid (direct subtraction)."""
     return DeltaPanel(
@@ -270,62 +275,6 @@ def _delta_panel(base: MetricPanel, cand: MetricPanel) -> DeltaPanel:
     )
 
 
-# --- stages -----------------------------------------------------------------
-
-def _resolve(runs: tuple[RunContext, ...], *,
-             type: str, layout: str, distribution: bool) -> PlotContext:
-    """Bind the runs to a layout, and announce the figure (mirrors ``pipeline._resolve``).
-
-    ``ctx.metric`` is the first run's — so it is bound to that run's reduction. Everything the
-    metric is asked for downstream — its title, its tick formatter, whether it counts steps —
-    is order-independent; the order-dependent labels are taken per panel, from that panel's
-    own reduction.
-    """
-    ctx = PlotContext(runs=runs, type=type, layout=layout, distribution=distribution)
-    log.info("Figure: %s %s/%s | Metric: %s | Region: %s | Branching on: %s | Runs: %s",
-             ctx.type, ctx.layout, "dist" if ctx.distribution else "nodist",
-             ctx.metric.slug, ctx.region.slug, ", ".join(ctx.axes) or "nothing",
-             ", ".join(_label(run) for run in ctx.runs))
-    return ctx
-
-def _validate(ctx: PlotContext) -> None:
-    """Reject an incoherent figure before a single raster is read.
-
-    Two halves, both answerable without loading anything: the *configuration*, from the
-    context alone, and the *archive*, from the ``.json`` manifests ``find_archived`` already
-    reads to select a product. Returns the refs per run, coarse tier first, so ``_fetch``
-    loads exactly what was approved here and nothing re-decides.
-    """
-    ctx.assert_shared_regions()
-    ctx.assert_shared_metrics()
-
-
-def _fetch(ctx: PlotContext) -> list[tuple[RasterLayer, ...]]:
-    """Load each run's archived tiers, coarse first; append the per-tier difference for a delta."""
-    archives = [load_archived(run) for run in ctx.runs]
-    if ctx.type == DELTA:
-        base, cand = archives[0], archives[1]
-        archives.append(tuple(RasterLayer(c.values - b.values, c.bounds, c.res_m)
-                              for b, c in zip(base, cand)))
-    log.info("Loaded %d raster(s).", sum(len(a) for a in archives))
-    return archives
-
-
-def _render(ctx: PlotContext, results: list[Result]) -> PlotProduct:
-    """Draw the figure this configuration selects — the one dispatch seam over the renderers."""
-    renderer = RENDERERS[ctx.key]
-    return PlotProduct(figure=renderer.draw(ctx, panels), tight=renderer.tight)
-
-
-def build_figure(runs: tuple[RunContext, ...], *,
-          type: str = RAW, layout: str = MULTI,
-          distribution: bool = True) -> PlotProduct:
-    """Build one figure from the archive; the caller writes it via ``export.save_figure``."""
-    ctx = _resolve(runs, type=type, layout=layout, distribution=distribution)
-    _validate(ctx)
-    layers = _fetch(ctx)
-    panels
-    return _render(ctx, results)
 
 
 # --- CLI --------------------------------------------------------------------

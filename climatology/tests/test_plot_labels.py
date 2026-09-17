@@ -12,10 +12,8 @@ import pytest
 from climatology.plot.labels import (
     PLOT_STYLES,
     REDUCTION_STYLES,
-    metric_label,
+    colorbar_labels,
     metric_title,
-    reduction_note,
-    threshold_label,
 )
 from climatology.core.metrics import Metric
 from climatology.core.reduction.temporal import Reduction
@@ -26,6 +24,11 @@ SPECS = [(slug, red) for slug in Metric.slugs() for red in Reduction.slugs()]
 
 def _spec(slug: str, reduction: str):
     return Metric.build(slug, reduction)
+
+
+def _label(slug: str, reduction: str) -> str:
+    """The colourbar label alone — the formatter rides along on the real call."""
+    return colorbar_labels(_spec(slug, reduction))[0]
 
 
 def test_plot_styles_cover_every_metric():
@@ -39,7 +42,7 @@ def test_reduction_styles_cover_every_reduction():
 @pytest.mark.parametrize(("slug", "reduction"), SPECS)
 def test_title_is_independent_of_reduction(slug: str, reduction: str):
     """A break-up is a break-up whichever order computed it — the title names the metric, not the method."""
-    assert metric_title(_spec(slug, reduction)) == PLOT_STYLES[slug].title
+    assert metric_title(slug) == PLOT_STYLES[slug].title
 
 
 def test_titles_are_unique():
@@ -66,14 +69,14 @@ def test_both_ice_season_titles_carry_the_threshold():
 
 @pytest.mark.parametrize(("slug", "reduction"), SPECS)
 def test_every_metric_has_a_label_per_reduction(slug: str, reduction: str):
-    label = metric_label(_spec(slug, reduction))
+    label = _label(slug, reduction)
     assert label and not label.isspace()
 
 
 @pytest.mark.parametrize(("slug", "reduction"), SPECS)
 def test_every_reducer_gets_its_own_label(slug: str, reduction: str):
     """No two reducers share a label: they differ in order, in statistic, or in both."""
-    labels = {metric_label(_spec(slug, red)) for red in Reduction.slugs()}
+    labels = {_label(slug, red) for red in Reduction.slugs()}
     assert len(labels) == len(Reduction.slugs())
 
 
@@ -81,43 +84,20 @@ def test_every_reducer_gets_its_own_label(slug: str, reduction: str):
 def test_stat_then_threshold_labels_name_the_series(slug: str):
     """Under a stat-first order the number is a crossing of the collapsed *series* — the label says which statistic collapsed it."""
     for reduction, stat in (("mediantt", "median"), ("meantt", "mean")):
-        assert stat in metric_label(_spec(slug, reduction)).lower()
+        assert stat in _label(slug, reduction).lower()
 
 
 @pytest.mark.parametrize("slug", Metric.slugs())
 def test_threshold_then_stat_labels_open_on_the_statistic(slug: str):
     """Under a threshold-first order the number *is* a statistic of per-season values, so the label leads with which one — and MPO's fixed-denominator mean is neither a median nor a plain mean."""
     for reduction, stat in (("ttmedian", "median"), ("ttmean", "mean"), ("ttmpo", "mpo mean")):
-        assert metric_label(_spec(slug, reduction)).lower().startswith(stat)
+        assert _label(slug, reduction).lower().startswith(stat)
 
 
-@pytest.mark.parametrize("slug", Metric.slugs())
-def test_label_agrees_with_the_kernel_threshold(slug: str):
-    """A label must not claim a crossing the kernel does not compute (the drift that bit twice)."""
-    spec = _spec(slug, "mediantt")
-    if spec.fields[0] != "CT":          # landfast runs on the FA indicator, not a concentration
-        return
-    if len(spec.conversion.value_cols) > 1:
-        return  # multi-variable state, no single crossing — pinned by the developed-ice test
-    threshold = threshold_label(spec)   # e.g. "CT < 4/10" — derived from the kernel
-    label = metric_label(spec)
-    for clause in threshold.split(" → "):
-        op, tenths = clause.split()[1], clause.split()[2]
-        assert f"{op} {tenths}" in label, (
-            f"{slug}: label {label!r} does not carry the kernel's crossing {clause!r}")
-
-
-@pytest.mark.parametrize("reduction", ["ttmedian", "ttmean", "ttmpo"])
-def test_threshold_first_notes_state_the_season_coverage_rule(reduction: str):
-    """Every threshold-first order drops cells short of the MPO coverage rule; the figure has to admit that."""
-    note = reduction_note(_spec("breakup_date", reduction))
-    assert "50%" in note and "coverage" in note
-
-
-def test_ttmpo_note_states_the_fixed_denominator():
-    """The dilution is the reducer's defining property — a reader cannot infer it from the colourbar."""
-    note = reduction_note(_spec("breakup_date", "ttmpo"))
-    assert "record length" in note and "Dec 31" in note
+def test_reduction_labels_are_unique():
+    """Two orders must not read alike, or a title cannot tell the panels apart."""
+    labels = [style.label for style in REDUCTION_STYLES.values()]
+    assert len(labels) == len(set(labels))
 
 
 def test_developed_ice_labels_name_both_criteria():
@@ -125,7 +105,7 @@ def test_developed_ice_labels_name_both_criteria():
     for slug in (s for s in Metric.slugs() if s.startswith("developed_ice")):
         ct_t, thk_t = Metric.build(slug).kernel.threshold
         for reduction in Reduction.slugs():
-            label = metric_label(_spec(slug, reduction))
+            label = _label(slug, reduction)
             assert f"{round(ct_t * 10)}/10" in label and f"{thk_t} m" in label, (
                 f"{slug}/{reduction}: label {label!r} must carry both criteria")
 
@@ -134,12 +114,11 @@ def test_landfast_labels_name_fa_not_ct():
     """Landfast metrics run on FA (form of ice), never on CT — the old labels said 'CT = 10/10'."""
     for slug in (s for s in Metric.slugs() if s.startswith("landfast")):
         for reduction in Reduction.slugs():
-            label = metric_label(_spec(slug, reduction))
+            label = _label(slug, reduction)
             assert "FA" in label and "CT" not in label
 
 
 def test_labels_do_not_depend_on_the_source():
     """TierProduct scales step counts to days, so a label is the same for every chart table."""
     for slug, reduction in SPECS:
-        spec = _spec(slug, reduction)
-        assert len({metric_label(spec) for _ in ChartSource}) == 1
+        assert len({_label(slug, reduction) for _ in ChartSource}) == 1
