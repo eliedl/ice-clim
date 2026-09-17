@@ -55,11 +55,6 @@ class RasterLayer:
     bounds: GridBounds
     res_m: float          # Tier.res_m live; manifest "grid_res_m" when read back from an archive
 
-    @classmethod
-    def from_tier(cls, values: DataGrid, tier: Tier) -> "RasterLayer":
-        """Build a layer from a live pipeline tier."""
-        return cls(values, tier.grid.bounds, tier.res_m)
-
     @property
     def cell_size(self) -> tuple[float, float]:
         """(x, y) cell size, validated against ``res_m``."""
@@ -84,8 +79,9 @@ def _deposit(coarse: RasterLayer, finer: RasterLayer, finer_area: np.ndarray) ->
     res_x, res_y = coarse.cell_size
 
     f_height, f_width = finer.values.shape
-    f_res_x, f_res_y = finer.cell_size
     f_xmin, _, _, f_ymax = finer.bounds
+    f_res_x, f_res_y = finer.cell_size
+    
     xs = f_xmin + (np.arange(f_width) + 0.5) * f_res_x
     ys = f_ymax - (np.arange(f_height) + 0.5) * f_res_y     # origin="upper": row 0 sits at ymax
     grid_x, grid_y = np.meshgrid(xs, ys)

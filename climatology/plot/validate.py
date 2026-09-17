@@ -18,25 +18,8 @@ if TYPE_CHECKING:
     from climatology.core.metrics import Metric
     from climatology.plot.render import MetricPanel
 
-
-def assert_comparable(panels: list[MetricPanel], metric: Metric) -> None:
-    """Reject a shared colour scale over mixed observation units.
-
-    Step-count metrics only land on a common unit because ``TierProduct`` scales them to
-    days; this is the backstop if a source ever reports its counts in something else.
-    """
-    if not metric.counts_steps:
-        return
-    units = {p.source.obs_unit for p in panels}
-    if len(units) > 1:
-        raise ValueError(
-            f"Metric '{metric.slug}' is counted in the source's observation unit "
-            f"({', '.join(sorted(units))}) — panels from different chart cadences "
-            "cannot share one colour scale. Plot one source per figure."
-        )
-
-
 def assert_one_reduction(panels: list[MetricPanel]) -> None:
+    # Should be branched depending on the PlotContext, more than one reduction can be used in some layouts
     """Panels under one shared colourbar must come from one reduction order.
 
     The orders compute different quantities from the same charts and are labelled with

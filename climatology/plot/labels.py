@@ -206,11 +206,11 @@ _DATE_OPS = {"first_above": "≥", "last_above": "≥", "first_below": "<"}
 _DURATION_OPS = {operator.ge: "≥", operator.le: "≤", operator.lt: "<"}
 
 
-def _kernel_threshold(kernel, field: str) -> str:
+def _kernel_threshold_label(kernel, field: str) -> str:
     """One kernel's threshold as ``FIELD op n/10``; a delta kernel reads ``early → late``."""
     if isinstance(kernel, ThresholdDateDelta):
-        return (f"{_kernel_threshold(kernel.early, field)} → "
-                f"{_kernel_threshold(kernel.late, field)}")
+        return (f"{_kernel_threshold_label(kernel.early, field)} → "
+                f"{_kernel_threshold_label(kernel.late, field)}")
     op = (_DATE_OPS[kernel.mode] if isinstance(kernel, ThresholdDate)
           else _DURATION_OPS[kernel.op])
     return f"{field} {op} {round(kernel.threshold[0] * 10)}/10"
@@ -238,7 +238,7 @@ def threshold_label(metric: Metric) -> str:
         # state (the per-metric crossing direction lives in the colourbar label).
         ct_t, thk_t = metric.kernel.threshold
         return f"developed ice (CT ≥ {round(ct_t * 10)}/10, thickness ≥ {thk_t} m)"
-    return _kernel_threshold(metric.kernel, field)
+    return _kernel_threshold_label(metric.kernel, field)
 
 
 def footer(fig, *, source_label: str, res_label: str, method: str, x: float = 0.01,

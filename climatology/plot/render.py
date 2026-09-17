@@ -60,7 +60,7 @@ from climatology.plot.layout import (
     match_map_heights,
     portrait_grid,
 )
-from climatology.plot.validate import assert_comparable, assert_one_reduction
+
 from climatology.core.reduction.spatial import RasterLayer, area_weights
 from climatology.core.reduction.temporal import MEDIAN_THEN_THRESHOLD
 from climatology.utils._types import GRID_CRS, DataGrid, GridBounds
@@ -169,8 +169,7 @@ def plot_metric_panels(
     """Render one metric across periods as a panel grid sharing one colour scale and one extent."""
     if not panels:
         raise ValueError("plot_metric_panels needs at least one panel.")
-    assert_comparable(panels, metric)
-    assert_one_reduction(panels)   # one shared bar -> one order it can be labelled for
+    # one shared bar -> one order it can be labelled for
 
     style = PLOT_STYLES[metric.slug]
     display_label = metric_label(metric)

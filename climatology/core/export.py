@@ -10,7 +10,8 @@ from operator import itemgetter
 from pathlib import Path
 import numpy as np
 
-from climatology.core.context import FetchResult, Result, RunContext
+from climatology.core.context import RunContext, Result, FetchResult
+from climatology.core.reduction.spatial import RasterLayer
 
 log = logging.getLogger(__name__)
 
@@ -96,6 +97,12 @@ def find_archived(ctx: RunContext) -> list[tuple[Path, dict]]:
     
     return [(arch_dir / m["raster"], m)
             for m in sorted(newest.values(), key=itemgetter("grid_res_m"), reverse=True)] # coarse first
+
+
+def load_archived(ctx: RunContext) -> tuple[RasterLayer, ...]:
+    """Every archived tier of one run as layers, coarsest grid first."""
+    return tuple(RasterLayer(np.load(npz)["values"], m["bounds"], m["grid_res_m"])
+                 for npz, m in find_archived(ctx))
 
 
 def save_figure(fig, png_path: Path, *, tight: bool = True) -> None:
