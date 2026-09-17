@@ -12,12 +12,22 @@ grid cell.
 from __future__ import annotations
 
 from dataclasses import dataclass
+from math import ceil
+from typing import TYPE_CHECKING, NamedTuple
 
 import geopandas as gpd
+import matplotlib.pyplot as plt
+from matplotlib.axes import Axes
+from matplotlib.figure import Figure
 from matplotlib.transforms import Bbox
 
-from climatology.plot.colors import DARK_COAST, DARK_LAND
+from climatology.plot.colors import DARK_COAST, DARK_LAND, DARK_OCEAN
+from climatology.plot.labels import DELTA, RAW
 from climatology.utils._types import GridBounds
+
+if TYPE_CHECKING:
+    from climatology.core.reduction.spatial import RasterLayer
+    from climatology.plot.build import PlotContext
 
 # --- panel grid: one metric across periods ----------------------------------
 
@@ -39,94 +49,114 @@ PANEL_LEFT = 0.07             # figure margins, kept symmetric so the suptitle c
 PANEL_RIGHT = 0.93
 PANEL_TOP = 0.88
 PANEL_BOTTOM = 0.12
-PANEL_CBAR_PAD = 0.09         # gap between the bottom row and the colourbar
+PANEL_WSPACE = 0.32           # gap between a map and its own histogram, and between panels
+PANEL_CBAR_IN = 0.55          # row height beyond the map for that map's own colourbar
+PANEL_CBAR_THICK = 0.010      # colourbar thickness (figure fraction)
+PANEL_CBAR_GAP = 0.028        # gap between a map's bottom edge and its own colourbar
 
 
-# --- source portrait: baseline & candidate over their change ----------------
+class Slot(NamedTuple):
+    """One panel's pair of axes: its map, and the distribution beside it."""
 
-# Fixed, symmetric map-block margins (figure fractions). Each map carries its *own*
-# horizontal colourbar, placed under it from its drawn box: a portrait can branch on
-# reduction order, and the orders phrase the quantity differently, so one bar per map is
-# what lets each say what its own map means. The bars live in the gaps the margins already
-# reserve — row 1's in the inter-row gap, the hero's in the bottom margin — so their
-# geometry never moves a map.
-PORTRAIT_LEFT, PORTRAIT_RIGHT = 0.13, 0.87
-PORTRAIT_TOP, PORTRAIT_BOTTOM = 0.9, 0.13
-PORTRAIT_WSPACE = 0.12
-PORTRAIT_HSPACE = 0.42        # gap between row 1 and row 2 (fraction of average row height)
-PORTRAIT_FIG_W_IN = 16.0      # figure width with no histogram columns (widened pro rata with them)
-PORTRAIT_CBAR_THICK = 0.010   # colourbar thickness (figure fraction)
-PORTRAIT_CBAR_GAP = 0.028     # gap between a map's bottom edge and its own colourbar
-PORTRAIT_DHIST_TICK_PT = 16   # the hero delta distribution's ticks, larger than a panel's
-PORTRAIT_DHIST_TICK_PAD = 10   # tick label offset, double a panel's — the larger type needs it
-PORTRAIT_DHIST_LABEL_PAD = 4  # ditto for the "% of area" caption under it
-# The histogram layout carries the enlarged ticks between a map and its distribution, so its
-# columns sit further apart than the plain layout's. The figure widens by the extra gap
-# (see `portrait_grid`), leaving the maps their own size.
-PORTRAIT_HIST_WSPACE = 0.20
+    map_ax: Axes
+    hist_ax: Axes
 
 
 @dataclass(frozen=True)
-class PortraitGrid:
-    """The portrait's mosaic, and the figure size derived from it."""
+class PanelAxes:
+    """A figure and the axes each panel draws into, indexed *by panel*, not by reading position.
 
-    mosaic: list[list[str]]
-    width_ratios: list[float]
-    hero_ratio: float
-    fig_w_in: float
-    fig_h_in: float
-    wspace: float
-
-    @property
-    def gridspec_kw(self) -> dict:
-        """Everything ``subplot_mosaic`` needs to place this grid in the fixed margins."""
-        return {"height_ratios": [1, self.hero_ratio], "width_ratios": self.width_ratios,
-                "wspace": self.wspace, "hspace": PORTRAIT_HSPACE,
-                "left": PORTRAIT_LEFT, "right": PORTRAIT_RIGHT,
-                "top": PORTRAIT_TOP, "bottom": PORTRAIT_BOTTOM}
-
-
-def portrait_grid(extent: GridBounds, *, distribution: bool) -> PortraitGrid:
-    """Lay out the portrait — two value maps over a hero delta — and size the figure to it.
-
-    The delta is the hero panel: the value maps share the top row, the delta spans a taller
-    bottom row. With distributions, each map gains a narrow histogram column to its right and
-    the hero spans every column but the last.
-
-    Both the hero's height and the figure's are *derived*, never floated: the maps hold an
-    equal aspect, so a height that did not match the block would leave the region padded out
-    with dead space instead of filling it.
+    Carries the extent every panel shares, since the renderer needs it for the basemap read
+    and for clamping each map's view.
     """
+
+    fig: Figure
+    slots: tuple[Slot, ...]
+    extent: GridBounds
+
+
+def _centre_last_row(axes, n: int, ncols: int) -> None:
+    """Shift a partial final row so its panels sit centred under the full rows above.
+
+    The gridspec cannot express a half-column offset on a ``[1, hist] * ncols`` column grid,
+    so the shift is applied to the settled boxes instead — the same post-hoc placement
+    ``balance_margins`` and ``match_map_heights`` use. The stride is *measured* off the first
+    row rather than re-derived from wspace algebra; a partial last row only ever exists when
+    there are two or more rows, so a full row is always there to measure.
+    """
+    in_last = (n - 1) % ncols + 1
+    spare = ncols - in_last
+    if not spare:
+        return
+    stride = axes[0, 2].get_position().x0 - axes[0, 0].get_position().x0
+    shift = spare * stride / 2.0
+    for ax in axes[-1, :2 * in_last]:
+        box = ax.get_position()
+        ax.set_position([box.x0 + shift, box.y0, box.width, box.height])
+
+
+def panel_grid(extent: GridBounds, n: int) -> PanelAxes:
+    """Lay ``n`` equal panels out in reading order, each a map with its distribution beside it.
+
+    Row height follows the region's own aspect, so the cells hug the (equal-aspect) maps
+    instead of padding them out with dead space. ``ncols`` is capped at ``n`` so a lone panel
+    fills the width rather than sitting half-empty in a two-column row, and a partial final
+    row is centred under the rows above.
+    """
+    ncols = min(n, PANEL_NCOLS)
+    nrows = ceil(n / ncols)
     xmin, ymin, xmax, ymax = extent
-    ncols = 4 if distribution else 2
-    width_ratios = [1.0, PANEL_HIST_WIDTH] * 2 if distribution else [1.0, 1.0]
-    span = ncols - 1 if distribution else ncols          # columns the hero covers
-    # Candidate first, baseline second — each map followed by its own histogram column.
-    mosaic = ([["cand", "chist", "base", "bhist"], ["delta", "delta", "delta", "dhist"]]
-              if distribution else [["cand", "base"], ["delta", "delta"]])
+    map_w_in = PANEL_WIDTH_IN / (1.0 + PANEL_HIST_WIDTH)
+    row_h_in = (map_w_in * (ymax - ymin) / (xmax - xmin)
+                + PANEL_DECORATION_IN + PANEL_CBAR_IN)
 
-    # wspace is a fraction of the *mean* column width, so one gap is that fraction of the
-    # ratio total over the column count.
-    wspace = PORTRAIT_HIST_WSPACE if distribution else PORTRAIT_WSPACE
-    gap = wspace * sum(width_ratios) / ncols
-    block_ratio = sum(width_ratios) + (ncols - 1) * gap
-    # The hero spans its columns *and* the gaps between them, so it needs a matching height
-    # to fill that width at equal aspect.
-    hero_ratio = sum(width_ratios[:span]) + (span - 1) * gap
-    # Histogram columns — and the wider gaps they sit in — widen the figure by exactly the
-    # width they add, leaving the maps their own size rather than squeezing them. The
-    # denominator is the plain two-map block, the reference both layouts are sized against.
-    fig_w_in = PORTRAIT_FIG_W_IN * block_ratio / (2.0 + PORTRAIT_WSPACE)
+    fig, axes = plt.subplots(
+        nrows, 2 * ncols, figsize=(PANEL_WIDTH_IN * ncols, row_h_in * nrows), squeeze=False,
+        gridspec_kw={"width_ratios": [1.0, PANEL_HIST_WIDTH] * ncols,
+                     "wspace": PANEL_WSPACE, "hspace": PANEL_HSPACE,
+                     "left": PANEL_LEFT, "right": PANEL_RIGHT,
+                     "top": PANEL_TOP, "bottom": PANEL_BOTTOM},
+    )
+    fig.patch.set_facecolor(DARK_OCEAN)
 
-    # column width -> row-1 height -> the row stack -> the usable band between the margins.
-    col_w_in = (PORTRAIT_RIGHT - PORTRAIT_LEFT) * fig_w_in / block_ratio
-    # stack height = row 1 + hero + the hspace gap (a fraction of the average row height).
-    stack_h_in = ((1 + hero_ratio) * (1 + PORTRAIT_HSPACE / 2)
-                  * col_w_in * (ymax - ymin) / (xmax - xmin))
-    return PortraitGrid(mosaic=mosaic, width_ratios=width_ratios, hero_ratio=hero_ratio,
-                        fig_w_in=fig_w_in,
-                        fig_h_in=stack_h_in / (PORTRAIT_TOP - PORTRAIT_BOTTOM),
-                        wspace=wspace)
+    for spare in axes.ravel()[2 * n:]:
+        spare.set_visible(False)
+    _centre_last_row(axes, n, ncols)
+
+    return PanelAxes(
+        fig=fig,
+        slots=tuple(Slot(axes[i // ncols, 2 * (i % ncols)],
+                         axes[i // ncols, 2 * (i % ncols) + 1]) for i in range(n)),
+        extent=extent,
+    )
+
+
+# Which reading position each panel occupies; ``None`` is reading order. A delta figure puts
+# the candidate left and the baseline right, so its three panels read (1, 0, 2). Confining the
+# permutation here is what lets every other stage stay indexed by panel.
+_ORDERS: dict[str, tuple[int, ...] | None] = {RAW: None, DELTA: (1, 0, 2)}
+
+
+def _panel_count(ctx: PlotContext) -> int:
+    """Panels the figure draws: one per run, plus the difference a delta appends."""
+    return len(ctx.runs) + (ctx.type == DELTA)
+
+
+def layout(ctx: PlotContext, rasters: list[tuple[RasterLayer, ...]]) -> PanelAxes:
+    """The figure and its per-panel axes: boxes laid out in reading order, assigned in panel order.
+
+    The figure's extent is the *coarsest* tier of any panel. Every finer tier nests inside it
+    by construction — ``Tier._domain`` intersects the region with the coastline buffer for the
+    fine tier only, and ``build_grid`` takes the wet bbox verbatim — and every panel shares a
+    region, so the first stack's first layer already bounds the whole figure. Taking the fine
+    tier's instead would crop the coarse tier's offshore band off the map (~9% of the vertical
+    span on manicouagan).
+    """
+    grid = panel_grid(rasters[0][0].bounds, _panel_count(ctx))
+    order = _ORDERS[ctx.type]
+    if order is None:
+        return grid
+    return PanelAxes(grid.fig, tuple(grid.slots[p] for p in order), grid.extent)
 
 
 # --- axes framing and post-draw geometry -------------------------------------

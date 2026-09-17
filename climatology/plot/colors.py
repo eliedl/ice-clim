@@ -2,11 +2,19 @@
 
 from __future__ import annotations
 
+from dataclasses import dataclass
+from typing import TYPE_CHECKING
+
 import matplotlib.colors as mcolors
 import numpy as np
 from matplotlib.colors import Colormap, LinearSegmentedColormap, Normalize
 
+from climatology.plot.labels import DELTA, RAW
 from climatology.utils.arithmetics import percentile_range
+
+if TYPE_CHECKING:
+    from climatology.core.reduction.spatial import RasterLayer
+    from climatology.plot.build import PlotContext
 
 # Dark "Mapbox-style" theme. Ocean = axes background (shows through NaN /
 # ice-free cells); land polygons are painted on top so they cover dry cells only.
@@ -101,21 +109,70 @@ def build_cmap(
 
 
 # --- value-range scales -----------------------------------------------------
-# Each returns the tick *positions* only; formatting them into labels is the
+# Each carries the tick *positions* only; formatting them into labels is the
 # caller's business, since what a value means (a date, a day count, a signed
 # change) is not something a palette knows.
 
-def metric_scale(values: np.ndarray) -> tuple[Colormap, Normalize, list[float]]:
-    """Sequential colour scale + colourbar tick positions anchored on the value range (drops near-coast extremas)."""
+@dataclass(frozen=True)
+class Scale:
+    """One panel's colour mapping: the ramp, the range it is anchored on, and its tick positions."""
+
+    cmap: Colormap
+    norm: Normalize
+    ticks: list[float]
+
+
+def metric_scale(values: np.ndarray) -> Scale:
+    """Sequential colour scale anchored on the value range (drops near-coast extremas)."""
     vmin, vmax = percentile_range(values, low=1, high=100)
     cmap, norm = build_cmap("cool_to_warm_7", vmin=vmin, vmax=vmax)
-    return cmap, norm, list(np.linspace(vmin, vmax, 6))
+    return Scale(cmap, norm, list(np.linspace(vmin, vmax, 6)))
 
 
-def delta_scale(values: np.ndarray) -> tuple[Colormap, Normalize, list[float]]:
-    """Diverging colour scale symmetric about zero + its colourbar tick positions."""
+def delta_scale(values: np.ndarray) -> Scale:
+    """Diverging colour scale symmetric about zero, so a colour's direction reads as the sign of the change."""
     finite = values[np.isfinite(values)]
     vabs = float(np.percentile(np.abs(finite), 99)) if finite.size else DELTA_FALLBACK_VABS
     vabs = max(vabs, DELTA_FALLBACK_VABS)   # never collapse to a zero-width scale
     cmap, norm = build_cmap(DELTA_PALETTE, vmin=-vabs, vmax=vabs)
-    return cmap, norm, list(np.linspace(-vabs, vabs, 5))
+    return Scale(cmap, norm, list(np.linspace(-vabs, vabs, 5)))
+
+
+# --- scale policy: which panels pool into one scale --------------------------
+# Keyed on the figure's type. A delta figure's trailing panel is a difference and cannot
+# share a sequential ramp with the values it was computed from.
+
+def _pool(stacks: list[tuple[RasterLayer, ...]]) -> np.ndarray:
+    """Every cell of every tier of every stack — what a shared scale is anchored on.
+
+    Pooling across tiers as well as panels is deliberate: the fine tier's coastal cells are
+    exactly the ones a coarse-only range would drop off the scale.
+    """
+    return np.concatenate([layer.values.ravel() for stack in stacks for layer in stack])
+
+
+def _one_sequential(rasters: list[tuple[RasterLayer, ...]]) -> list[Scale]:
+    """One sequential scale over every panel: a colour means the same value figure-wide."""
+    return [metric_scale(_pool(rasters))] * len(rasters)
+
+
+def _sequential_plus_delta(rasters: list[tuple[RasterLayer, ...]]) -> list[Scale]:
+    """Value panels on one shared sequential scale; the trailing difference on its own diverging one.
+
+    Pooling baseline and candidate together is the point of the figure: the shift between
+    them then reads as a colour change, not as two independently stretched ramps.
+    """
+    *values, delta = rasters
+    return [metric_scale(_pool(values))] * len(values) + [delta_scale(_pool([delta]))]
+
+
+_SCALES = {RAW: _one_sequential, DELTA: _sequential_plus_delta}
+
+
+def style(ctx: PlotContext, rasters: list[tuple[RasterLayer, ...]]) -> list[Scale]:
+    """One ``Scale`` per raster stack, index-aligned — a delta figure's last stack is the difference.
+
+    Panels sharing a scale share one frozen instance, so "same colour, same value" holds by
+    identity rather than by two computations that happen to agree.
+    """
+    return _SCALES[ctx.type](rasters)

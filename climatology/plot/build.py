@@ -3,13 +3,13 @@
 The DAG mirrors ``climatology/pipeline.py``: a frozen context resolved first, one guard
 stage before any raster is read, then the work.
 
-    build() -> _resolve -> _validate -> _fetch -> _render -> PlotProduct
-               PlotContext  manifests   rasters   dispatch
+    build() -> _resolve -> _validate -> _fetch -> label -> style -> layout -> render
+               PlotContext  guards      rasters   text    colour   axes      Figure
 
-``_validate`` reads each run's ``.json`` manifest and rejects both an incoherent plot
-configuration and an incoherent archive; ``_fetch`` then loads only the ``.npz`` files those
-manifests already located. Splitting it that way keeps the cheap check ahead of the megabytes,
-and leaves each stage one concern: locate-and-check, load, draw.
+``_validate`` rejects an incoherent configuration before a raster is read; ``_fetch`` then
+loads the archive and *is* what fixes the panel list — the three stages after it each resolve
+one concern over that list and return it index-aligned, so a panel's place in the figure is
+its place in ``rasters``.
 
 Two callers, one path — the CLI here, and ``pipeline`` after it has emitted a run's archive.
 Neither hands in rasters: a figure is always built from what is on disk, so a plot is
@@ -24,9 +24,13 @@ of ``--period``, ``--source``, ``--reduction`` and it becomes the axis of compar
 pinned coordinates broadcast across it. Run the sweep first; every run named must already
 be archived.
 
+The figure's shape is not configured, it is *derived*: ``--type raw`` draws one panel per run,
+``--type delta`` draws the two runs it differences and their change. A partial final row is
+centred under the rows above it.
+
     # one run, one map: the same figure the pipeline emits per run
     python -m climatology.plot.build freeze_up_date --region manicouagan \\
-        --period 2011-2020 --source sgrda --layout single --no-distribution \\
+        --period 2011-2020 --source sgrda \\
         --out freeze_up_manicouagan_2011-2020.png
 
     # every period side by side on one colour scale (source co-varies, so both branch)
@@ -35,25 +39,18 @@ be archived.
         --source sgrdr:sgrdr:sgrdr:sgrda \\
         --out freeze_up_manicouagan_periods.png
 
-    # signed change, SGRDR against SGRDR — chart type held fixed, since data
-    # reliability is chart-type dependent (Angela Cheng/CIS, pers. comm. 2026).
-    # One comparison is one panel, hence `single`.
+    # baseline, candidate and their signed change — SGRDR against SGRDR, chart type held
+    # fixed since data reliability is chart-type dependent (Angela Cheng/CIS, pers. comm. 2026)
     python -m climatology.plot.build breakup_date --region manicouagan \\
-        --type delta --layout single --source sgrdr \\
+        --type delta --source sgrdr \\
         --period 1981-2010:2011-2020 \\
         --out breakup_manicouagan_delta.png
 
-    # baseline / candidate / change, one portrait
-    python -m climatology.plot.build breakup_date --region manicouagan \\
-        --type delta --layout portrait --no-distribution --source sgrdr \\
-        --period 1981-2010:2011-2020 \\
-        --out breakup_manicouagan_portrait.png
-
     # branch on reduction instead: same region, period and source, two estimators.
-    # "median date of break-up" against "date the median CT crosses 4/10" — the delta
+    # "median date of break-up" against "date the median CT crosses 4/10" — the change
     # panel maps where the two orders disagree, in days.
     python -m climatology.plot.build breakup_date --region manicouagan \\
-        --type delta --layout portrait \\
+        --type delta \\
         --period 1991-2020 --source sgrdr --reduction mediantt:ttmedian \\
         --out breakup_manicouagan_reduction.png
 """
@@ -66,16 +63,10 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import TYPE_CHECKING
 
-import numpy as np
-
-from climatology.plot.render import (
-    DeltaPanel,
-    MetricPanel,
-    plot_metric,
-    plot_metric_panels,
-    plot_source_portrait,
-)
+from climatology.plot.render import render
+from climatology.plot.colors import style
 from climatology.plot.labels import COORDS, DELTA, RAW, branch, label, run_label
+from climatology.plot.layout import layout
 from climatology.core.context import RunContext
 from climatology.core.metrics import Metric
 from climatology.core.reduction.spatial import RasterLayer
@@ -83,14 +74,11 @@ from climatology.core.reduction.temporal import MEDIAN_THEN_THRESHOLD, Reduction
 from climatology.core.regions import Region
 from climatology.core.export import load_archived
 from climatology.services.sources import ChartSource
-from climatology.core.context import Result
 
 if TYPE_CHECKING:
     from matplotlib.figure import Figure
 
 log = logging.getLogger(__name__)
-
-SINGLE, MULTI, PORTRAIT = "single", "multi", "portrait"
 
 GRID_MATCH_CELLS = 0.01   # bounds within 1/100 of a cell are the same grid
 
@@ -109,8 +97,6 @@ class PlotContext:
 
     runs: tuple[RunContext, ...]
     type: str = RAW                 # raw | delta
-    layout: str = MULTI             # single | multi | portrait
-    distribution: bool = True
 
     def assert_shared_regions(ctx: PlotContext) -> None:
         """Region is pinned across the figure — panels that do not share a grid cannot be
@@ -141,38 +127,21 @@ class PlotContext:
     def metric(self) -> Metric:
         return self.runs[0].metric
 
-    @property
-    def key(self) -> tuple[str, str, bool]:
-        """The renderer this configuration selects."""
-        return (self.type, self.layout, self.distribution)
-
-
-@dataclass(frozen=True)
-class PlotProduct:
-    """A rendered figure and how it must be written.
-
-    ``tight`` is a property of the layout, not of the caller: a tight bbox crops each side to
-    its own artists, which pulls a centred suptitle off-centre on the multi-map layouts.
-    """
-
-    figure: Figure
-    tight: bool
 
 # --- stages -----------------------------------------------------------------
 
-def _resolve(runs: tuple[RunContext, ...], *,
-             type: str, layout: str, distribution: bool) -> PlotContext:
-    """Bind the runs to a layout, and announce the figure (mirrors ``pipeline._resolve``).
+def _resolve(runs: tuple[RunContext, ...], *, type: str) -> PlotContext:
+    """Bind the runs to a figure type, and announce it (mirrors ``pipeline._resolve``).
 
     ``ctx.metric`` is the first run's — so it is bound to that run's reduction. Everything the
     metric is asked for downstream — its title, its tick formatter, whether it counts steps —
     is order-independent; the order-dependent labels are taken per panel, from that panel's
     own reduction.
     """
-    ctx = PlotContext(runs=runs, type=type, layout=layout, distribution=distribution)
-    log.info("Figure: %s %s/%s | Metric: %s | Region: %s | Branching on: %s | Runs: %s",
-             ctx.type, ctx.layout, "dist" if ctx.distribution else "nodist",
-             ctx.metric.slug, ctx.region.slug, ", ".join(branch(runs)) or "nothing",
+    ctx = PlotContext(runs=runs, type=type)
+    log.info("Figure: %s | Metric: %s | Region: %s | Branching on: %s | Runs: %s",
+             ctx.type, ctx.metric.slug, ctx.region.slug,
+             ", ".join(branch(runs)) or "nothing",
              ", ".join(run_label(run) for run in ctx.runs))
     return ctx
 
@@ -199,81 +168,20 @@ def _fetch(ctx: PlotContext) -> list[tuple[RasterLayer, ...]]:
     return rasters
 
 
-def _render(ctx: PlotContext, results: list[Result]) -> PlotProduct:
-    """Draw the figure this configuration selects — the one dispatch seam over the renderers."""
-    renderer = RENDERERS[ctx.key]
-    return PlotProduct(figure=renderer.draw(ctx, panels), tight=renderer.tight)
+def build_figure(runs: tuple[RunContext, ...], *, type: str = RAW) -> Figure:
+    """Build one figure from the archive; the caller writes it via ``export.save_figure``.
 
-
-def build_figure(runs: tuple[RunContext, ...], *,
-          type: str = RAW, layout: str = MULTI,
-          distribution: bool = True) -> PlotProduct:
-    """Build one figure from the archive; the caller writes it via ``export.save_figure``."""
-    ctx = _resolve(runs, type=type, layout=layout, distribution=distribution)
+    The four stages after the guard each resolve one concern over the same panel list, and
+    each returns a list indexed by panel: the rasters, their text, their colour, and the axes
+    they draw into. ``render`` walks the four together, so panel order *is* raster order.
+    """
+    ctx = _resolve(runs, type=type)
     _validate(ctx)
     rasters = _fetch(ctx)
     labels = label(ctx, rasters)
-    return _render(ctx, results)
-
-
-
-# --- renderer registry ------------------------------------------------------
-# One row per (type, layout, distribution) the archive can actually produce. A combination
-# absent here is not silently approximated — `_validate` names it and the available ones.
-
-@dataclass(frozen=True)
-class Renderer:
-    """How one configuration turns fetched panels into a figure."""
-
-    draw: object                    # (ctx, panels) -> Figure
-    n_runs: int | None              # required run count; None = any
-    tight: bool = False
-
-
-def _draw_single(ctx: PlotContext, panels: list[MetricPanel]) -> Figure:
-    """One run, one map, no distribution — the per-run product the pipeline emits."""
-    panel = panels[0]
-    return plot_metric([(l.values, l.bounds) for l in panel.layers],
-                       metric=ctx.metric, region_display=ctx.region.display,
-                       res_label=_res_label(panel), period_slug=panel.period,
-                       source_label=panel.source.display_label)
-
-
-def _draw_multi(ctx: PlotContext, panels: list[MetricPanel]) -> Figure:
-    """Every run side by side on one colour scale and one extent."""
-    return plot_metric_panels(panels, metric=ctx.metric,
-                              region_display=ctx.region.display,
-                              res_label=_res_label(panels[0]))
-
-
-def _draw_portrait(ctx: PlotContext, panels: list[MetricPanel]) -> Figure:
-    """Baseline and candidate over their change — two runs, two scales, one figure."""
-    base, cand = panels
-    return plot_source_portrait(base, cand, _delta_panel(base, cand),
-                                metric=ctx.metric,
-                                region_display=ctx.region.display,
-                                res_label=_res_label(base),
-                                subtitle=_subtitle(ctx),
-                                distribution=ctx.distribution)
-
-
-RENDERERS: dict[tuple[str, str, bool], Renderer] = {
-    (RAW,   SINGLE,   False): Renderer(_draw_single,   n_runs=1,    tight=True),
-    (RAW,   MULTI,    True):  Renderer(_draw_multi,    n_runs=None),
-    (DELTA, PORTRAIT, False): Renderer(_draw_portrait, n_runs=2),
-    (DELTA, PORTRAIT, True):  Renderer(_draw_portrait, n_runs=2),
-}
-
-
-def _delta_panel(base: MetricPanel, cand: MetricPanel) -> DeltaPanel:
-    """Candidate − baseline per tier, on the shared region+tier grid (direct subtraction)."""
-    return DeltaPanel(
-        title=f"{cand.title} − {base.title}",
-        layers=[RasterLayer(values=c.values - b.values, bounds=c.bounds, res_m=c.res_m)
-                for b, c in zip(base.layers, cand.layers)],
-        reductions=(base.reduction, cand.reduction),
-    )
-
+    scales = style(ctx, rasters)
+    panels = layout(ctx, rasters)
+    return render(rasters, labels, scales, panels)
 
 
 
@@ -338,10 +246,6 @@ def _parse_args() -> argparse.Namespace:
                         f"branch. Choices: {', '.join(Reduction.slugs())}.")
     p.add_argument("--type", choices=(RAW, DELTA), default=RAW,
                    help="Absolute values, or the signed change between products.")
-    p.add_argument("--layout", choices=(SINGLE, MULTI, PORTRAIT), default=MULTI,
-                   help="One map, a panel grid, or a baseline/candidate/change portrait.")
-    p.add_argument("--no-distribution", action="store_false", dest="distribution",
-                   help="Drop the area-weighted value distribution beside each map.")
     p.add_argument("--out", type=Path, required=True, metavar="PNG",
                    help="Where to write the figure.")
     args = p.parse_args()
@@ -364,9 +268,8 @@ def main() -> None:
                         format="%(asctime)s %(levelname)s %(message)s")
     args = _parse_args()
     runs = _broadcast(args.region, args.metric, args.period, args.source, args.reduction)
-    product = build_figure(runs, type=args.type,
-                    layout=args.layout, distribution=args.distribution)
-    save_figure(product.figure, args.out, tight=product.tight)
+    figure = build_figure(runs, type=args.type)
+    save_figure(figure, args.out)
 
 
 if __name__ == "__main__":

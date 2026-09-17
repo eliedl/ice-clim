@@ -74,10 +74,10 @@ def _plot(ctx: RunContext) -> None:
     artefact a later CLI invocation would produce.
     """
 
-    product = build_figure((ctx,), type="raw", layout="single", distribution=False)
+    figure = build_figure((ctx,), type="raw")
 
     path = product_path(ctx, ext="png")
-    save_figure(product.figure, path, tight=product.tight)
+    save_figure(figure, path)
 
 
 def run(metric: str, region: str, source: str, period: str,
