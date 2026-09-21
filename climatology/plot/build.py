@@ -233,11 +233,11 @@ def _parse_args() -> argparse.Namespace:
     p.add_argument("metric", choices=Metric.slugs(), metavar="METRIC")
     p.add_argument("--region", choices=Region.slugs(), required=True, metavar="REGION",
                    help="Pinned across the figure — panels must overlay on one grid.")
-    p.add_argument("--period", type=_axis("period"), default=("2011-2020",),
+    p.add_argument("--period", type=_axis("period"), default=("1991-2020",),
                    metavar="YYYY-YYYY[:...]",
                    help="Climatology period(s) in winters; colon-separated to branch.")
     p.add_argument("--source", type=_axis("source", tuple(ChartSource.slugs())),
-                   default=("sgrda",), metavar="SOURCE[:...]",
+                   default=("sgrdr",), metavar="SOURCE[:...]",
                    help=f"Chart table(s); colon-separated to branch. "
                         f"Choices: {', '.join(ChartSource.slugs())}.")
     p.add_argument("--reduction", type=_axis("reduction", tuple(Reduction.slugs())),

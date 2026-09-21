@@ -10,8 +10,10 @@ from __future__ import annotations
 import pytest
 
 from climatology.plot.labels import (
-    PLOT_STYLES,
+    FIELD_STYLES,
+    METRIC_TITLES,
     REDUCTION_STYLES,
+    UNITS,
     colorbar_labels,
     metric_title,
 )
@@ -32,7 +34,19 @@ def _label(slug: str, reduction: str) -> str:
 
 
 def test_plot_styles_cover_every_metric():
-    assert set(PLOT_STYLES) == set(Metric.slugs())
+    assert set(METRIC_TITLES) == set(Metric.slugs())
+
+
+def test_units_cover_every_kernel():
+    """The quantity-noun, the ticks and the axis unit all come off the kernel type — a kernel without a row cannot be labelled at all."""
+    assert {type(Metric.build(slug).kernel) for slug in Metric.slugs()} <= set(UNITS)
+
+
+def test_field_styles_cover_every_conversion():
+    """Each burned value column needs a name and a unit for its threshold, or a crossing renders the wrong quantity."""
+    for slug in Metric.slugs():
+        metric = Metric.build(slug)
+        assert len(FIELD_STYLES[metric.conversion]) == len(metric.conversion.value_cols)
 
 
 def test_reduction_styles_cover_every_reduction():
@@ -42,19 +56,19 @@ def test_reduction_styles_cover_every_reduction():
 @pytest.mark.parametrize(("slug", "reduction"), SPECS)
 def test_title_is_independent_of_reduction(slug: str, reduction: str):
     """A break-up is a break-up whichever order computed it — the title names the metric, not the method."""
-    assert metric_title(slug) == PLOT_STYLES[slug].title
+    assert metric_title(slug) == METRIC_TITLES[slug]
 
 
 def test_titles_are_unique():
     """Two metrics must not share a title, or a figure can't be told apart (the season_duration pair)."""
-    titles = [style.title for style in PLOT_STYLES.values()]
+    titles = list(METRIC_TITLES.values())
     assert len(titles) == len(set(titles))
 
 
 @pytest.mark.parametrize("slug", Metric.slugs())
 def test_title_states_the_value_type(slug: str):
     """Count metrics say what the number is ('duration' / 'lag'); date metrics are named for the event itself, so a literal 'date' would be redundant (title reformat, e8b5cce)."""
-    title = PLOT_STYLES[slug].title.lower()
+    title = METRIC_TITLES[slug].lower()
     if slug.endswith("_date"):
         assert "date" not in title
     else:
@@ -63,8 +77,8 @@ def test_title_states_the_value_type(slug: str):
 
 def test_both_ice_season_titles_carry_the_threshold():
     """season_duration and season_duration_10 differ only by threshold, so the title must show it."""
-    assert "4/10" in PLOT_STYLES["season_duration"].title
-    assert "1/10" in PLOT_STYLES["season_duration_10"].title
+    assert "4/10" in METRIC_TITLES["season_duration"]
+    assert "1/10" in METRIC_TITLES["season_duration_10"]
 
 
 @pytest.mark.parametrize(("slug", "reduction"), SPECS)
