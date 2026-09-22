@@ -134,7 +134,8 @@ def render(rasters: list[tuple[RasterLayer, ...]], labels: list[Label],
               in zip(panels.slots, rasters, labels, scales, strict=True)]
 
     # Figure-level text is identical on every label; drawn once, off the first.
-    fig.suptitle(labels[0].figure_title, fontsize=SUPTITLE_PT, color=DARK_FG)
+    fig.suptitle(labels[0].figure_title, wrap=True, x=0.5,
+                  ha="center", ma="center", fontsize=SUPTITLE_PT, color=DARK_FG)
 
     fig.canvas.draw()
     match_map_heights(fig, panels.slots)
