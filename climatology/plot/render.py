@@ -107,7 +107,8 @@ def _draw_panel(slot: Slot, layers: tuple[RasterLayer, ...], lab: Label, scale: 
     draw_basemap_labels(ax, tile, zorder=top + 2)   # names ride above the coastline
 
     ax.set_title(lab.axis_title, fontsize=PANEL_TITLE_PT, pad=6, color=DARK_FG)
-    ax.tick_params(labelsize=PANEL_TICK_PT)
+    ax.tick_params(labelbottom=False, labelleft=False,
+                bottom=False, left=False, top=False, right=False)
     style_axes(ax)
 
     draw_distribution(hax, layers, scale,
