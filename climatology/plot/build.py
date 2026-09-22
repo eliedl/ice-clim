@@ -65,7 +65,7 @@ from typing import TYPE_CHECKING
 
 from climatology.plot.render import render
 from climatology.plot.colors import style
-from climatology.plot.labels import COORDS, DELTA, RAW, branch, label, run_label
+from climatology.plot.labels import COORDS, DELTA, RAW, label
 from climatology.plot.layout import layout
 from climatology.core.context import RunContext
 from climatology.core.metrics import Metric
@@ -139,10 +139,11 @@ def _resolve(runs: tuple[RunContext, ...], *, type: str) -> PlotContext:
     own reduction.
     """
     ctx = PlotContext(runs=runs, type=type)
-    log.info("Figure: %s | Metric: %s | Region: %s | Branching on: %s | Runs: %s",
+    # Each run spelled as its own slugs, in the order the archive path spells them, so a log
+    # line greps straight against ``output/``.
+    log.info("Figure: %s | Metric: %s | Region: %s | Runs: %s",
              ctx.type, ctx.metric.slug, ctx.region.slug,
-             ", ".join(branch(runs)) or "nothing",
-             ", ".join(run_label(run) for run in ctx.runs))
+             " | ".join(" ".join(run.describe()) for run in ctx.runs))
     return ctx
 
 def _validate(ctx: PlotContext) -> None:

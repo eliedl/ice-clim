@@ -39,13 +39,14 @@ if TYPE_CHECKING:
 
 RAW, DELTA = "raw", "delta"
 
-# Every coordinate a title can name, in reading order.
+# Every coordinate a title can name, in reading order — which is also the order
+# ``RunContext.describe`` returns them in; ``branch`` zips the two together.
 TITLE_ORDER = ("region", "metric", "period", "source", "reduction")
 
 # The subset a figure can branch on — ``TITLE_ORDER`` less the two ``_validate`` pins.
 # Region is pinned because panels that do not share a grid cannot overlay, let alone be
 # differenced; metric because one colour scale can only mean one quantity. Pinned
-# coordinates never reach ``branch``, so they always read in the figure title.
+# coordinates never join the branch, so they always read in the figure title.
 COORDS = ("period", "source", "reduction")
 
 _CREDIT = "© Mapbox © OpenStreetMap contributors"
@@ -69,56 +70,24 @@ STAT_TT = "stat_then_threshold"
 TT_STAT = "threshold_then_stat"
 
 
-# The editorial half of a metric's naming — the one judgement call left, since a colourbar
-# label is assembled from the kernel itself (see ``colorbar_labels``) and so cannot claim a
-# crossing the kernel does not compute. A title names the *event*; the colourbar names the
-# *quantity*, which is why the threshold reads in both.
-METRIC_TITLES: dict[str, str] = {
-    "freeze_up_date":               "Freeze-up",
-    "breakup_date":                 "Break-up",
-    "first_occurrence_date":        "First occurrence",
-    "last_occurrence_date":         "Last occurrence",
-    "closing_date":                 "Season closing (8/10)",
-    "opening_date":                 "Season opening (8/10)",
-    "formation_lag":                "Formation lag",
-    "melt_lag":                     "Melt lag",
-    "season_duration":              "Season duration (4/10)",
-    "season_duration_10":           "Season duration (1/10)",
-    "storm_exposure_duration":      "Storm exposure duration",
-    "landfast_freeze_up_date":      "Landfast freeze-up",
-    "landfast_breakup_date":        "Landfast break-up",
-    "landfast_duration":            "Landfast ice duration",
-    "landfast_exposure":            "Landfast absence duration",
-    "developed_ice_freeze_up_date": "Developed ice freeze-up",
-    "developed_ice_breakup_date":   "Developed ice break-up",
-    "developed_ice_duration":       "Developed ice duration",
-    "developed_ice_exposure":       "Developed ice absence duration",
-}
-
-
 @dataclass(frozen=True)
 class ReductionStyle:
-    """Presentation for one reduction order: the label template it reads, the name of its statistic, and its own display name."""
+    """Colourbar grammar for one reduction order: the label template it reads, and the name of its statistic."""
 
     order: str   # which ``PlotStyle.label`` template applies
     stat: str    # fills that template's {stat} / {Stat} slots
-    label: str   # the slug as it reads in a title
 
 
-# Keyed by reduction slug: how an order *reads*, kept out of the reducer, which only
-# needs to know how it computes. ``Reduction.slugs()`` is the closed set this must cover.
+# Keyed by reduction slug: how an order's *colourbar* reads, kept out of the reducer, which
+# only needs to know how it computes. ``REDUCTION_LABELS`` below is the same closed set under
+# its title concern; ``Reduction.slugs()`` is the set both must cover.
 REDUCTION_STYLES: dict[str, ReductionStyle] = {
-    "mediantt": ReductionStyle(STAT_TT, "median", "Median-then-threshold"),
-    "meantt": ReductionStyle(STAT_TT, "mean", "Mean-then-threshold"),
-    "ttmedian": ReductionStyle(TT_STAT, "median", "Threshold-then-median"),
-    "ttmean": ReductionStyle(TT_STAT, "mean", "Threshold-then-mean"),
-    "ttmpo": ReductionStyle(TT_STAT, "MPO mean", "Threshold-then-MPO-mean"),
+    "mediantt": ReductionStyle(STAT_TT, "median"),
+    "meantt": ReductionStyle(STAT_TT, "mean"),
+    "ttmedian": ReductionStyle(TT_STAT, "median"),
+    "ttmean": ReductionStyle(TT_STAT, "mean"),
+    "ttmpo": ReductionStyle(TT_STAT, "MPO mean"),
 }
-
-
-def metric_title(metric: str) -> str:
-    """The metric's display name — the figure title, independent of reduction order."""
-    return METRIC_TITLES[metric]
 
 
 # --- the colourbar grammar ---------------------------------------------------
@@ -273,62 +242,132 @@ def colorbar_labels(metric: Metric) -> tuple[str, Callable[[list[float]], list[s
 
 
 # --- naming -----------------------------------------------------------------
-# Which coordinates distinguish a panel depends on which one the figure branched on, so the
+# Which coordinates distinguish a panel depends on which ones the figure branched on, so the
 # titles are decided here and handed to the renderers as data. Varying coordinates title the
-# panels; pinned ones are stated once, in the figure title.
+# panels; the rest are stated once, in the figure title.
+#
+# One table per coordinate whose values are a closed set: the label is the whole editorial
+# content of a title, so a new region, source or reduction costs a row and no code. An
+# unmapped slug raises KeyError at label time rather than mislabelling — the same stance
+# ``conversion.py`` takes on an unmapped SIGRID-3 code. A period has an open set of values
+# and already reads as a label ("2011-2020"), so it has no table; see ``_as_label``.
 
-def _coords(run: RunContext) -> dict[str, str]:
-    """A run's branchable coordinates, as the slugs the CLI names them by."""
-    return {"period": run.period.slug, "source": run.source.slug,
-            "reduction": run.metric.reduction_slug}
+REGION_LABELS: dict[str, str] = {
+    "golfe":                      "Golfe du Saint-Laurent",
+    "avignon":                    "Avignon",
+    "bonaventure":                "Bonaventure",
+    "rocher-perce":               "Le Rocher-Percé",
+    "cote-de-gaspe":              "La Côte-de-Gaspé",
+    "haute-gaspesie":             "La Haute-Gaspésie",
+    "iles-de-la-madeleine-mrc":   "Communauté maritime des Îles-de-la-Madeleine",
+    "golfe-du-saint-laurent-mrc": "Le Golfe-du-Saint-Laurent",
+    "minganie":                   "Minganie",
+    "sept-rivieres":              "Sept-Rivières",
+    "manicouagan":                "Manicouagan",
+    "haute-cote-nord":            "La Haute-Côte-Nord",
+    "matanie":                    "La Matanie",
+    "mitis":                      "La Mitis",
+    "rimouski-neigette":          "Rimouski-Neigette",
+    "basques":                    "Les Basques",
+    "riviere-du-loup":            "Rivière-du-Loup",
+    "kamouraska":                 "Kamouraska",
+    "islet":                      "L'Islet",
+    "montmagny":                  "Montmagny",
+    "bellechasse":                "Bellechasse",
+    "levis":                      "Lévis",
+    "quebec":                     "Québec",
+    "ile-orleans":                "L'Île-d'Orléans",
+    "cote-de-beaupre":            "La Côte-de-Beaupré",
+    "charlevoix-est":             "Charlevoix-Est",
+    "charlevoix":                 "Charlevoix",
+}
+
+# The editorial half of a metric's naming — the one judgement call left, since a colourbar
+# label is assembled from the kernel itself (see ``colorbar_labels``) and so cannot claim a
+# crossing the kernel does not compute. A title names the *event*; the colourbar names the
+# *quantity*, which is why the threshold reads in both.
+METRIC_LABELS: dict[str, str] = {
+    "freeze_up_date":               "Freeze-up",
+    "breakup_date":                 "Break-up",
+    "first_occurrence_date":        "First occurrence",
+    "last_occurrence_date":         "Last occurrence",
+    "closing_date":                 "Season closing (8/10)",
+    "opening_date":                 "Season opening (8/10)",
+    "formation_lag":                "Formation lag",
+    "melt_lag":                     "Melt lag",
+    "season_duration":              "Season duration (4/10)",
+    "season_duration_10":           "Season duration (1/10)",
+    "storm_exposure_duration":      "Storm exposure duration",
+    "landfast_freeze_up_date":      "Landfast freeze-up",
+    "landfast_breakup_date":        "Landfast break-up",
+    "landfast_duration":            "Landfast ice duration",
+    "landfast_exposure":            "Landfast absence duration",
+    "developed_ice_freeze_up_date": "Developed ice freeze-up",
+    "developed_ice_breakup_date":   "Developed ice break-up",
+    "developed_ice_duration":       "Developed ice duration",
+    "developed_ice_exposure":       "Developed ice absence duration",
+}
+
+# The chart cadence in one word. ``ChartSource.display_label`` is the *footer* attribution —
+# the full chart-series name — a different slot, not a duplicate of this.
+SOURCE_LABELS: dict[str, str] = {
+    "sgrda": "Daily",
+    "sgrdr": "Weekly",
+}
+
+# How an order reads in a title; ``REDUCTION_STYLES`` above is the same closed set under the
+# colourbar's grammar.
+REDUCTION_LABELS: dict[str, str] = {
+    "mediantt": "Median-then-threshold",
+    "meantt":   "Mean-then-threshold",
+    "ttmedian": "Threshold-then-median",
+    "ttmean":   "Threshold-then-mean",
+    "ttmpo":    "Threshold-then-MPO-mean",
+}
+
+LABELS: dict[str, dict[str, str]] = {
+    "region": REGION_LABELS, "metric": METRIC_LABELS,
+    "source": SOURCE_LABELS, "reduction": REDUCTION_LABELS,
+}
 
 
-def run_label(run: RunContext) -> str:
-    """One run named in a log line or an error message."""
-    text = _coords(run)
-    return f"{text['period']} {text['source'].upper()} {text['reduction']}"
+def branch(runs: tuple[RunContext, ...]) -> tuple[dict[str, str], tuple[dict[str, str], ...]]:
+    """Split the runs' coordinates into what the whole figure shares and what each panel names.
 
+    The one place the runs are read as a table: transpose them once into a column per
+    coordinate, and everything downstream is a plain ``{name: slug}`` selection. A coordinate
+    that varies belongs to the panels; the rest are stated once, in the figure title. A lone
+    run varies in nothing, so its panel selection is empty and the figure title carries the
+    whole identity.
 
-def branch(runs: tuple[RunContext, ...]) -> tuple[str, ...]:
-    """The coordinates that differ across the runs — what a panel title must name, and by
-    complement what the figure title states once for the whole figure."""
-    return tuple(name for name in COORDS
-                 if len({_coords(run)[name] for run in runs}) > 1)
-
-
-def _coord_text(run: RunContext) -> dict[str, str]:
-    """Each coordinate as it should read, already cased — the source and reduction are slugs
-    and stay lowercase, so the assembled title must never be re-cased as a whole.
-
-    Carries region and metric on top of the branchable three: both are pinned across a
-    figure, so they never reach ``branch`` and only ever read in the figure title.
+    ``strict`` pins the positional coupling to ``RunContext.describe``: a run identity that
+    grows or loses a coordinate fails here rather than having it silently truncated, which
+    would drop it from every title *and* from the branch — two runs differing only in the
+    new coordinate would then draw as one.
     """
-    return {**_coords(run),
-            "region": run.region.display,
-            "metric": metric_title(run.metric.slug),
-            "period": f"Winters {run.period.slug}"}
+    columns = dict(zip(TITLE_ORDER, zip(*(run.describe() for run in runs)), strict=True))
+    branched = tuple(name for name in COORDS if len(set(columns[name])) > 1)
+    shared_slugs = {name: values[0] for name, values in columns.items() if name not in branched}
+    panels_slugs = tuple({name: columns[name][i] for name in branched} for i in range(len(runs)))
+    return shared_slugs, panels_slugs
 
 
-def _panel_title(run: RunContext, branched: tuple[str, ...]) -> str:
-    """Panel heading: the coordinates that distinguish this run from the figure's others."""
-    named = branched or ("period", "source")   # a lone run still says what it is
-    text = _coord_text(run)
-    # "·", not an em dash: a delta title joins two of these with "−", and the two dashes
-    # are indistinguishable at title size.
-    return " · ".join(text[name] for name in TITLE_ORDER if name in named)
+def _as_label(name: str, slug: str) -> str:
+    """One coordinate's slug as it reads: a table lookup, except a period, which names itself."""
+    return LABELS[name][slug] if name in LABELS else slug
 
 
-def _figure_title(runs: tuple[RunContext, ...]) -> str:
-    """Figure heading: the coordinates every panel shares (the varying ones title the panels).
+def _title(slugs: dict[str, str]) -> str:
+    """A heading from a selection of coordinates: reading order, each slug as its label.
 
-    Assembled off the first run, which is safe by construction rather than by luck: a
-    coordinate survives the filter only when ``branch`` found it identical across every run,
-    so each run spells the pinned coordinates the same way. Deriving the branch here rather
-    than taking it as an argument is what keeps that true — the two cannot be handed in
-    out of step.
+    Empty in, empty out — a lone run branches on nothing, and its panel needs no heading
+    because the figure title already names every coordinate.
+
+    "·", not an em dash: a delta title joins two of these with "−", and the two dashes
+    are indistinguishable at title size.
     """
-    text, branched = _coord_text(runs[0]), branch(runs)
-    return " · ".join(text[name] for name in TITLE_ORDER if name not in branched)
+    return " · ".join(_as_label(name, slugs[name])
+                      for name in TITLE_ORDER if name in slugs)
 
 
 def _footer_text(ctx: PlotContext, tiers: tuple[RasterLayer, ...]) -> str:
@@ -359,22 +398,21 @@ class Label:
 
 def label(ctx: PlotContext, rasters: list[tuple[RasterLayer, ...]]) -> list[Label]:
     """One Label per raster stack, index-aligned — a delta figure's last stack is the difference."""
-    branched = branch(ctx.runs)
-    title, foot = _figure_title(ctx.runs), _footer_text(ctx, rasters[0])
+    shared_slugs, panels_slugs = branch(ctx.runs)
+    title, foot = _title(shared_slugs), _footer_text(ctx, rasters[0])
     unit = UNITS[type(ctx.metric.kernel)].axis
 
     labels = []
-    for run in ctx.runs:
+    for run, panel_slugs in zip(ctx.runs, panels_slugs):
         colorbar, format_ticks = colorbar_labels(run.metric)
-        labels.append(Label(title, _panel_title(run, branched), colorbar,
+        labels.append(Label(title, _title(panel_slugs), colorbar,
                             unit, foot, format_ticks))
 
     if ctx.type == DELTA:
-        base, cand = ctx.runs[0], ctx.runs[1]
         labels.append(Label(
             title,
-            f"{_panel_title(cand, branched)} − {_panel_title(base, branched)}",
-            f"Δ {metric_title(ctx.metric.slug)} (days, candidate − baseline)",
+            f"{_title(panels_slugs[1])} − {_title(panels_slugs[0])}",
+            f"Δ {_as_label('metric', ctx.metric.slug)} (days, candidate − baseline)",
             "Days",                 # a difference of two dates is a duration, not a date
             foot,
             _count_ticks,

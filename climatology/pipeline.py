@@ -29,8 +29,8 @@ def _resolve(metric: str, region: str, source: str,
     
     ctx = RunContext.build(region, metric, period, source, reduction)
     
-    log.info("Region: %s (slug=%s) | Metric: %s | Reduction: %s | Source: %s | Winters: %s | %d tier(s)",
-             ctx.region.display, ctx.region.slug, ctx.metric.slug, ctx.metric.reduction_slug,
+    log.info("Region: %s | Metric: %s | Reduction: %s | Source: %s | Winters: %s | %d tier(s)",
+             ctx.region.slug, ctx.metric.slug, ctx.metric.reduction_slug,
              ctx.source.slug, ctx.period.slug, len(ctx.region.tiers))
     return ctx
 

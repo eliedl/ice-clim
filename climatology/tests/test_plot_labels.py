@@ -11,14 +11,17 @@ import pytest
 
 from climatology.plot.labels import (
     FIELD_STYLES,
-    METRIC_TITLES,
+    METRIC_LABELS,
+    REDUCTION_LABELS,
     REDUCTION_STYLES,
+    REGION_LABELS,
+    SOURCE_LABELS,
     UNITS,
     colorbar_labels,
-    metric_title,
 )
 from climatology.core.metrics import Metric
 from climatology.core.reduction.temporal import Reduction
+from climatology.core.regions import Region
 from climatology.services.sources import ChartSource
 
 SPECS = [(slug, red) for slug in Metric.slugs() for red in Reduction.slugs()]
@@ -33,8 +36,13 @@ def _label(slug: str, reduction: str) -> str:
     return colorbar_labels(_spec(slug, reduction))[0]
 
 
-def test_plot_styles_cover_every_metric():
-    assert set(METRIC_TITLES) == set(Metric.slugs())
+@pytest.mark.parametrize(("table", "slugs"), [
+    (REGION_LABELS, Region.slugs()), (METRIC_LABELS, Metric.slugs()),
+    (SOURCE_LABELS, ChartSource.slugs()), (REDUCTION_LABELS, Reduction.slugs()),
+])
+def test_label_tables_cover_every_slug(table, slugs):
+    """A coordinate value a run can name must have text to read as — an unmapped slug is a KeyError at plot time."""
+    assert set(table) == set(slugs)
 
 
 def test_units_cover_every_kernel():
@@ -50,25 +58,20 @@ def test_field_styles_cover_every_conversion():
 
 
 def test_reduction_styles_cover_every_reduction():
+    """The colourbar grammar is a second table over the same closed set as ``REDUCTION_LABELS``."""
     assert set(REDUCTION_STYLES) == set(Reduction.slugs())
-
-
-@pytest.mark.parametrize(("slug", "reduction"), SPECS)
-def test_title_is_independent_of_reduction(slug: str, reduction: str):
-    """A break-up is a break-up whichever order computed it — the title names the metric, not the method."""
-    assert metric_title(slug) == METRIC_TITLES[slug]
 
 
 def test_titles_are_unique():
     """Two metrics must not share a title, or a figure can't be told apart (the season_duration pair)."""
-    titles = list(METRIC_TITLES.values())
+    titles = list(METRIC_LABELS.values())
     assert len(titles) == len(set(titles))
 
 
 @pytest.mark.parametrize("slug", Metric.slugs())
 def test_title_states_the_value_type(slug: str):
     """Count metrics say what the number is ('duration' / 'lag'); date metrics are named for the event itself, so a literal 'date' would be redundant (title reformat, e8b5cce)."""
-    title = METRIC_TITLES[slug].lower()
+    title = METRIC_LABELS[slug].lower()
     if slug.endswith("_date"):
         assert "date" not in title
     else:
@@ -77,8 +80,8 @@ def test_title_states_the_value_type(slug: str):
 
 def test_both_ice_season_titles_carry_the_threshold():
     """season_duration and season_duration_10 differ only by threshold, so the title must show it."""
-    assert "4/10" in METRIC_TITLES["season_duration"]
-    assert "1/10" in METRIC_TITLES["season_duration_10"]
+    assert "4/10" in METRIC_LABELS["season_duration"]
+    assert "1/10" in METRIC_LABELS["season_duration_10"]
 
 
 @pytest.mark.parametrize(("slug", "reduction"), SPECS)
@@ -110,7 +113,7 @@ def test_threshold_then_stat_labels_open_on_the_statistic(slug: str):
 
 def test_reduction_labels_are_unique():
     """Two orders must not read alike, or a title cannot tell the panels apart."""
-    labels = [style.label for style in REDUCTION_STYLES.values()]
+    labels = list(REDUCTION_LABELS.values())
     assert len(labels) == len(set(labels))
 
 

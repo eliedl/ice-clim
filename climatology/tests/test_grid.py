@@ -34,8 +34,7 @@ def _regions_inputs_present() -> bool:
     return MRC_GPKG.exists() and COASTLINE_BUFFER.exists() and LAND_MASK.exists()
 
 
-def _assert_adaptive(spec, display):
-    assert spec.display == display
+def _assert_adaptive(spec):
     assert [t.level for t in spec.tiers] == ["coarse", "fine"]
     coarse, fine = spec.tiers
     assert (coarse.res_m, fine.res_m) == (1000.0, 100.0), "1 km / 100 m tiers"
@@ -52,7 +51,7 @@ def test_minganie_tiers():
         print("    (skip: input layers absent)")
         return
     from climatology.core.regions import Region
-    _assert_adaptive(Region.build("minganie"), "Minganie")
+    _assert_adaptive(Region.build("minganie"))
 
 
 def test_manicouagan_tiers():
@@ -61,7 +60,7 @@ def test_manicouagan_tiers():
         return
     from climatology.core.regions import REGIONS, Region
     assert "manicouagan" in REGIONS, "manicouagan must be CLI-selectable"
-    _assert_adaptive(Region.build("manicouagan"), "Manicouagan")
+    _assert_adaptive(Region.build("manicouagan"))
 
 
 def test_sept_rivieres_tiers():
@@ -70,7 +69,7 @@ def test_sept_rivieres_tiers():
         return
     from climatology.core.regions import REGIONS, Region
     assert "sept-rivieres" in REGIONS, "sept-rivieres must be CLI-selectable"
-    _assert_adaptive(Region.build("sept-rivieres"), "Sept-Rivières")
+    _assert_adaptive(Region.build("sept-rivieres"))
 
 
 if __name__ == "__main__":
