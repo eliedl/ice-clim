@@ -33,7 +33,7 @@ from climatology.plot.colors import (
 from climatology.plot.layout import (
     PANEL_CBAR_GAP,
     PANEL_CBAR_THICK,
-    PANEL_HIST_BINS,
+    PANEL_HIST_BIN_DAYS,
     PANEL_HIST_MINOR_NUMTICKS,
     PANEL_HIST_XLIM,
     PanelAxes,
@@ -154,6 +154,21 @@ def render(rasters: list[tuple[RasterLayer, ...]], labels: list[Label],
 
 # --- per-panel value distribution -------------------------------------------
 
+def _bin_edges(vmin: float, vmax: float) -> np.ndarray:
+    """One-day bins centred on whole days, spanning the shared limits.
+
+    The chart cadence needs no deriving: a source's attainable values are whole days, so a
+    one-day bin centred on each whole day *is* a bin at the cadence — a weekly source fills
+    every seventh one and draws as single-day bars seven days apart, a daily source fills
+    them all. A reducer that averages across seasons leaves no cadence in the values at all,
+    and the same grid bins those as an ordinary histogram would. Depending on the limits
+    alone also keeps the bin grid identical across a figure's panels, so a bar stands for one
+    day in every panel however often its source charts. Half-day edges keep the values at a
+    bin's centre, never on a boundary where float error would pick the side.
+    """
+    return np.arange(np.floor(vmin) - 0.5, np.ceil(vmax) + 1.0, PANEL_HIST_BIN_DAYS)
+
+
 def draw_distribution(hax, layers: tuple[RasterLayer, ...], scale: Scale, *,
                       tick_labels: list[str], unit: str) -> None:
     """Draw the panel's area-weighted value distribution on its own axes, beside the map.
@@ -165,7 +180,7 @@ def draw_distribution(hax, layers: tuple[RasterLayer, ...], scale: Scale, *,
     cmap, norm = scale.cmap, scale.norm
     values, weights = area_weights(list(layers))
     vmin, vmax = norm.vmin, norm.vmax
-    edges = np.linspace(vmin, vmax, PANEL_HIST_BINS + 1)
+    edges = _bin_edges(vmin, vmax)
     hist, _ = np.histogram(np.clip(values, vmin, vmax), bins=edges, weights=weights)
     pct = 100.0 * hist / weights.sum()
     centers = 0.5 * (edges[:-1] + edges[1:])

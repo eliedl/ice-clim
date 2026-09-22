@@ -32,7 +32,11 @@ if TYPE_CHECKING:
 # --- panel grid: one metric across periods ----------------------------------
 
 PANEL_NCOLS = 2               # 4 periods -> 2 x 2
-PANEL_HIST_BINS = 30
+# Distribution bins are one day wide, centred on whole days — the unit every metric is
+# counted in. A weekly source's values fall seven days apart, so it draws as single-day bars
+# seven days apart, which is what it resolves; bins of any other width slice that lattice at
+# an offset and leave gaps between bars whose positions mean nothing.
+PANEL_HIST_BIN_DAYS = 1.0
 PANEL_HIST_WIDTH = 0.30       # histogram column width, relative to its map column
 # Log area axis, fixed: the full share range, 0.01% (standing in for the 0 a log axis cannot
 # draw) to the whole region. Data-dependent limits would make a bar's length mean something
