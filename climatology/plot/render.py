@@ -189,7 +189,10 @@ def draw_distribution(hax, layers: tuple[RasterLayer, ...], scale: Scale, *,
     hax.barh(centers, pct, height=np.diff(edges), color=cmap(norm(centers)),
              edgecolor="none")
 
-    hax.set_ylim(vmax, vmin)        # dates increase downward, like the map's origin="upper"
+    # Dates increase downward, like the map's origin="upper". Limits are the outer bin edges
+    # rather than the scale's, so the bars carrying vmin and vmax — which hold the clipped
+    # over/under — draw whole instead of being halved by the axis.
+    hax.set_ylim(edges[-1], edges[0])
     hax.set_yticks(scale.ticks)
     hax.set_yticklabels(tick_labels, fontsize=PANEL_TICK_PT)
     hax.set_ylabel(unit, fontsize=PANEL_TICK_PT, color=DARK_FG, labelpad=2)

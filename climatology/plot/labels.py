@@ -412,7 +412,7 @@ def label(ctx: PlotContext, rasters: list[tuple[RasterLayer, ...]]) -> list[Labe
         labels.append(Label(
             title,
             f"{_title(panels_slugs[1])} − {_title(panels_slugs[0])}",
-            f"Δ {_as_label('metric', ctx.metric.slug)} (days, candidate − baseline)",
+            f"Δ {_as_label('metric', ctx.metric.slug)}  (days)",
             "Days",                 # a difference of two dates is a duration, not a date
             foot,
             _count_ticks,
