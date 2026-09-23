@@ -313,6 +313,7 @@ METRIC_LABELS: dict[str, str] = {
 SOURCE_LABELS: dict[str, str] = {
     "sgrda": "Daily ice charts",
     "sgrdr": "Weekly ice charts",
+    "mpo": "DFO reference climatology",
 }
 
 # How an order reads in a title; ``REDUCTION_STYLES`` above is the same closed set under the

@@ -101,7 +101,11 @@ class ThresholdDuration:
                 observed = np.zeros(_cell_shape(values), dtype=bool)
             count += self.combine(self.op(values, thr), axis=-2)
             observed |= ~np.isnan(values).any(axis=-2)
-        count[~observed] = np.nan
+        # A season that never crossed carries an absent event, not a zero-length
+        # one — NaN so the season is invalid to the coverage gate, as it already is
+        # for the date kernels. Without it a step count's validity tracks chart
+        # coverage rather than occurrence, and the gate passes every observed cell.
+        count[(count == 0) | ~observed] = np.nan
         return count
 
 
