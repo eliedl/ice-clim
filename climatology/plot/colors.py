@@ -129,13 +129,25 @@ def metric_scale(values: np.ndarray) -> Scale:
     return Scale(cmap, norm, list(np.linspace(vmin, vmax, 6)))
 
 
+def _delta_ticks(vabs: float) -> list[float]:
+    """Five ticks across ±vabs, dropped to three when the half-steps would not survive integer rounding.
+
+    A day-count delta labels its ticks as integers, so a half-step that rounds onto either
+    its end tick or the centre renders as a duplicate label — the latter is the
+    ``DELTA_FALLBACK_VABS`` floor, reached whenever the delta is ~flat everywhere.
+    """
+    if round(vabs / 2) in (round(vabs), 0):
+        return [-vabs, 0.0, vabs]
+    return list(np.linspace(-vabs, vabs, 5))
+
+
 def delta_scale(values: np.ndarray) -> Scale:
     """Diverging colour scale symmetric about zero, so a colour's direction reads as the sign of the change."""
     finite = values[np.isfinite(values)]
     vabs = float(np.percentile(np.abs(finite), 99)) if finite.size else DELTA_FALLBACK_VABS
     vabs = max(vabs, DELTA_FALLBACK_VABS)   # never collapse to a zero-width scale
     cmap, norm = build_cmap(DELTA_PALETTE, vmin=-vabs, vmax=vabs)
-    return Scale(cmap, norm, list(np.linspace(-vabs, vabs, 5)))
+    return Scale(cmap, norm, _delta_ticks(vabs))
 
 
 # --- scale policy: which panels pool into one scale --------------------------
