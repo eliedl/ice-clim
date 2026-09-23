@@ -253,7 +253,7 @@ def colorbar_labels(metric: Metric) -> tuple[str, Callable[[list[float]], list[s
 # and already reads as a label ("2011-2020"), so it has no table; see ``_as_label``.
 
 REGION_LABELS: dict[str, str] = {
-    "golfe":                      "Golfe du Saint-Laurent",
+    "golfe":                      "Gulf of St. Lawrence",
     "avignon":                    "Avignon",
     "bonaventure":                "Bonaventure",
     "rocher-perce":               "Le Rocher-Percé",
@@ -311,8 +311,8 @@ METRIC_LABELS: dict[str, str] = {
 # The chart cadence in one word. ``ChartSource.display_label`` is the *footer* attribution —
 # the full chart-series name — a different slot, not a duplicate of this.
 SOURCE_LABELS: dict[str, str] = {
-    "sgrda": "Daily",
-    "sgrdr": "Weekly",
+    "sgrda": "Daily ice charts",
+    "sgrdr": "Weekly ice charts",
 }
 
 # How an order reads in a title; ``REDUCTION_STYLES`` above is the same closed set under the
