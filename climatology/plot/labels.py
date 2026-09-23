@@ -323,7 +323,7 @@ REDUCTION_LABELS: dict[str, str] = {
     "meantt":   "Mean-then-threshold",
     "ttmedian": "Threshold-then-median",
     "ttmean":   "Threshold-then-mean",
-    "ttmpo":    "Threshold-then-MPO-mean",
+    "ttmpo":    "Threshold-then-fixed-denominator-mean",
 }
 
 LABELS: dict[str, dict[str, str]] = {
