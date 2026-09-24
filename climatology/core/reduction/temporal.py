@@ -12,7 +12,7 @@ import numpy as np
 from climatology.core.conversion import value_columns
 from climatology.core.rasterize import burn_value_stack
 from climatology.core.regions import Tier
-from climatology.services.calendar import day_of_season
+from climatology.services.calendar import day_of_season, filter_admissible_days
 from climatology.utils._types import (
     BoolVector, ConvertedPolygons, DataGrid, DateConvertedPolygons,
     VarWetStack, VarWetVector, WetStack, WetVector,
@@ -109,7 +109,20 @@ class ThresholdDuration:
         return count
 
 
-Kernel = ThresholdDate | ThresholdDateDelta | ThresholdDuration
+@dataclass(frozen=True)
+class DomainMean:
+    """Mean of the burned variable over the wet domain: one value per season, per day."""
+
+    def reduce(self, slices: SliceStream) -> DataGrid:
+        # Cell size is constant within a tier, so sum(CTi*ai)/sum(ai) is the plain domain
+        # mean; the fixed n_wet denominator reads an uncovered cell as ice-free rather than
+        # dividing an all-NaN slice. squeeze(-1) drops the n_vars axis and raises on a
+        # multi-column conversion, which this kernel has no way to combine.
+        return np.stack([np.nansum(values, axis=-1).squeeze(-1) / values.shape[-1]
+                         for _ordinal, values in slices()], axis=-1)
+
+
+Kernel = ThresholdDate | ThresholdDateDelta | ThresholdDuration | DomainMean
 
 
 def _aligned_season_groups(day_df: DateConvertedPolygons, seasons: list,
@@ -174,13 +187,17 @@ def _mpo_mean(per_season: WetStack, *, zero: float = 0.0) -> WetVector:
 
 @dataclass(frozen=True)
 class Reduction(ABC):
-    """A reduction order: when the season-axis collapse happens relative to the kernel fold (DEC-054)."""
+    """A reduction order: when the season-axis collapse happens relative to the kernel fold (DEC-054).
+
+    The admissible days filter is moved inside ttstat and stattt reductions since domain series needs the whole dataset.
+    The domain-compressed order keeps every observed day and so prepares the frame unfiltered.
+    """
 
     slug: str
 
     @abstractmethod
     def __call__(self, kernel: Kernel, df: ConvertedPolygons, tier: Tier) -> DataGrid:
-        """Reduce raterized polygons to one day-of-season raster."""
+        """Reduce rasterized polygons to one product array."""
 
     @classmethod
     def build(cls, slug: str) -> Reduction:
@@ -201,7 +218,8 @@ class StatThenThreshold(Reduction):
 
     def __call__(self, kernel: Kernel, df: ConvertedPolygons, tier: Tier) -> DataGrid:
         # Kernels fold over compact wet-cell vectors; scatter to (H, W) once, here.
-        result = kernel.reduce(lambda: _stream_stat_slices(df, tier=tier, stat=self.stat))
+        result = kernel.reduce(lambda: _stream_stat_slices(filter_admissible_days(df),
+                                                           tier=tier, stat=self.stat))
         return _scatter_to_grid(result, tier)
 
 
@@ -214,7 +232,8 @@ class ThresholdThenStat(Reduction):
     min_season_coverage: float = MPO_MIN_SEASON_COVERAGE
 
     def __call__(self, kernel: Kernel, df: ConvertedPolygons, tier: Tier) -> DataGrid:
-        per_season: WetStack = kernel.reduce(lambda: _stream_day_stacks(df, tier=tier))
+        stream = lambda: _stream_day_stacks(filter_admissible_days(df), tier=tier)
+        per_season: WetStack = kernel.reduce(stream)
         n_valid = np.sum(~np.isnan(per_season), axis=0)
         keep: BoolVector = n_valid >= np.ceil(self.min_season_coverage * per_season.shape[0])
         kept = per_season[:, keep]
@@ -227,13 +246,23 @@ class ThresholdThenStat(Reduction):
         return _scatter_to_grid(out, tier)
 
 
+@dataclass(frozen=True)
+class DomainSeries(Reduction):
+    """Reduction order (DEC-055): compress the wet domain away, keeping every observed day of every season."""
+
+    def __call__(self, kernel: Kernel, df: ConvertedPolygons, tier: Tier) -> DataGrid:
+        return kernel.reduce(lambda: _stream_day_stacks(df, tier=tier))
+
+
 MEDIAN_THEN_THRESHOLD   = StatThenThreshold("mediantt", _nanmedian_high)
 MEAN_THEN_THRESHOLD     = StatThenThreshold("meantt", _nanmean)
 THRESHOLD_THEN_MEDIAN   = ThresholdThenStat("ttmedian", _nanmedian_high)
 THRESHOLD_THEN_MEAN     = ThresholdThenStat("ttmean", _nanmean)
 THRESHOLD_THEN_MPO_MEAN = ThresholdThenStat("ttmpo", _mpo_mean, fixed_denominator=True)
+DOMAIN_SERIES           = DomainSeries("series")
 
 # The closed set behind ``Reduction.build``/``Reduction.slugs``; order is the CLI's.
 REDUCTIONS: dict[str, Reduction] = {r.slug: r for r in (
     MEDIAN_THEN_THRESHOLD, MEAN_THEN_THRESHOLD,
-    THRESHOLD_THEN_MEDIAN, THRESHOLD_THEN_MEAN, THRESHOLD_THEN_MPO_MEAN)}
+    THRESHOLD_THEN_MEDIAN, THRESHOLD_THEN_MEAN, THRESHOLD_THEN_MPO_MEAN,
+    DOMAIN_SERIES)}

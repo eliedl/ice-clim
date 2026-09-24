@@ -8,7 +8,9 @@ from dataclasses import dataclass, replace
 import numpy as np
 
 from climatology.core.reduction.temporal import (
+    DOMAIN_SERIES,
     MEDIAN_THEN_THRESHOLD,
+    DomainMean,
     Kernel,
     Reduction,
     ThresholdDate,
@@ -42,6 +44,8 @@ class Metric:
     reduction: Reduction = MEDIAN_THEN_THRESHOLD
 
     def __post_init__(self):
+        if isinstance(self.kernel, DomainMean):
+            return   # compresses the domain; it crosses nothing, so it carries no threshold
         # Threshold <-> selected df values guard
         kernels = ((self.kernel.late, self.kernel.early)
                    if isinstance(self.kernel, ThresholdDateDelta) else (self.kernel,))
@@ -52,9 +56,10 @@ class Metric:
                     f"threshold(s) but the conversion burns {self.conversion.value_cols}.")
 
     @classmethod
-    def build(cls, metric: str, reduction: str = MEDIAN_THEN_THRESHOLD.slug) -> Metric:
-        """Resolve a metric slug and a reduction slug to the metric they name."""
-        return _METRICS[metric].with_reduction(reduction)
+    def build(cls, metric: str, reduction: str | None = None) -> Metric:
+        """Resolve a metric slug and a reduction slug to the metric they name; no reduction keeps the spec's own."""
+        spec = _METRICS[metric]
+        return spec.with_reduction(reduction) if reduction else spec
 
     @classmethod
     def slugs(cls) -> list[str]:
@@ -135,8 +140,14 @@ _SPECS: dict[str, Metric] = {
     "developed_ice_exposure":       M(ThresholdDuration(DEVELOPED_ICE_THRESHOLDS, operator.lt,
                                                         combine=np.any),
                                       fields=_EGG_FIELDS, conversion=DEVELOPED_ICE_CONVERSION),
+    "concentration":            M(DomainMean(), reduction=DOMAIN_SERIES),
 }
 
+
+# Metrics whose product is a ``(n_seasons, n_days)`` series rather than an (H, W) raster —
+# the one thing a product's layout cannot be read off, since both archive as the same .npz.
+# With the manifest's ``reduction`` field, this names what a consumer is holding.
+SERIES_METRICS: frozenset[str] = frozenset({"concentration"})
 
 _METRICS: dict[str, Metric] = {slug: replace(spec, slug=slug)
                                for slug, spec in _SPECS.items()}

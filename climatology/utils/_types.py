@@ -11,6 +11,8 @@ Dimension vocabulary
   n_wet              wet cells of a tier (``wet_mask.sum()``); the H*W grid
                      flattened to its analysed cells
   n_seasons          climatology seasons withtin RunContext.period.window
+  n_days             days of season a product keeps a value for (the domain-
+                     compressed series' column axis)
   n_vars             value columns burned per polygon (1 for CT-only metrics;
                      2 for the developed-ice (ct, mean_thk) pair)
 
@@ -26,6 +28,9 @@ import numpy as np
 import pandas as pd
 
 # rasters (H, W)
+# A product array in either of its two layouts: (H, W) when the reduction scatters
+# back to the grid, (n_seasons, n_days) when it compresses the domain away instead
+# (the SERIES_METRICS of core/metrics.py). Both archive through the same .npz.
 DataGrid = Float[np.ndarray, "H W"]         # float32 result raster; NaN = nodata
 BoolGrid = Bool[np.ndarray, "H W"]          # land / clip masks (True = land / in-domain)
 

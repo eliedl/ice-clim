@@ -37,8 +37,9 @@ def _parse_args() -> argparse.Namespace:
                    help="Chart table (default: sgrda).")
     p.add_argument("--period", default="1991-2020",
                    help="Climatology period in winters - default: 1991-2020)")
-    p.add_argument("--reduction", default="mediantt", choices=Reduction.slugs(), 
-                   help=f"Reduction order - Available: {', '.join(Reduction.slugs())} - default: mediantt")
+    p.add_argument("--reduction", default=None, choices=Reduction.slugs(),
+                   help=f"Reduction order - Available: {', '.join(Reduction.slugs())} - "
+                        "default: the metric's own (mediantt for every threshold metric)")
     p.add_argument("--plot", default=True, 
                    help="Skip the run's figure (built from the npz archives by plot.build).")
     return p.parse_args()

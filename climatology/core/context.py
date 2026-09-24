@@ -7,7 +7,7 @@ from dataclasses import dataclass
 from climatology.core.conversion import ConversionStrategy
 from climatology.core.metrics import Metric
 from climatology.core.regions import Region, Tier
-from climatology.services.calendar import Period, filter_admissible_days, attach_season_calendar
+from climatology.services.calendar import Period, attach_season_calendar
 from climatology.services.sources import ChartSource
 from climatology.utils._types import ConvertedPolygons, DataGrid, RawPolygons
 
@@ -42,8 +42,12 @@ class FetchResult:
     df: RawPolygons
 
     def prepare(self, conversion: ConversionStrategy) -> ConvertedPolygons:
-        """Fetched rows with the season calendar attached and the metric's value column computed (tier-agnostic, once per run)."""
-        return conversion.prepare(filter_admissible_days(attach_season_calendar(self.df)))
+        """Fetched rows with the season calendar attached and the metric's value column computed (tier-agnostic, once per run).
+
+        Every observed day, admissible or not: which days an order may read is the order's
+        own rule, applied in ``reduction.temporal`` (DEC-055).
+        """
+        return conversion.prepare(attach_season_calendar(self.df))
 
 
 @dataclass(frozen=True)

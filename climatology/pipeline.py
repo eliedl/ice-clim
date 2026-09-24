@@ -7,7 +7,7 @@ import logging
 import numpy as np
 
 from climatology.core.context import FetchResult, Result, RunContext
-from climatology.core.metrics import Metric
+from climatology.core.metrics import SERIES_METRICS, Metric
 from climatology.core.regions import Tier
 from climatology.services.db import load_polygons
 from climatology.utils._types import ConvertedPolygons, DataGrid
@@ -92,5 +92,5 @@ def run(metric: str, region: str, source: str, period: str,
     for r in results:
         archive_product(context, fetch, r)
 
-    if plot:
+    if plot and metric not in SERIES_METRICS:   # a series carries no map to draw
         _plot(context)
