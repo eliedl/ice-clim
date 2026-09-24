@@ -41,6 +41,7 @@ from scipy import ndimage
 load_dotenv(Path(__file__).parents[3] / ".env")
 
 from climatology.pipeline import _fetch, _resolve
+from climatology.core.context import RunContext
 from climatology.core.metrics import Metric
 from climatology.core.reduction.temporal import (
     MPO_MIN_SEASON_COVERAGE,
@@ -58,9 +59,9 @@ OUTPUT_DIR = Path(__file__).parent / "output"
 # --- 1. The product registry under test ---------------------------------------
 
 METRIC = "season_duration_10"
-REGION, SOURCE, PERIOD, TIER = "manicouagan", "sgrdr", "1991-2020", "fine"
+REGION, SOURCE, PERIOD, TIER = "golfe", "sgrdr", "1991-2020", "full"
 BASELINE = "mediantt"
-CANDIDATES = ("meantt", "ttmedian")
+CANDIDATES = ("ttmedian",)
 
 CT_THRESHOLD = 0.1   # season_duration_10 counts days at or above 1/10
 
@@ -71,10 +72,14 @@ GROUP_SAMPLE = 200
 
 # --- 2. Retrieve the archived rasters -----------------------------------------
 
-def product(reduction: str) -> Product:
-    """The newest archived raster for one reduction, selected on its manifest."""
-    npz, _ = next((npz, m) for npz, m in find_archived((REGION, METRIC, PERIOD, SOURCE, reduction))
-                  if m["tier"] == TIER)
+def context(reduction: str) -> RunContext:
+    """The run identity of one reduction — what the archive is keyed on."""
+    return _resolve(METRIC, REGION, SOURCE, PERIOD, reduction)
+
+
+def product(ctx: RunContext) -> Product:
+    """The newest archived raster for one run identity, selected on its manifest."""
+    npz, _ = next((npz, m) for npz, m in find_archived(ctx) if m["tier"] == TIER)
     return Product(npz)
 
 
@@ -337,10 +342,10 @@ def main() -> None:
     stamp = datetime.now().strftime("%Y-%m-%d_%H%M%S")
     rng = np.random.default_rng(0)
 
-    base = product(BASELINE)
-    candidates = {c: product(c) for c in CANDIDATES}
+    ctx = context(BASELINE)
+    base = product(ctx)
+    candidates = {c: product(context(c)) for c in CANDIDATES}
     deltas = {c: delta(base, p) for c, p in candidates.items()}
-    ctx = _resolve(METRIC, REGION, SOURCE, PERIOD, BASELINE)
     tier = ctx.region.tiers[-1]
     groups = [g for c, d in deltas.items() for g in tail_patches(c, d, tier.wet_mask)]
 

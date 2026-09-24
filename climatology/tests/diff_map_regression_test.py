@@ -37,6 +37,7 @@ import matplotlib.pyplot as plt
 from rasterio.transform import from_bounds
 from rasterio.warp import Resampling, reproject
 
+from climatology.utils._types import GRID_CRS
 from climatology.utils.arithmetics import percentile_range
 
 OUTPUT_DIR = Path(__file__).parent / "output"
@@ -49,7 +50,9 @@ class Product:
         self.npz_path = npz_path
         self.values = np.load(npz_path)["values"].astype("float32")
         meta = json.loads(npz_path.with_suffix(".json").read_text())
-        self.crs = int(meta["grid_crs"])
+        # Manifests written before the single-CRS pipeline name their own CRS; since
+        # then every grid is GRID_CRS and the manifest no longer stores the field.
+        self.crs = int(meta.get("grid_crs", GRID_CRS))
         if "bounds" not in meta:
             raise KeyError(
                 f"{npz_path.name}: manifest has no 'bounds' — cannot georeference. "
