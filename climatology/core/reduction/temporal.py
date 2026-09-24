@@ -268,6 +268,7 @@ class SeriesLayer:
     first_day: int            # day-of-season ordinal of the first column
     last_day: int             # ... and of the last, which is what checks a reconstructed axis
     day_step: int             # days one chart stands for (``ChartSource.step_days``)
+    res_m: float              # the grid the domain was compressed over — provenance, for the figure footer
 
 
 MEDIAN_THEN_THRESHOLD   = StatThenThreshold("mediantt", _nanmedian_high)

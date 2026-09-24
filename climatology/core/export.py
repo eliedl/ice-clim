@@ -133,7 +133,7 @@ def load_archived(ctx: RunContext) -> tuple[RasterLayer, ...] | tuple[SeriesLaye
     archived = find_archived(ctx)
     if ctx.metric.slug in SERIES_METRICS:
         return tuple(SeriesLayer(np.load(npz)["values"],
-                                 m["first_day"], m["last_day"], m["day_step"])
+                                 m["first_day"], m["last_day"], m["day_step"], m["grid_res_m"])
                      for npz, m in archived)
     return tuple(RasterLayer(np.load(npz)["values"], m["bounds"], m["grid_res_m"])
                  for npz, m in archived)
