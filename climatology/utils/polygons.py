@@ -36,7 +36,11 @@ def _landmask() -> BaseGeometry:
 
 
 def _bbox_envelope(region_name: str) -> BaseGeometry:
-    """Axis-aligned bbox envelope for a 'full' region (glob, one per region folder)."""
+    """Stored envelope polygon for a non-MRC region (glob, one per region folder).
+
+    The name predates the second use: `golfe` stores an axis-aligned bbox, `manic-roi`
+    stores the ROI as drawn. Both are read as-is and must already be valid EPSG:32198.
+    """
     folder = BBOX_ROOT / region_name
     matches = sorted(folder.glob(f"*_{GRID_CRS}_bbox.geojson"))
     if len(matches) != 1:

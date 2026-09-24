@@ -254,6 +254,7 @@ def colorbar_labels(metric: Metric) -> tuple[str, Callable[[list[float]], list[s
 
 REGION_LABELS: dict[str, str] = {
     "golfe":                      "Gulf of St. Lawrence",
+    "manic-roi":                  "Manicouagan ROI",
     "avignon":                    "Avignon",
     "bonaventure":                "Bonaventure",
     "rocher-perce":               "Le Rocher-Percé",
