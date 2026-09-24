@@ -65,10 +65,10 @@ from typing import TYPE_CHECKING
 
 from climatology.plot.render import render
 from climatology.plot.colors import style
-from climatology.plot.labels import COORDS, DELTA, RAW, label
+from climatology.plot.labels import COORDS, DELTA, RASTER, RAW, SERIES, label
 from climatology.plot.layout import layout
 from climatology.core.context import RunContext
-from climatology.core.metrics import Metric
+from climatology.core.metrics import SERIES_METRICS, Metric
 from climatology.core.reduction.spatial import RasterLayer
 from climatology.core.reduction.temporal import MEDIAN_THEN_THRESHOLD, Reduction
 from climatology.core.regions import Region
@@ -97,6 +97,16 @@ class PlotContext:
 
     runs: tuple[RunContext, ...]
     type: str = RAW                 # raw | delta
+
+    @property
+    def kind(self) -> str:
+        """Which family of objects every stage resolves into: ``raster`` or ``series``.
+
+        Derived, not configured — like the figure's shape. Which layout a run archived is a
+        property of its metric, so ``--type series`` would be a claim the archive could
+        contradict; ``--type`` stays the raw/delta axis, which is a genuine choice.
+        """
+        return SERIES if self.metric.slug in SERIES_METRICS else RASTER
 
     def assert_shared_regions(ctx: PlotContext) -> None:
         """Region is pinned across the figure — panels that do not share a grid cannot be
@@ -141,48 +151,51 @@ def _resolve(runs: tuple[RunContext, ...], *, type: str) -> PlotContext:
     ctx = PlotContext(runs=runs, type=type)
     # Each run spelled as its own slugs, in the order the archive path spells them, so a log
     # line greps straight against ``output/``.
-    log.info("Figure: %s | Metric: %s | Region: %s | Runs: %s",
-             ctx.type, ctx.metric.slug, ctx.region.slug,
+    log.info("Figure: %s %s | Metric: %s | Region: %s | Runs: %s",
+             ctx.kind, ctx.type, ctx.metric.slug, ctx.region.slug,
              " | ".join(" ".join(run.describe()) for run in ctx.runs))
     return ctx
 
 def _validate(ctx: PlotContext) -> None:
-    """Reject an incoherent figure before a single raster is read.
+    """Reject an incoherent figure before a single layer is read.
 
-    Two halves, both answerable without loading anything: the *configuration*, from the
-    context alone, and the *archive*, from the ``.json`` manifests ``find_archived`` already
-    reads to select a product. Returns the refs per run, coarse tier first, so ``_fetch``
-    loads exactly what was approved here and nothing re-decides.
+    Answerable from the context alone, which is why it runs before the archive is touched.
     """
     ctx.assert_shared_regions()
     ctx.assert_shared_metrics()
+    if ctx.kind == SERIES and ctx.type == DELTA:
+        raise ValueError(
+            "A series figure has no difference panel: two periods hold different seasons, so "
+            "their season axes do not subtract. Branch on --period to draw them side by side.")
 
 
-def _fetch(ctx: PlotContext) -> list[tuple[RasterLayer, ...]]:
+def _fetch(ctx: PlotContext) -> list[tuple]:
     """Load each run's archived tiers, coarse first; append the per-tier difference for a delta."""
-    rasters = [load_archived(run) for run in ctx.runs]
-    if ctx.type == DELTA:
-        base, cand = rasters[0], rasters[1]
-        rasters.append(tuple(RasterLayer(c.values - b.values, c.bounds, c.res_m)
-                              for b, c in zip(base, cand)))
-    log.info("Loaded %d raster(s).", sum(len(a) for a in rasters))
-    return rasters
+    layers = [load_archived(run) for run in ctx.runs]
+    if ctx.type == DELTA:                       # guarded to the raster family in ``_validate``
+        base, cand = layers[0], layers[1]
+        layers.append(tuple(RasterLayer(c.values - b.values, c.bounds, c.res_m)
+                            for b, c in zip(base, cand)))
+    log.info("Loaded %d layer(s).", sum(len(stack) for stack in layers))
+    return layers
 
 
 def build_figure(runs: tuple[RunContext, ...], *, type: str = RAW) -> Figure:
     """Build one figure from the archive; the caller writes it via ``export.save_figure``.
 
     The four stages after the guard each resolve one concern over the same panel list, and
-    each returns a list indexed by panel: the rasters, their text, their colour, and the axes
-    they draw into. ``render`` walks the four together, so panel order *is* raster order.
+    each returns a list indexed by panel: the layers, their text, their colour, and the axes
+    they draw into. ``render`` walks the four together, so panel order *is* layer order. Which
+    family of objects those four hold follows from ``ctx.kind``, and each stage resolves it
+    itself — the sequence below is the same whichever it is.
     """
     ctx = _resolve(runs, type=type)
     _validate(ctx)
-    rasters = _fetch(ctx)
-    labels = label(ctx, rasters)
-    scales = style(ctx, rasters)
-    panels = layout(ctx, rasters)
-    return render(rasters, labels, scales, panels)
+    layers = _fetch(ctx)
+    labels = label(ctx, layers)
+    scales = style(ctx, layers)
+    panels = layout(ctx, layers)
+    return render(ctx, layers, labels, scales, panels)
 
 
 

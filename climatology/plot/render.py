@@ -1,13 +1,14 @@
-"""The rendering engine: axes, rasters, text and colour in, one drawn figure out.
+"""The rendering engines: axes, layers, text and colour in, one drawn figure out.
 
-One path for every figure. The engine takes four index-aligned lists — the rasters, the
-``Label`` each carries, the ``Scale`` each is drawn on, and the axes each occupies — and
-walks them together, so a panel's position in the figure *is* its position in ``rasters``.
-Nothing here decides anything: which panels exist is ``build._fetch``'s, what they say is
-``labels.label``'s, what colour they carry is ``colors.style``'s, and where they sit is
-``layout.layout``'s. This module only puts ink down.
+One engine per figure kind, both with the same shape. Each takes four index-aligned lists — the
+layers, the ``Label`` each carries, the scale or palette each is drawn on, and the axes each
+occupies — and walks them together, so a panel's position in the figure *is* its position in
+``layers``. Nothing here decides anything about content: which panels exist is
+``build._fetch``'s, what they say is ``labels.label``'s, what colour they carry is
+``colors.style``'s, and where they sit is ``layout.layout``'s. These engines only put ink down;
+``render`` picks between them on the figure's kind and does nothing else.
 
-The pieces it composes live beside it: colours and scales in `colors`, text in `labels`,
+The pieces they compose live beside them: colours and scales in `colors`, text in `labels`,
 geometry in `layout`, the basemap in `basemap`.
 """
 
@@ -26,10 +27,12 @@ from climatology.plot.colors import (
     DARK_LINE,
     DARK_MUTED,
     DARK_OCEAN,
-    Scale,
+    RasterScale,
+    SeriesPalette,
     style_axes,
     style_colorbar,
 )
+from climatology.plot.labels import RASTER, SERIES
 from climatology.plot.layout import (
     PANEL_CBAR_GAP,
     PANEL_CBAR_THICK,
@@ -37,7 +40,9 @@ from climatology.plot.layout import (
     PANEL_HIST_MINOR_NUMTICKS,
     PANEL_HIST_XLIM,
     PanelAxes,
-    Slot,
+    RasterPanels,
+    RasterSlot,
+    SeriesPanels,
     balance_margins,
     frame_axes,
     match_map_heights,
@@ -46,7 +51,9 @@ from climatology.core.reduction.spatial import RasterLayer, area_weights
 from climatology.utils._types import DataGrid, GridBounds
 
 if TYPE_CHECKING:
-    from climatology.plot.labels import Label
+    from climatology.core.reduction.temporal import SeriesLayer
+    from climatology.plot.build import PlotContext
+    from climatology.plot.labels import Label, RasterLabel, SeriesLabel
 
 SUPTITLE_PT = 14
 PANEL_TITLE_PT = 11
@@ -90,8 +97,8 @@ def _map_colorbar(fig, im, ax, *, label: str, tick_values: list[float],
 
 # --- one panel --------------------------------------------------------------
 
-def _draw_panel(slot: Slot, layers: tuple[RasterLayer, ...], lab: Label, scale: Scale,
-                *, tile, land, extent: GridBounds):
+def _draw_panel(slot: RasterSlot, layers: tuple[RasterLayer, ...], lab: RasterLabel,
+                scale: RasterScale, *, tile, land, extent: GridBounds):
     """One panel: its tiered map, the basemap over it, and its distribution beside it.
 
     Returns the mappable, which the colourbar pass needs once the boxes have settled.
@@ -118,9 +125,9 @@ def _draw_panel(slot: Slot, layers: tuple[RasterLayer, ...], lab: Label, scale: 
 
 # --- the engine -------------------------------------------------------------
 
-def render(rasters: list[tuple[RasterLayer, ...]], labels: list[Label],
-           scales: list[Scale], panels: PanelAxes) -> Figure:
-    """Draw every panel into the axes it was assigned, then the figure-level furniture.
+def _render_maps(layers: list[tuple[RasterLayer, ...]], labels: list[RasterLabel],
+                 scales: list[RasterScale], panels: RasterPanels) -> Figure:
+    """Draw every map panel into the axes it was assigned, then the figure-level furniture.
 
     The three passes are ordered by what matplotlib has settled: the maps hold an equal
     aspect and shrink inside their boxes at draw time, so the histograms can only be pinned
@@ -129,9 +136,9 @@ def render(rasters: list[tuple[RasterLayer, ...]], labels: list[Label],
     fig = panels.fig
     tile, land = load_basemap(panels.extent)   # one extent across panels -> fetched once
 
-    images = [_draw_panel(slot, layers, lab, scale, tile=tile, land=land, extent=panels.extent)
-              for slot, layers, lab, scale
-              in zip(panels.slots, rasters, labels, scales, strict=True)]
+    images = [_draw_panel(slot, stack, lab, scale, tile=tile, land=land, extent=panels.extent)
+              for slot, stack, lab, scale
+              in zip(panels.slots, layers, labels, scales, strict=True)]
 
     # Figure-level text is identical on every label; drawn once, off the first.
     fig.suptitle(labels[0].figure_title, wrap=True, x=0.5,
@@ -152,6 +159,27 @@ def render(rasters: list[tuple[RasterLayer, ...]], labels: list[Label],
     return fig
 
 
+def _render_series(layers: list[tuple[SeriesLayer, ...]], labels: list[SeriesLabel],
+                   palettes: list[SeriesPalette], panels: SeriesPanels) -> Figure:
+    """Draw every series panel: its per-season values, their daily mean, and the spread around it."""
+    raise NotImplementedError("The series engine is not written yet.")
+
+
+_RENDERERS = {RASTER: _render_maps, SERIES: _render_series}
+
+
+def render(ctx: PlotContext, layers: list[tuple], labels: list[Label],
+           scales: list, panels: PanelAxes) -> Figure:
+    """Draw the figure with the engine its kind calls for.
+
+    The dispatch is the one decision this module makes, and it decides nothing about content:
+    which panels exist is ``build._fetch``'s, what they say is ``labels.label``'s, what colour
+    they carry is ``colors.style``'s, and where they sit is ``layout.layout``'s. Each engine
+    below only puts ink down.
+    """
+    return _RENDERERS[ctx.kind](layers, labels, scales, panels)
+
+
 # --- per-panel value distribution -------------------------------------------
 
 def _bin_edges(vmin: float, vmax: float) -> np.ndarray:
@@ -169,7 +197,7 @@ def _bin_edges(vmin: float, vmax: float) -> np.ndarray:
     return np.arange(np.floor(vmin) - 0.5, np.ceil(vmax) + 1.0, PANEL_HIST_BIN_DAYS)
 
 
-def draw_distribution(hax, layers: tuple[RasterLayer, ...], scale: Scale, *,
+def draw_distribution(hax, layers: tuple[RasterLayer, ...], scale: RasterScale, *,
                       tick_labels: list[str], unit: str) -> None:
     """Draw the panel's area-weighted value distribution on its own axes, beside the map.
 

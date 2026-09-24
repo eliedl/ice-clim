@@ -9,7 +9,7 @@ import matplotlib.colors as mcolors
 import numpy as np
 from matplotlib.colors import Colormap, LinearSegmentedColormap, Normalize
 
-from climatology.plot.labels import DELTA, RAW
+from climatology.plot.labels import DELTA, RASTER, RAW, SERIES
 from climatology.services.calendar import day_of_season
 from climatology.utils.arithmetics import percentile_range
 
@@ -116,19 +116,35 @@ def build_cmap(
 # change) is not something a palette knows.
 
 @dataclass(frozen=True)
-class Scale:
-    """One panel's colour mapping: the ramp, the range it is anchored on, and its tick positions."""
+class RasterScale:
+    """One map panel's colour mapping: the ramp, the range it is anchored on, and its tick positions."""
 
     cmap: Colormap
     norm: Normalize
     ticks: list[float]
 
 
-def metric_scale(values: np.ndarray) -> Scale:
+@dataclass(frozen=True)
+class SeriesPalette:
+    """The four marks a series panel draws, each in its own colour.
+
+    A series carries no colour *scale*: nothing is mapped from a value, so there is no ramp, no
+    norm and no tick positions to anchor — only which mark is which. That is the whole of what
+    ``style`` has to resolve for a series panel, and it is why this is a sibling of
+    ``RasterScale`` rather than a subclass of anything.
+    """
+
+    points: str          # the per-season values
+    mean: str            # the across-season daily mean
+    inner_band: str      # mean ± half a standard deviation
+    outer_band: str      # mean ± a standard deviation
+
+
+def metric_scale(values: np.ndarray) -> RasterScale:
     """Sequential colour scale anchored on the value range (drops near-coast extremas)."""
     vmin, vmax = percentile_range(values, low=1, high=100)
     cmap, norm = build_cmap("cool_to_warm_7", vmin=vmin, vmax=vmax)
-    return Scale(cmap, norm, list(np.linspace(vmin, vmax, 6)))
+    return RasterScale(cmap, norm, list(np.linspace(vmin, vmax, 6)))
 
 
 def _delta_ticks(vabs: float) -> list[float]:
@@ -143,13 +159,13 @@ def _delta_ticks(vabs: float) -> list[float]:
     return list(np.linspace(-vabs, vabs, 5))
 
 
-def delta_scale(values: np.ndarray) -> Scale:
+def delta_scale(values: np.ndarray) -> RasterScale:
     """Diverging colour scale symmetric about zero, so a colour's direction reads as the sign of the change."""
     finite = values[np.isfinite(values)]
     vabs = float(np.percentile(np.abs(finite), 99)) if finite.size else DELTA_FALLBACK_VABS
     vabs = max(vabs, DELTA_FALLBACK_VABS)   # never collapse to a zero-width scale
     cmap, norm = build_cmap(DELTA_PALETTE, vmin=-vabs, vmax=vabs)
-    return Scale(cmap, norm, _delta_ticks(vabs))
+    return RasterScale(cmap, norm, _delta_ticks(vabs))
 
 
 # --- the series' day axis ----------------------------------------------------
@@ -178,8 +194,10 @@ def series_days(layer: SeriesLayer) -> np.ndarray:
 
 
 # --- scale policy: which panels pool into one scale --------------------------
-# Keyed on the figure's type. A delta figure's trailing panel is a difference and cannot
-# share a sequential ramp with the values it was computed from.
+# Two levels, because two questions. The kind decides *which family* a panel is resolved into —
+# a colour scale for a map, a set of marks for a series — and only within the raster family does
+# the figure's type matter: a delta's trailing panel is a difference and cannot share a
+# sequential ramp with the values it was computed from.
 
 def _pool(stacks: list[tuple[RasterLayer, ...]]) -> np.ndarray:
     """Every cell of every tier of every stack — what a shared scale is anchored on.
@@ -190,28 +208,44 @@ def _pool(stacks: list[tuple[RasterLayer, ...]]) -> np.ndarray:
     return np.concatenate([layer.values.ravel() for stack in stacks for layer in stack])
 
 
-def _one_sequential(rasters: list[tuple[RasterLayer, ...]]) -> list[Scale]:
+def _one_sequential(layers: list[tuple[RasterLayer, ...]]) -> list[RasterScale]:
     """One sequential scale over every panel: a colour means the same value figure-wide."""
-    return [metric_scale(_pool(rasters))] * len(rasters)
+    return [metric_scale(_pool(layers))] * len(layers)
 
 
-def _sequential_plus_delta(rasters: list[tuple[RasterLayer, ...]]) -> list[Scale]:
+def _sequential_plus_delta(layers: list[tuple[RasterLayer, ...]]) -> list[RasterScale]:
     """Value panels on one shared sequential scale; the trailing difference on its own diverging one.
 
     Pooling baseline and candidate together is the point of the figure: the shift between
     them then reads as a colour change, not as two independently stretched ramps.
     """
-    *values, delta = rasters
+    *values, delta = layers
     return [metric_scale(_pool(values))] * len(values) + [delta_scale(_pool([delta]))]
 
 
-_SCALES = {RAW: _one_sequential, DELTA: _sequential_plus_delta}
+_RASTER_SCALES = {RAW: _one_sequential, DELTA: _sequential_plus_delta}
 
 
-def style(ctx: PlotContext, rasters: list[tuple[RasterLayer, ...]]) -> list[Scale]:
-    """One ``Scale`` per raster stack, index-aligned — a delta figure's last stack is the difference.
+def _raster_scales(ctx: PlotContext,
+                   layers: list[tuple[RasterLayer, ...]]) -> list[RasterScale]:
+    """One colour scale per map panel, under the pooling policy the figure's type calls for."""
+    return _RASTER_SCALES[ctx.type](layers)
+
+
+def _series_scales(ctx: PlotContext,
+                   layers: list[tuple[SeriesLayer, ...]]) -> list[SeriesPalette]:
+    """One palette per series panel."""
+    raise NotImplementedError("Series panel colours are not chosen yet.")
+
+
+_SCALES = {RASTER: _raster_scales, SERIES: _series_scales}
+
+
+def style(ctx: PlotContext,
+          layers: list[tuple]) -> list[RasterScale] | list[SeriesPalette]:
+    """One scale or palette per layer stack, index-aligned — a delta figure's last stack is the difference.
 
     Panels sharing a scale share one frozen instance, so "same colour, same value" holds by
     identity rather than by two computations that happen to agree.
     """
-    return _SCALES[ctx.type](rasters)
+    return _SCALES[ctx.kind](ctx, layers)

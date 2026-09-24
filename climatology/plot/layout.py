@@ -22,11 +22,12 @@ from matplotlib.figure import Figure
 from matplotlib.transforms import Bbox
 
 from climatology.plot.colors import DARK_COAST, DARK_LAND, DARK_OCEAN
-from climatology.plot.labels import DELTA, RAW
+from climatology.plot.labels import DELTA, RASTER, RAW, SERIES
 from climatology.utils._types import GridBounds
 
 if TYPE_CHECKING:
     from climatology.core.reduction.spatial import RasterLayer
+    from climatology.core.reduction.temporal import SeriesLayer
     from climatology.plot.build import PlotContext
 
 # --- panel grid: one metric across periods ----------------------------------
@@ -42,6 +43,10 @@ PANEL_HIST_WIDTH = 0.30       # histogram column width, relative to its map colu
 # draw) to the whole region. Data-dependent limits would make a bar's length mean something
 # different in every panel — the same trap as a per-panel colour scale (probe 030).
 PANEL_HIST_XLIM = (0.01, 100.0)
+# A concentration series is a share of the region, so its value axis is the whole share range —
+# fixed for the same reason as the limits above. A data-derived top would make the same height
+# mean a different coverage in each panel, and an ice-poor era would read as an ice-rich one.
+PANEL_SERIES_YLIM = (0.0, 1.0)
 # Minor-tick budget, pinned rather than left on LogLocator's "auto". Auto reads the axis'
 # estimated tick space, which shrinks with the tick label size — at the hero's larger type the
 # stride goes to 2 and the locator returns *no* minor ticks, silently dropping the grid.
@@ -59,24 +64,41 @@ PANEL_CBAR_THICK = 0.010      # colourbar thickness (figure fraction)
 PANEL_CBAR_GAP = 0.028        # gap between a map's bottom edge and its own colourbar
 
 
-class Slot(NamedTuple):
-    """One panel's pair of axes: its map, and the distribution beside it."""
+class RasterSlot(NamedTuple):
+    """One map panel's pair of axes: its map, and the distribution beside it."""
 
     map_ax: Axes
     hist_ax: Axes
 
 
+class SeriesSlot(NamedTuple):
+    """One series panel's single axes — there is no second view of the same values to place beside it."""
+
+    series_ax: Axes
+
+
 @dataclass(frozen=True)
 class PanelAxes:
-    """A figure and the axes each panel draws into, indexed *by panel*, not by reading position.
-
-    Carries the extent every panel shares, since the renderer needs it for the basemap read
-    and for clamping each map's view.
-    """
+    """A figure and the axes each panel draws into, indexed *by panel*, not by reading position."""
 
     fig: Figure
-    slots: tuple[Slot, ...]
+    slots: tuple[RasterSlot, ...] | tuple[SeriesSlot, ...]
+
+
+@dataclass(frozen=True)
+class RasterPanels(PanelAxes):
+    """Map panels, plus the extent every one of them shares.
+
+    The extent is carried because the renderer needs it twice — once for the basemap read, once
+    for clamping each map's view — and it is a property of the figure, not of a panel.
+    """
+
     extent: GridBounds
+
+
+@dataclass(frozen=True)
+class SeriesPanels(PanelAxes):
+    """Series panels, which share no ground and so carry nothing beyond their axes."""
 
 
 def _centre_last_row(axes, n: int, ncols: int) -> None:
@@ -99,7 +121,7 @@ def _centre_last_row(axes, n: int, ncols: int) -> None:
         ax.set_position([box.x0 + shift, box.y0, box.width, box.height])
 
 
-def panel_grid(extent: GridBounds, n: int) -> PanelAxes:
+def panel_grid(extent: GridBounds, n: int) -> RasterPanels:
     """Lay ``n`` equal panels out in reading order, each a map with its distribution beside it.
 
     Row height follows the region's own aspect, so the cells hug the (equal-aspect) maps
@@ -127,10 +149,10 @@ def panel_grid(extent: GridBounds, n: int) -> PanelAxes:
         spare.set_visible(False)
     _centre_last_row(axes, n, ncols)
 
-    return PanelAxes(
+    return RasterPanels(
         fig=fig,
-        slots=tuple(Slot(axes[i // ncols, 2 * (i % ncols)],
-                         axes[i // ncols, 2 * (i % ncols) + 1]) for i in range(n)),
+        slots=tuple(RasterSlot(axes[i // ncols, 2 * (i % ncols)],
+                               axes[i // ncols, 2 * (i % ncols) + 1]) for i in range(n)),
         extent=extent,
     )
 
@@ -146,8 +168,8 @@ def _panel_count(ctx: PlotContext) -> int:
     return len(ctx.runs) + (ctx.type == DELTA)
 
 
-def layout(ctx: PlotContext, rasters: list[tuple[RasterLayer, ...]]) -> PanelAxes:
-    """The figure and its per-panel axes: boxes laid out in reading order, assigned in panel order.
+def _raster_grid(ctx: PlotContext, layers: list[tuple[RasterLayer, ...]]) -> RasterPanels:
+    """The map panels: boxes laid out in reading order, assigned in panel order.
 
     The figure's extent is the *coarsest* tier of any panel. Every finer tier nests inside it
     by construction — ``Tier._domain`` intersects the region with the coastline buffer for the
@@ -156,11 +178,24 @@ def layout(ctx: PlotContext, rasters: list[tuple[RasterLayer, ...]]) -> PanelAxe
     tier's instead would crop the coarse tier's offshore band off the map (~9% of the vertical
     span on manicouagan).
     """
-    grid = panel_grid(rasters[0][0].bounds, _panel_count(ctx))
+    grid = panel_grid(layers[0][0].bounds, _panel_count(ctx))
     order = _ORDERS[ctx.type]
     if order is None:
         return grid
-    return PanelAxes(grid.fig, tuple(grid.slots[p] for p in order), grid.extent)
+    return RasterPanels(grid.fig, tuple(grid.slots[p] for p in order), grid.extent)
+
+
+def _series_grid(ctx: PlotContext, layers: list[tuple[SeriesLayer, ...]]) -> SeriesPanels:
+    """The series panels: one axes each, always in reading order."""
+    raise NotImplementedError("Series panel geometry is not laid out yet.")
+
+
+_LAYOUTS = {RASTER: _raster_grid, SERIES: _series_grid}
+
+
+def layout(ctx: PlotContext, layers: list[tuple]) -> PanelAxes:
+    """The figure and its per-panel axes, indexed by panel."""
+    return _LAYOUTS[ctx.kind](ctx, layers)
 
 
 # --- axes framing and post-draw geometry -------------------------------------

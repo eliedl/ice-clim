@@ -34,10 +34,17 @@ if TYPE_CHECKING:
     from climatology.core.context import RunContext
     from climatology.core.metrics import Metric
     from climatology.core.reduction.spatial import RasterLayer
+    from climatology.core.reduction.temporal import SeriesLayer
     from climatology.plot.build import PlotContext
 
 
 RAW, DELTA = "raw", "delta"
+
+# What a figure draws, and therefore which family of objects each stage resolves. Not
+# configured but *derived* from the metric (``PlotContext.kind``): the two product layouts are
+# located in different spaces, so which one a run archived is not a presentation choice.
+# Orthogonal to RAW/DELTA, which asks whether a raster figure shows values or their change.
+RASTER, SERIES = "raster", "series"
 
 # Every coordinate a title can name, in reading order — which is also the order
 # ``RunContext.describe`` returns them in; ``branch`` zips the two together.
@@ -384,39 +391,72 @@ def _footer_text(ctx: PlotContext, tiers: tuple[RasterLayer, ...]) -> str:
 
 @dataclass(frozen=True)
 class Label:
-    """Every piece of text one panel needs, resolved once from its run and the figure it sits in.
+    """The text every panel carries, whatever it draws.
 
     ``figure_title`` and ``footer`` are figure-level and therefore identical on every label of
-    one figure; the engine draws them once, off any panel's.
+    one figure; the engine draws them once, off any panel's. ``format_ticks`` is the one piece
+    of behaviour a label carries rather than a string, because what a tick *reads* as — a
+    calendar date, a day count, a month — is editorial in exactly the way the rest of this
+    module is.
     """
 
     figure_title: str
     axis_title: str
-    colorbar: str
-    distribution_y: str          # unit of observation on the distribution's value axis
     footer: str
     format_ticks: Callable[[list[float]], list[str]]
 
 
-def label(ctx: PlotContext, rasters: list[tuple[RasterLayer, ...]]) -> list[Label]:
-    """One Label per raster stack, index-aligned — a delta figure's last stack is the difference."""
+@dataclass(frozen=True)
+class RasterLabel(Label):
+    """A map panel's own text: what its colourbar means, and what its distribution is measured in."""
+
+    colorbar: str
+    distribution_y: str          # unit of observation on the distribution's value axis
+
+
+@dataclass(frozen=True)
+class SeriesLabel(Label):
+    """A series panel's own text: its two named axes, and one entry per mark it draws."""
+
+    x_axis: str
+    y_axis: str
+    legend: tuple[str, ...]      # one entry per mark, in draw order
+
+
+def _raster_labels(ctx: PlotContext, layers: list[tuple[RasterLayer, ...]]) -> list[RasterLabel]:
+    """One label per map panel — a delta figure's last stack is the difference, which names itself."""
     shared_slugs, panels_slugs = branch(ctx.runs)
-    title, foot = _title(shared_slugs), _footer_text(ctx, rasters[0])
+    title, foot = _title(shared_slugs), _footer_text(ctx, layers[0])
     unit = UNITS[type(ctx.metric.kernel)].axis
 
     labels = []
     for run, panel_slugs in zip(ctx.runs, panels_slugs):
         colorbar, format_ticks = colorbar_labels(run.metric)
-        labels.append(Label(title, _title(panel_slugs), colorbar,
-                            unit, foot, format_ticks))
+        labels.append(RasterLabel(
+            figure_title=title, axis_title=_title(panel_slugs), footer=foot,
+            format_ticks=format_ticks, colorbar=colorbar, distribution_y=unit,
+        ))
 
     if ctx.type == DELTA:
-        labels.append(Label(
-            title,
-            f"{_title(panels_slugs[1])} − {_title(panels_slugs[0])}",
-            f"Δ {_as_label('metric', ctx.metric.slug)}  (days)",
-            "Days",                 # a difference of two dates is a duration, not a date
-            foot,
-            _count_ticks,
+        labels.append(RasterLabel(
+            figure_title=title,
+            axis_title=f"{_title(panels_slugs[1])} − {_title(panels_slugs[0])}",
+            footer=foot,
+            format_ticks=_count_ticks,
+            colorbar=f"Δ {_as_label('metric', ctx.metric.slug)}  (days)",
+            distribution_y="Days",   # a difference of two dates is a duration, not a date
         ))
     return labels
+
+
+def _series_labels(ctx: PlotContext, layers: list[tuple[SeriesLayer, ...]]) -> list[SeriesLabel]:
+    """One label per series panel."""
+    raise NotImplementedError("Series figure text is not written yet.")
+
+
+_LABELLERS = {RASTER: _raster_labels, SERIES: _series_labels}
+
+
+def label(ctx: PlotContext, layers: list[tuple]) -> list[Label]:
+    """One Label per layer stack, index-aligned — a delta figure's last stack is the difference."""
+    return _LABELLERS[ctx.kind](ctx, layers)
