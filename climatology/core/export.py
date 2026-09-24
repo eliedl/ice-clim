@@ -11,7 +11,10 @@ from pathlib import Path
 import numpy as np
 
 from climatology.core.context import RunContext, Result, FetchResult
+from climatology.core.metrics import SERIES_METRICS
 from climatology.core.reduction.spatial import RasterLayer
+from climatology.core.reduction.temporal import SeriesLayer
+from climatology.core.regions import Tier
 
 log = logging.getLogger(__name__)
 
@@ -47,25 +50,50 @@ def _git_state() -> dict:
     except (OSError, subprocess.CalledProcessError):
         return {"git_sha": None, "git_dirty": None}
 
-def _build_manifest(ctx: RunContext, fetch: FetchResult, result: Result) -> dict:
-    """Self-describing run manifest persisted alongside each tier product."""
-    region, metric, period, source, reduction = ctx.describe()
-    tier = result.tier
+def _grid_extent(tier: Tier) -> dict:
+    """Where a raster product sits on the ground — the half of the manifest a map carries."""
     grid = tier.grid
+    return {"grid_shape": [grid.height, grid.width],
+            "bounds": [float(b) for b in grid.bounds]}
 
-    git = _git_state()
 
-    return {
-        "region": region, "metric": metric, 
-        "period": period, "source": source, 
-        "reduction": reduction, 
+def _series_extent(ctx: RunContext, fetch: FetchResult, result: Result) -> dict:
+    """Where a domain-compressed series sits on the season — the half of the manifest it carries instead.
+
+    A series has no grid to locate: its columns are days, and its extent is the span they cover.
+    The ordinals themselves are not stored because the lattice is regular but for the single
+    week that absorbs the 365th day, so first/last/step reconstruct it — with ``last_day``
+    checking the reconstruction rather than merely describing it (``plot.colors.series_days``).
+    """
+    n_seasons, n_days = result.values.shape
+    days = fetch.df["day_of_season"]
+    if days.nunique() != n_days:
+        raise ValueError(
+            f"Series has {n_days} columns but the fetch observed {days.nunique()} distinct "
+            "days — the extent would reconstruct an axis of the wrong length.")
+    return {"n_seasons": n_seasons, "n_days": n_days,
+            "first_day": int(days.min()), "last_day": int(days.max()),
+            "day_step": ctx.source.step_days}
+
+
+def _build_manifest(ctx: RunContext, fetch: FetchResult, result: Result) -> dict:
+    """Self-describing run manifest persisted alongside each tier product.
+
+    The identity half is common to every product; the extent half is not, since the two
+    product layouts are located in different spaces (see ``_grid_extent``/``_series_extent``).
+    """
+    region, metric, period, source, reduction = ctx.describe()
+    identity = {
+        "region": region, "metric": metric,
+        "period": period, "source": source,
+        "reduction": reduction,
         "n_polygons": len(fetch.df),
-        "tier": tier.level, 
-        "grid_res_m": tier.res_m,
-        "grid_shape": [grid.height, grid.width],
-        "bounds": [float(b) for b in grid.bounds],
-        **git
+        "tier": result.tier.level,
+        "grid_res_m": result.tier.res_m,   # the domain a series was compressed over is still its provenance
     }
+    extent = (_series_extent(ctx, fetch, result) if metric in SERIES_METRICS
+              else _grid_extent(result.tier))
+    return identity | extent | _git_state()
 
 def archive_product(ctx: RunContext, fetch: FetchResult, result: Result) -> Path:
     """Persist the product raster + run manifest under ``<product-dir>/archive/``."""
@@ -99,10 +127,16 @@ def find_archived(ctx: RunContext) -> list[tuple[Path, dict]]:
             for m in sorted(newest.values(), key=itemgetter("grid_res_m"), reverse=True)] # coarse first
 
 
-def load_archived(ctx: RunContext) -> tuple[RasterLayer, ...]:
-    """Every archived tier of one run as layers, coarsest grid first."""
+def load_archived(ctx: RunContext) -> tuple[RasterLayer, ...] | tuple[SeriesLayer, ...]:
+    """Every archived tier of one run as layers, coarsest grid first — or its series.
+    """
+    archived = find_archived(ctx)
+    if ctx.metric.slug in SERIES_METRICS:
+        return tuple(SeriesLayer(np.load(npz)["values"],
+                                 m["first_day"], m["last_day"], m["day_step"])
+                     for npz, m in archived)
     return tuple(RasterLayer(np.load(npz)["values"], m["bounds"], m["grid_res_m"])
-                 for npz, m in find_archived(ctx))
+                 for npz, m in archived)
 
 
 def save_figure(fig, png_path: Path) -> None:

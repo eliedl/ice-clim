@@ -10,10 +10,12 @@ import numpy as np
 from matplotlib.colors import Colormap, LinearSegmentedColormap, Normalize
 
 from climatology.plot.labels import DELTA, RAW
+from climatology.services.calendar import day_of_season
 from climatology.utils.arithmetics import percentile_range
 
 if TYPE_CHECKING:
     from climatology.core.reduction.spatial import RasterLayer
+    from climatology.core.reduction.temporal import SeriesLayer
     from climatology.plot.build import PlotContext
 
 # Dark "Mapbox-style" theme. Ocean = axes background (shows through NaN /
@@ -148,6 +150,31 @@ def delta_scale(values: np.ndarray) -> Scale:
     vabs = max(vabs, DELTA_FALLBACK_VABS)   # never collapse to a zero-width scale
     cmap, norm = build_cmap(DELTA_PALETTE, vmin=-vabs, vmax=vabs)
     return Scale(cmap, norm, _delta_ticks(vabs))
+
+
+# --- the series' day axis ----------------------------------------------------
+# A series panel is anchored on days rather than on a value range, so its axis is resolved
+# here beside the colour scales: same concern — what the panel's positions mean — read off
+# the archive rather than off the data drawn on it.
+
+# The one week a 52-week lattice stretches to absorb the 365th day: CIS weekly charts run
+# Jan 1 + 7k up to Nov 26, then resume on Dec 4 rather than Dec 3. Every ordinal past it
+# therefore sits one day later than a constant step would place it.
+WEEK_RESET_DAY = day_of_season("11-26")
+
+
+def series_days(layer: SeriesLayer) -> np.ndarray:
+    """A series' column axis: the day-of-season ordinals its archived extent spans."""
+    
+    days = layer.first_day + layer.day_step * np.arange(layer.values.shape[1])
+    if days[-1] == layer.last_day:
+        return days                                   # constant step throughout (daily charts)
+    if days[-1] + 1 == layer.last_day:
+        return days + (days > WEEK_RESET_DAY)         # 52-week lattice, one 8-day week
+    raise ValueError(
+        f"Series day axis does not reach its recorded extent: {layer.first_day} + "
+        f"{layer.day_step} × {layer.values.shape[1]} columns ends on day {days[-1]}, but the "
+        f"manifest records {layer.last_day}.")
 
 
 # --- scale policy: which panels pool into one scale --------------------------

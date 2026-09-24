@@ -254,6 +254,22 @@ class DomainSeries(Reduction):
         return kernel.reduce(lambda: _stream_day_stacks(df, tier=tier))
 
 
+@dataclass(frozen=True)
+class SeriesLayer:
+    """One archived domain-compressed series: its values and the day-of-season extent its columns span.
+
+    The counterpart of ``RasterLayer`` for the other product layout, and carried the same way —
+    the array, plus the manifest fields locating it. A raster is located on the ground (bounds,
+    resolution), a series on the season (first day, last day, step). Neither holds the
+    per-cell coordinates; both leave the consumer to derive them.
+    """
+
+    values: DataGrid          # (n_seasons, n_days)
+    first_day: int            # day-of-season ordinal of the first column
+    last_day: int             # ... and of the last, which is what checks a reconstructed axis
+    day_step: int             # days one chart stands for (``ChartSource.step_days``)
+
+
 MEDIAN_THEN_THRESHOLD   = StatThenThreshold("mediantt", _nanmedian_high)
 MEAN_THEN_THRESHOLD     = StatThenThreshold("meantt", _nanmean)
 THRESHOLD_THEN_MEDIAN   = ThresholdThenStat("ttmedian", _nanmedian_high)

@@ -37,7 +37,7 @@ def _synthetic_tier(land_mask):
 
 def _raster(metric, df, tier):
     """Prepare rows (temporal + conversion) via FetchResult, then run the kernel — mirrors the pipeline."""
-    return _compute_raster(metric, FetchResult(df).prepare(metric.conversion), tier)
+    return _compute_raster(metric, FetchResult.build(df).prepare(metric.conversion), tier)
 
 
 def _duration_fixture():
@@ -137,7 +137,7 @@ def test_feb29_rows_dropped_by_season_calendar():
     rows = [{"obs_date": d, "ct_code": "92", "geometry": left}
             for d in ("2012-01-01", "2012-01-08", "2012-02-29", "2013-01-01", "2013-01-08")]
     metric = Metric.build("season_duration")
-    prepared = FetchResult(pd.DataFrame(rows)).prepare(metric.conversion)
+    prepared = FetchResult.build(pd.DataFrame(rows)).prepare(metric.conversion)
     assert set(prepared["day_of_season"]) == {day_of_season("01-01"), day_of_season("01-08")}, \
         "02-29 must be excluded (no ordinal); the other days survive the calendar"
 
@@ -413,11 +413,11 @@ def _large_fixture(n_seasons: int = 10, n_days: int = 15) -> pd.DataFrame:
 
 
 def test_prepare_overhead_is_negligible():
-    """FetchResult.prepare (temporal + conversion) must be a small fraction of a metric's total compute time."""
+    """FetchResult.prepare (the conversion; the season calendar is attached once, at ``build``) must be a small fraction of a metric's total compute time."""
     df = _large_fixture()
     tier = _synthetic_tier(land_mask=None)
     metric = Metric.build("season_duration")
-    fetch = FetchResult(df)
+    fetch = FetchResult.build(df)
     reps = 50
 
     t0 = time.perf_counter()

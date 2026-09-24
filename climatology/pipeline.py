@@ -40,7 +40,7 @@ def _fetch(ctx: RunContext) -> FetchResult:
     bbox = ctx.region.tiers[0].fetch_wkt
     
     sql = ctx.metric.sql(table=ctx.source.table, bbox=bbox, period=ctx.period.window)
-    fetch = FetchResult(load_polygons(sql))
+    fetch = FetchResult.build(load_polygons(sql))
 
     if fetch.df.empty:
             raise ValueError("No polygons returned — check metric SQL, region bounds, "

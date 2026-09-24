@@ -37,17 +37,27 @@ class RunContext:
 
 @dataclass(frozen=True)
 class FetchResult:
-    """The chart-polygon rows fetched once for a run (the fetch-stage output)."""
+    """The chart-polygon rows fetched once for a run, under the season calendar (the fetch-stage output)."""
 
     df: RawPolygons
 
+    @classmethod
+    def build(cls, df: RawPolygons) -> FetchResult:
+        """The fetched rows with the season calendar attached — the form every later stage reads.
+
+        Attached at the fetch boundary rather than inside ``prepare`` so the season columns are
+        a property of the fetch itself: the archive manifest then reads a run's day-of-season
+        extent straight off ``df`` instead of re-deriving it from the dates.
+        """
+        return cls(attach_season_calendar(df))
+
     def prepare(self, conversion: ConversionStrategy) -> ConvertedPolygons:
-        """Fetched rows with the season calendar attached and the metric's value column computed (tier-agnostic, once per run).
+        """Fetched rows with the metric's value column computed (tier-agnostic, once per run).
 
         Every observed day, admissible or not: which days an order may read is the order's
         own rule, applied in ``reduction.temporal`` (DEC-055).
         """
-        return conversion.prepare(attach_season_calendar(self.df))
+        return conversion.prepare(self.df)
 
 
 @dataclass(frozen=True)
