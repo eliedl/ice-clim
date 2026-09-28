@@ -10,7 +10,7 @@ import numpy as np
 from matplotlib.colors import Colormap, LinearSegmentedColormap, Normalize
 
 from climatology.plot.labels import DELTA, RASTER, RAW, SERIES
-from climatology.services.calendar import day_of_season
+from climatology.services.calendar import day_of_season, month_start
 from climatology.utils.arithmetics import percentile_range
 
 if TYPE_CHECKING:
@@ -39,12 +39,22 @@ PALETTES: dict[str, list[tuple[float, str]]] = {
         (1.0,     "#f63601"),
     ],
     DELTA: [
-        (0.0, "#2166ac"), 
-        (0.25, "#67a9cf"), 
+        (0.0, "#2166ac"),
+        (0.25, "#67a9cf"),
         (0.5, "#f7f7f7"),
-        (0.75, "#ef8a62"), 
+        (0.75, "#ef8a62"),
         (1.0, "#b2182b"),
     ],
+}
+
+# A sibling of PALETTES, not a row in it: those are ramps, read by position, and a series maps
+# nothing from a value — it needs one colour per mark. Keyed by ``SeriesPalette`` field, so the
+# two stay in step and a mark added there fails loudly here rather than drawing uncoloured.
+SERIES_COLORS: dict[str, str] = {
+    "points":     "#a05422",
+    "mean":       "#ded9d2",
+    "inner_band": "#1b4a69",
+    "outer_band": "#95bbd0",
 }
 
 def style_axes(ax) -> None:
@@ -100,12 +110,19 @@ class RasterScale:
 
 @dataclass(frozen=True)
 class SeriesPalette:
-    """The four objects a series panel draws, each in its own colour."""
+    """What a series panel is drawn with, and the axis it is read on.
+
+    Carries ``ticks`` for the same reason ``RasterScale`` does: the tick *positions* are
+    resolved here, the text ``Label.format_ticks`` puts on them is resolved in ``labels``.
+    Neither half means anything without the other, which is why paired stages produce them.
+    """
 
     points: str          # the per-season values
     mean: str            # the across-season daily mean
     inner_band: str      # mean ± half a standard deviation
     outer_band: str      # mean ± a standard deviation
+    days: np.ndarray     # x position of every column, in the ordinals ``ticks`` is measured in
+    ticks: list[float]   # month starts — the positions ``format_ticks`` labels
 
 
 def _ticks_values(vmin: float, vmax: float, type: str) -> list[float]:
@@ -200,10 +217,30 @@ def _raster_scales(ctx: PlotContext,
     return _RASTER_SCALES[ctx.type](layers)
 
 
+def series_months(layer: SeriesLayer) -> list[float]:
+    """Day-of-season of the first of each month the series actually carries ice in.
+
+    Filtered, not merely derived. The weekly charts run year-round, so a concentration series
+    holds a five-month summer plateau of exact zeros; ticking those months would spend half the
+    axis labelling an empty stretch. The set collapses the four-or-five columns that share a
+    month — ``series_days`` is strictly increasing, so nothing upstream needs deduplicating.
+    """
+    days = series_days(layer)
+    carries = layer.values.max(axis=0) > 0.0
+    return sorted({month_start(day) for day, keep in zip(days, carries) if keep})
+
+
 def _series_scales(ctx: PlotContext,
                    layers: list[tuple[SeriesLayer, ...]]) -> list[SeriesPalette]:
-    """One palette per series panel."""
-    raise NotImplementedError("Series panel colours are not chosen yet.")
+    """One palette per series panel, every panel read on the same months.
+
+    The ticks pool across panels for the reason ``_one_sequential``'s scale does — a position
+    has to mean the same month everywhere — while ``days`` stays per panel, since two sources
+    chart on different lattices and one shared axis would misplace the finer one.
+    """
+    ticks = sorted({month for stack in layers for month in series_months(stack[0])})
+    return [SeriesPalette(**SERIES_COLORS, days=series_days(stack[0]), ticks=ticks)
+            for stack in layers]
 
 
 _SCALES = {RASTER: _raster_scales, SERIES: _series_scales}

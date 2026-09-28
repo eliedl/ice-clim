@@ -5,7 +5,7 @@ from __future__ import annotations
 import calendar
 import re
 from dataclasses import dataclass
-from datetime import date
+from datetime import date, timedelta
 
 import numpy as np
 import pandas as pd
@@ -34,6 +34,11 @@ def day_of_season(month_day: str) -> int:
     # year's own Feb 29 sits upstream and cancels in the subtraction.
     year = SEASON_ORIGIN.year if m >= SEASON_ORIGIN.month else SEASON_ORIGIN.year + 1
     return (date(year, m, d) - SEASON_ORIGIN).days
+
+
+def month_start(day: int) -> int:
+    """Sep-1-anchored ordinal of the first of the month a day-of-season ordinal falls in."""
+    return day_of_season((SEASON_ORIGIN + timedelta(days=int(day))).strftime("%m-01"))
 
 
 def winter_season(obs_date: pd.Series) -> pd.Series:
