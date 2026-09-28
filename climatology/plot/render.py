@@ -205,7 +205,9 @@ def _draw_series_panel(slot: SeriesSlot, layers: tuple[SeriesLayer, ...],
     ax = slot.series_ax
     values = layers[0].values                      # (n_seasons, n_days)
     days = palette.days
-    mean, sd = values.mean(axis=0), values.std(axis=0)
+    # NaN where a season published no chart that day (DEC-056); the column still carries
+    # the seasons that did, so the curve is the mean over the charted ones, not a gap.
+    mean, sd = np.nanmean(values, axis=0), np.nanstd(values, axis=0)
 
 
     outer = ax.fill_between(days, mean - sd, mean + sd,

@@ -15,7 +15,7 @@ from climatology.core.regions import Tier
 from climatology.services.calendar import day_of_season, filter_admissible_days
 from climatology.utils._types import (
     BoolVector, ConvertedPolygons, DataGrid, DateConvertedPolygons,
-    VarWetStack, VarWetVector, WetStack, WetVector,
+    SeasonVector, VarWetStack, VarWetVector, WetStack, WetVector,
 )
 from climatology.utils.arithmetics import _nanmean, _nanmedian_high
 
@@ -114,12 +114,21 @@ class DomainMean:
     """Mean of the burned variable over the wet domain: one value per season, per day."""
 
     def reduce(self, slices: SliceStream) -> DataGrid:
+        return np.stack([self._day_mean(values) for _ordinal, values in slices()], axis=-1)
+
+    @staticmethod
+    def _day_mean(values: VarWetStack) -> SeasonVector:
+        """One day's domain mean per season; NaN where the season published no chart (DEC-056)."""
         # Cell size is constant within a tier, so sum(CTi*ai)/sum(ai) is the plain domain
-        # mean; the fixed n_wet denominator reads an uncovered cell as ice-free rather than
-        # dividing an all-NaN slice. squeeze(-1) drops the n_vars axis and raises on a
-        # multi-column conversion, which this kernel has no way to combine.
-        return np.stack([np.nansum(values, axis=-1).squeeze(-1) / values.shape[-1]
-                         for _ordinal, values in slices()], axis=-1)
+        # mean; the fixed n_wet denominator reads a cell no polygon covers as ice-free —
+        # in-domain gaps are dropped no-data polygons, never chart extent (DEC-056).
+        # A season with no chart that day is an all-NaN row (_aligned_season_groups burns an
+        # empty group), which nansum reports as 0: an absent chart is not an ice-free domain.
+        # squeeze(-1) drops the n_vars axis and raises on a multi-column conversion, which
+        # this kernel has no way to combine.
+        charted = ~np.isnan(values).all(axis=-1)
+        mean = np.nansum(values, axis=-1) / values.shape[-1]
+        return np.where(charted, mean, np.nan).squeeze(-1)
 
 
 Kernel = ThresholdDate | ThresholdDateDelta | ThresholdDuration | DomainMean

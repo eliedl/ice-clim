@@ -40,6 +40,9 @@ WetVector = Float[np.ndarray, "n_wet"]      # float32 over wet cells; NaN = neve
 BoolVector = Bool[np.ndarray, "n_wet"]      # predicate over wet cells (threshold / observed)
 WetStack = Float[np.ndarray, "n_seasons n_wet"]  # one WetVector per season, stacked (pre-median)
 
+# the series layout's per-day column: the wet axis compressed away, the season axis kept
+SeasonVector = Float[np.ndarray, "n_seasons"]  # NaN = the season published no chart that day
+
 # kernel input slices: one row per burned value column; the kernels collapse
 # the n_vars axis (always second-from-last) and return WetVector / WetStack
 VarWetVector = Float[np.ndarray, "n_vars n_wet"]           # MTT slice (post-median)

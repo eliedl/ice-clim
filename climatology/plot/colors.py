@@ -231,7 +231,9 @@ def series_months(layer: SeriesLayer) -> list[float]:
     month — ``series_days`` is strictly increasing, so nothing upstream needs deduplicating.
     """
     days = series_days(layer)
-    carries = layer.values.max(axis=0) > 0.0
+    # nanmax, not max: a chartless season is NaN (DEC-056) and would propagate through a
+    # plain max, silently dropping the tick for a month the charted seasons do carry ice in.
+    carries = np.nanmax(layer.values, axis=0) > 0.0
     return sorted({month_start(day) for day, keep in zip(days, carries) if keep})
 
 
