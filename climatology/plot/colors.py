@@ -29,7 +29,7 @@ DARK_LINE  = "#3a3f47"
 
 PALETTES: dict[str, list[tuple[float, str]]] = {
     # 7-stop cool-to-warm sequential ramp (teal -> indigo -> plum -> ember -> red).
-    "clim_metric": [
+    RAW: [
         (0.0,     "#7dc6d5"),
         (1 / 6,   "#6576bb"),
         (2 / 6,   "#5b389a"),
@@ -38,19 +38,17 @@ PALETTES: dict[str, list[tuple[float, str]]] = {
         (5 / 6,   "#ed5009"),
         (1.0,     "#f63601"),
     ],
-    "delta": [
-    (0.0, "#2166ac"), 
-    (0.25, "#67a9cf"), 
-    (0.5, "#f7f7f7"),
-    (0.75, "#ef8a62"), 
-    (1.0, "#b2182b"),
+    DELTA: [
+        (0.0, "#2166ac"), 
+        (0.25, "#67a9cf"), 
+        (0.5, "#f7f7f7"),
+        (0.75, "#ef8a62"), 
+        (1.0, "#b2182b"),
     ],
 }
 
-DELTA_FALLBACK_VABS = 1.0   # symmetric ± limit (days) when the delta is ~flat everywhere
-
-
 def style_axes(ax) -> None:
+    # Render concern
     """Dark-theme the ticks and spines."""
     ax.tick_params(axis="both", colors=DARK_FG)
     ax.ticklabel_format(style="plain", axis="both")
@@ -70,14 +68,9 @@ def style_colorbar(cbar, *, label: str, tick_values: list[float],
 
 
 def build_cmap(
-    palette: str | list[tuple[float, str]],
+    palette: str,
     vmin: float,
     vmax: float,
-    *,
-    under: str | None = None,
-    over: str | None = None,
-    bad: str = "none",
-    n: int = 1024,
 ) -> tuple[Colormap, Normalize]:
     """Build a ``(cmap, norm)`` pair anchored to ``[vmin, vmax]``."""
     stops = PALETTES[palette] if isinstance(palette, str) else palette
@@ -85,11 +78,8 @@ def build_cmap(
     colors = [mcolors.to_rgba(c) for _, c in stops]
 
     cmap = LinearSegmentedColormap.from_list(
-        "custom", list(zip(positions, colors)), N=n,
+        "custom", list(zip(positions, colors)), N=1024,
     )
-    cmap.set_under(mcolors.to_rgba(under) if under else colors[0])
-    cmap.set_over(mcolors.to_rgba(over) if over else colors[-1])
-    cmap.set_bad(bad)
 
     return cmap, Normalize(vmin=vmin, vmax=vmax, clip=False)
 
@@ -110,13 +100,7 @@ class RasterScale:
 
 @dataclass(frozen=True)
 class SeriesPalette:
-    """The four marks a series panel draws, each in its own colour.
-
-    A series carries no colour *scale*: nothing is mapped from a value, so there is no ramp, no
-    norm and no tick positions to anchor — only which mark is which. That is the whole of what
-    ``style`` has to resolve for a series panel, and it is why this is a sibling of
-    ``RasterScale`` rather than a subclass of anything.
-    """
+    """The four objects a series panel draws, each in its own colour."""
 
     points: str          # the per-season values
     mean: str            # the across-season daily mean
@@ -124,31 +108,31 @@ class SeriesPalette:
     outer_band: str      # mean ± a standard deviation
 
 
-def metric_scale(values: np.ndarray) -> RasterScale:
-    """Sequential colour scale anchored on the value range (drops near-coast extremas)."""
-    vmin, vmax = percentile_range(values, low=1, high=100)
-    cmap, norm = build_cmap("clim_metric", vmin=vmin, vmax=vmax)
-    return RasterScale(cmap, norm, list(np.linspace(vmin, vmax, 6)))
-
-
-def _delta_ticks(vabs: float) -> list[float]:
-    """Five ticks across ±vabs, dropped to three when the half-steps would not survive integer rounding.
+def _ticks_values(vmin: float, vmax: float, type: str) -> list[float]:
+    """Six ticks across a value range; five across a delta's ±span, dropped to three when the
+    half-steps would not survive integer rounding.
 
     A day-count delta labels its ticks as integers, so a half-step that rounds onto either
     its end tick or the centre renders as a duplicate label — the latter is the
     ``DELTA_FALLBACK_VABS`` floor, reached whenever the delta is ~flat everywhere.
     """
-    if round(vabs / 2) in (round(vabs), 0):
-        return [-vabs, 0.0, vabs]
-    return list(np.linspace(-vabs, vabs, 5))
+    if type != DELTA:
+        return list(np.linspace(vmin, vmax, 6))
+    if round(vmax / 2) in (round(vmax), 0):
+        return [vmin, 0.0, vmax]
+    return list(np.linspace(vmin, vmax, 5))
 
 
-def delta_scale(values: np.ndarray) -> RasterScale:
-    """Diverging colour scale symmetric about zero, so a colour's direction reads as the sign of the change."""
-    finite = values[np.isfinite(values)]
-    vabs = float(np.percentile(np.abs(finite), 99)) # keep delta values up to the 99th percentile
-    cmap, norm = build_cmap(PALETTES["delta"], vmin=-vabs, vmax=vabs)
-    return RasterScale(cmap, norm, _delta_ticks(vabs))
+def scale(values: np.ndarray, type: str) -> RasterScale:
+    """One map panel's colour scale: sequential over the value range, or diverging and symmetric
+    about zero for a delta, so a colour's direction reads as the sign of the change."""
+    if type == DELTA:
+        _, vmax = percentile_range(np.abs(values))  # keep delta values up to the 99th percentile
+        vmin = -vmax
+    else:
+        vmin, vmax = percentile_range(values, low=1, high=100)  # drops near-coast extremas
+    cmap, norm = build_cmap(type, vmin=vmin, vmax=vmax)
+    return RasterScale(cmap, norm, _ticks_values(vmin, vmax, type))
 
 
 # --- the series' day axis ----------------------------------------------------
@@ -163,6 +147,7 @@ WEEK_RESET_DAY = day_of_season("11-26")
 
 
 def series_days(layer: SeriesLayer) -> np.ndarray:
+    # Labels concern
     """A series' column axis: the day-of-season ordinals its archived extent spans."""
     
     days = layer.first_day + layer.day_step * np.arange(layer.values.shape[1])
@@ -193,7 +178,7 @@ def _pool(stacks: list[tuple[RasterLayer, ...]]) -> np.ndarray:
 
 def _one_sequential(layers: list[tuple[RasterLayer, ...]]) -> list[RasterScale]:
     """One sequential scale over every panel: a colour means the same value figure-wide."""
-    return [metric_scale(_pool(layers))] * len(layers)
+    return [scale(_pool(layers), RAW)] * len(layers)
 
 
 def _sequential_plus_delta(layers: list[tuple[RasterLayer, ...]]) -> list[RasterScale]:
@@ -203,7 +188,7 @@ def _sequential_plus_delta(layers: list[tuple[RasterLayer, ...]]) -> list[Raster
     them then reads as a colour change, not as two independently stretched ramps.
     """
     *values, delta = layers
-    return [metric_scale(_pool(values))] * len(values) + [delta_scale(_pool([delta]))]
+    return [scale(_pool(values), RAW)] * len(values) + [scale(_pool([delta]), DELTA)]
 
 
 _RASTER_SCALES = {RAW: _one_sequential, DELTA: _sequential_plus_delta}
