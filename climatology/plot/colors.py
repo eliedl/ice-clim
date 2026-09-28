@@ -123,7 +123,7 @@ def _ticks_values(vmin: float, vmax: float, type: str) -> list[float]:
     return list(np.linspace(vmin, vmax, 5))
 
 
-def scale(values: np.ndarray, type: str) -> RasterScale:
+def _scale(values: np.ndarray, type: str) -> RasterScale:
     """One map panel's colour scale: sequential over the value range, or diverging and symmetric
     about zero for a delta, so a colour's direction reads as the sign of the change."""
     if type == DELTA:
@@ -178,7 +178,7 @@ def _pool(stacks: list[tuple[RasterLayer, ...]]) -> np.ndarray:
 
 def _one_sequential(layers: list[tuple[RasterLayer, ...]]) -> list[RasterScale]:
     """One sequential scale over every panel: a colour means the same value figure-wide."""
-    return [scale(_pool(layers), RAW)] * len(layers)
+    return [_scale(_pool(layers), RAW)] * len(layers)
 
 
 def _sequential_plus_delta(layers: list[tuple[RasterLayer, ...]]) -> list[RasterScale]:
@@ -188,7 +188,7 @@ def _sequential_plus_delta(layers: list[tuple[RasterLayer, ...]]) -> list[Raster
     them then reads as a colour change, not as two independently stretched ramps.
     """
     *values, delta = layers
-    return [scale(_pool(values), RAW)] * len(values) + [scale(_pool([delta]), DELTA)]
+    return [_scale(_pool(values), RAW)] * len(values) + [_scale(_pool([delta]), DELTA)]
 
 
 _RASTER_SCALES = {RAW: _one_sequential, DELTA: _sequential_plus_delta}

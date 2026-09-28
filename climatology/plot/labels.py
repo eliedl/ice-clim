@@ -22,6 +22,7 @@ from climatology.core.conversion import (
     ConversionStrategy,
 )
 from climatology.core.reduction.temporal import (
+    DomainMean,
     Kernel,
     ThresholdDate,
     ThresholdDateDelta,
@@ -68,6 +69,16 @@ def _date_ticks(tick_values: list[float]) -> list[str]:
 def _count_ticks(tick_values: list[float]) -> list[str]:
     """Colourbar labels for time-step-count metrics: rounded integers."""
     return [f"{int(round(d))}" for d in tick_values]
+
+
+def _month_ticks(tick_values: list[float]) -> list[str]:
+    """Axis labels for a series' day-of-season ticks: the month's initial.
+
+    Locale-free by luck rather than by care — the twelve initials read the same in French and
+    in English — so unlike ``_date_ticks`` this needs nothing to pin ``%b``'s language.
+    """
+    return [(SEASON_ORIGIN + timedelta(days=int(round(d)))).strftime("%b")[0].upper()
+            for d in tick_values]
 
 
 # The two reduction orders, as label-template keys: the shape of sentence an order needs.
@@ -170,7 +181,8 @@ FIELD_STYLES: dict[ConversionStrategy, tuple[FieldStyle, ...]] = {
 class Unit:
     """What one kernel family measures, in every place a figure has to say it."""
 
-    noun: str                                         # the quantity: "days", "date", "lag"
+    noun: str                                         # the quantity ("days", "date", "lag") or, where
+                                                      # the kernel crosses nothing, its unit ("[%]")
     connector: str                                    # ties the noun to the chain; "" for a date
     format_ticks: Callable[[list[float]], list[str]]
     axis: str                                         # the distribution's value axis
@@ -182,11 +194,14 @@ class Unit:
 
 # Keyed by kernel type: a new kernel costs one row, not a new sentence builder. ``date`` is the
 # only quantity that is an ordinal rather than a count of days, hence the only one whose ticks
-# are calendar dates.
+# are calendar dates. ``DomainMean`` is the one kernel that crosses nothing, so it reaches only
+# the two slots a series reads — the unit its y axis is named in, and the month its ticks carry;
+# the colourbar grammar never asks it for a phrase.
 UNITS: dict[type, Unit] = {
     ThresholdDuration:  Unit("days", "with", _count_ticks, "Days"),
     ThresholdDate:      Unit("date", "", _date_ticks, "Date"),
     ThresholdDateDelta: Unit("lag", "between", _count_ticks, "Days"),
+    DomainMean:         Unit("[%]", "", _month_ticks, ""),
 }
 
 
@@ -314,6 +329,7 @@ METRIC_LABELS: dict[str, str] = {
     "developed_ice_breakup_date":   "Developed ice break-up",
     "developed_ice_duration":       "Developed ice duration",
     "developed_ice_exposure":       "Developed ice absence duration",
+    "concentration":                "Ice coverage",
 }
 
 # The chart cadence in one word. ``ChartSource.display_label`` is the *footer* attribution —
@@ -332,12 +348,21 @@ REDUCTION_LABELS: dict[str, str] = {
     "ttmedian": "Threshold-then-median",
     "ttmean":   "Threshold-then-mean",
     "ttmpo":    "Threshold-then-fixed-denominator-mean",
+    "series":   "Domain-compressed series",
 }
 
 LABELS: dict[str, dict[str, str]] = {
     "region": REGION_LABELS, "metric": METRIC_LABELS,
     "source": SOURCE_LABELS, "reduction": REDUCTION_LABELS,
 }
+
+# The two strings a series panel does not read off its run. The x axis is the same on every
+# series — a season, read in months — and the legend names the marks rather than the data, so
+# neither varies with the metric the way the y axis does.
+SERIES_X_AXIS = "Month"
+# One entry per mark, in ``SeriesPalette`` field order: the renderer zips the two together, so
+# a mark added to the palette without an entry here fails loudly rather than drawing unnamed.
+SERIES_LEGEND = ("Observations", "Mean", "± 0.5 σ", "± σ")
 
 
 def branch(runs: tuple[RunContext, ...]) -> tuple[dict[str, str], tuple[dict[str, str], ...]]:
@@ -403,7 +428,8 @@ class Label:
     figure_title: str
     axis_title: str
     footer: str
-    format_ticks: Callable[[list[float]], list[str]]
+    format_ticks: Callable[[list[float]], list[str]] 
+    # The format ticks sequence should be moved upstream of the Label definition, Label should store tick_labels, not the method.
 
 
 @dataclass(frozen=True)
@@ -450,8 +476,26 @@ def _raster_labels(ctx: PlotContext, layers: list[tuple[RasterLayer, ...]]) -> l
 
 
 def _series_labels(ctx: PlotContext, layers: list[tuple[SeriesLayer, ...]]) -> list[SeriesLabel]:
-    """One label per series panel."""
-    raise NotImplementedError("Series figure text is not written yet.")
+    """One label per series panel — the same split as the maps: what the figure shares titles it, what varies names the panel.
+
+    The y axis is composed rather than tabled: ``METRIC_LABELS`` names the quantity and the
+    kernel's ``Unit`` carries its unit, so neither table has to repeat what the other says. No
+    delta tail, since ``_validate`` refuses a series difference — the panels are exactly the runs.
+    """
+    shared_slugs, panels_slugs = branch(ctx.runs)
+    title = _title(shared_slugs)
+    unit = UNITS[type(ctx.metric.kernel)]
+    y_axis = f"{_as_label('metric', ctx.metric.slug)} {unit.noun}"
+
+    return [SeriesLabel(
+        figure_title=title,
+        axis_title=_title(panel_slugs),
+        footer="",                     # the provenance strip is not assembled for a series yet
+        format_ticks=unit.format_ticks,
+        x_axis=SERIES_X_AXIS,
+        y_axis=y_axis,
+        legend=SERIES_LEGEND,
+    ) for panel_slugs in panels_slugs]
 
 
 _LABELLERS = {RASTER: _raster_labels, SERIES: _series_labels}
