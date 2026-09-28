@@ -15,6 +15,7 @@ from climatology.core.metrics import SERIES_METRICS
 from climatology.core.reduction.spatial import RasterLayer
 from climatology.core.reduction.temporal import SeriesLayer
 from climatology.core.regions import Tier
+from climatology.plot.labels import branch
 
 log = logging.getLogger(__name__)
 
@@ -36,6 +37,34 @@ def _product_name(ctx: RunContext) -> str:
 def product_path(ctx: RunContext, ext: str) -> Path:
     """Output path for a product of this run, with extension ``ext``."""
     return _product_dir(ctx) / f"{_product_name(ctx)}.{ext}"
+
+
+def _figure_dir(runs: tuple[RunContext, ...]) -> Path:
+    """Directory holding every figure drawn over one region and metric.
+
+    One level above the product dirs a figure reads: it may branch on period, source and
+    reduction, so it cannot sit under any single run's coordinates. Region and metric are
+    pinned across a figure (``plot.build._validate``), hence read off any of its runs.
+    """
+    region, metric, *_ = runs[0].describe()
+    return OUTPUT_DIR / region / metric
+
+
+def _figure_name(runs: tuple[RunContext, ...]) -> str:
+    """Basename of one figure: the coordinates it holds fixed, then the whole axis of every branched one.
+
+    The same split the titles read: ``branch`` gives the pinned coordinates once and the
+    branched ones per panel, so a filename says what the figure draws for the same reason its
+    title does — and two figures over different runs cannot land on one name.
+    """
+    shared, panels = branch(runs)
+    branched = ["_".join(panel[coord] for panel in panels) for coord in panels[0]]
+    return "_".join([*shared.values(), *branched])
+
+
+def figure_path(runs: tuple[RunContext, ...]) -> Path:
+    """Output path for the figure drawn over these runs."""
+    return _figure_dir(runs) / f"{_figure_name(runs)}.png"
 
 
 def _git_state() -> dict:

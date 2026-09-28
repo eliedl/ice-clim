@@ -50,12 +50,17 @@ PALETTES: dict[str, list[tuple[float, str]]] = {
 # A sibling of PALETTES, not a row in it: those are ramps, read by position, and a series maps
 # nothing from a value — it needs one colour per mark. Keyed by ``SeriesPalette`` field, so the
 # two stay in step and a mark added there fails loudly here rather than drawing uncoloured.
+# Sampled off PALETTES[RAW] — bands from its cool half, the mean from its ember stop — and
+# pre-blended toward DARK_OCEAN rather than drawn with alpha: two translucent patches would make
+# the inner band a product of two alphas. Ordered by salience, not by field: outer < inner <
+# points < mean, so the eye lands on the mean. Assumes that same draw order.
 SERIES_COLORS: dict[str, str] = {
-    "points":     "#95bbd0",
-    "mean":       "#1b4a69",
-    "inner_band": "#a05422",
-    "outer_band": "#ded9d2",
+    "points":     "#6098a5",
+    "mean":       "#f08a23",
+    "inner_band": "#4e5c91",
+    "outer_band": "#332457",
 }
+
 
 def style_axes(ax) -> None:
     # Render concern

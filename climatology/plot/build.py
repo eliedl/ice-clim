@@ -28,31 +28,31 @@ The figure's shape is not configured, it is *derived*: ``--type raw`` draws one 
 ``--type delta`` draws the two runs it differences and their change. A partial final row is
 centred under the rows above it.
 
+Where the PNG lands is derived too, from the same coordinates: ``export.figure_path`` writes it
+beside the product dirs of the runs it draws, under ``output/<region>/<metric>/``.
+
     # one run, one map: the same figure the pipeline emits per run
+    # -> output/manicouagan/freeze_up_date/manicouagan_freeze_up_date_2011-2020_sgrda_mediantt.png
     python -m climatology.plot.build freeze_up_date --region manicouagan \\
-        --period 2011-2020 --source sgrda \\
-        --out freeze_up_manicouagan_2011-2020.png
+        --period 2011-2020 --source sgrda
 
     # every period side by side on one colour scale (source co-varies, so both branch)
     python -m climatology.plot.build freeze_up_date --region manicouagan \\
         --period 1971-2000:1981-2010:1991-2020:2011-2020 \\
-        --source sgrdr:sgrdr:sgrdr:sgrda \\
-        --out freeze_up_manicouagan_periods.png
+        --source sgrdr:sgrdr:sgrdr:sgrda
 
     # baseline, candidate and their signed change — SGRDR against SGRDR, chart type held
     # fixed since data reliability is chart-type dependent (Angela Cheng/CIS, pers. comm. 2026)
     python -m climatology.plot.build breakup_date --region manicouagan \\
         --type delta --source sgrdr \\
-        --period 1981-2010:2011-2020 \\
-        --out breakup_manicouagan_delta.png
+        --period 1981-2010:2011-2020
 
     # branch on reduction instead: same region, period and source, two estimators.
     # "median date of break-up" against "date the median CT crosses 4/10" — the change
     # panel maps where the two orders disagree, in days.
     python -m climatology.plot.build breakup_date --region manicouagan \\
         --type delta \\
-        --period 1991-2020 --source sgrdr --reduction mediantt:ttmedian \\
-        --out breakup_manicouagan_reduction.png
+        --period 1991-2020 --source sgrdr --reduction mediantt:ttmedian
 """
 
 from __future__ import annotations
@@ -244,8 +244,6 @@ def _parse_args() -> argparse.Namespace:
                         f"branch. Choices: {', '.join(Reduction.slugs())}.")
     p.add_argument("--type", choices=(RAW, DELTA), default=RAW,
                    help="Absolute values, or the signed change between products.")
-    p.add_argument("--out", type=Path, required=True, metavar="PNG",
-                   help="Where to write the figure.")
     args = p.parse_args()
     _assert_uniform(p, {"period": args.period, "source": args.source,
                         "reduction": args.reduction})
@@ -255,7 +253,7 @@ def _parse_args() -> argparse.Namespace:
 def main() -> None:
     from dotenv import load_dotenv
 
-    from climatology.core.export import save_figure
+    from climatology.core.export import figure_path, save_figure
 
     # Only on the CLI path: MAPBOX_TOKEN reaches `plot.basemap` through the environment, and
     # importing this module (as `pipeline` does) must not have the side effect of setting it.
@@ -267,7 +265,8 @@ def main() -> None:
     args = _parse_args()
     runs = _broadcast(args.region, args.metric, args.period, args.source, args.reduction)
     figure = build_figure(runs, type=args.type)
-    save_figure(figure, args.out)
+    output_path = figure_path(runs)
+    save_figure(figure, output_path)
 
 
 if __name__ == "__main__":
