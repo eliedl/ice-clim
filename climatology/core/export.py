@@ -15,7 +15,7 @@ from climatology.core.metrics import SERIES_METRICS
 from climatology.core.reduction.spatial import RasterLayer
 from climatology.core.reduction.temporal import SeriesLayer
 from climatology.core.regions import Tier
-from climatology.plot.labels import branch
+from climatology.plot.labels import DELTA, branch
 
 log = logging.getLogger(__name__)
 
@@ -50,21 +50,24 @@ def _figure_dir(runs: tuple[RunContext, ...]) -> Path:
     return OUTPUT_DIR / region / metric
 
 
-def _figure_name(runs: tuple[RunContext, ...]) -> str:
+def _figure_name(runs: tuple[RunContext, ...], type: str) -> str:
     """Basename of one figure: the coordinates it holds fixed, then the whole axis of every branched one.
 
     The same split the titles read: ``branch`` gives the pinned coordinates once and the
     branched ones per panel, so a filename says what the figure draws for the same reason its
-    title does — and two figures over different runs cannot land on one name.
+    title does — and two figures over different runs cannot land on one name. The type is what
+    separates the two figures over the *same* runs, a delta being drawn over the pair it
+    differences; ``raw`` is left unsaid, since absolute values are what a figure draws by default.
     """
     shared, panels = branch(runs)
     branched = ["_".join(panel[coord] for panel in panels) for coord in panels[0]]
-    return "_".join([*shared.values(), *branched])
+    marker = [type] if type == DELTA else []
+    return "_".join([*shared.values(), *branched, *marker])
 
 
-def figure_path(runs: tuple[RunContext, ...]) -> Path:
-    """Output path for the figure drawn over these runs."""
-    return _figure_dir(runs) / f"{_figure_name(runs)}.png"
+def figure_path(runs: tuple[RunContext, ...], type: str) -> Path:
+    """Output path for the figure these runs draw under ``type`` (``raw`` | ``delta``)."""
+    return _figure_dir(runs) / f"{_figure_name(runs, type)}.png"
 
 
 def _git_state() -> dict:

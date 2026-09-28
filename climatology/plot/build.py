@@ -265,7 +265,7 @@ def main() -> None:
     args = _parse_args()
     runs = _broadcast(args.region, args.metric, args.period, args.source, args.reduction)
     figure = build_figure(runs, type=args.type)
-    output_path = figure_path(runs)
+    output_path = figure_path(runs, args.type)
     save_figure(figure, output_path)
 
 
