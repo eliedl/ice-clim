@@ -47,6 +47,11 @@ PANEL_HIST_XLIM = (0.01, 100.0)
 # fixed for the same reason as the limits above. A data-derived top would make the same height
 # mean a different coverage in each panel, and an ice-poor era would read as an ice-rich one.
 PANEL_SERIES_YLIM = (0.0, 1.0)
+# A series panel is read along its season, so it wants width where a map wants the region's own
+# aspect — and one column, so the same month sits at the same x in every panel of the figure.
+PANEL_SERIES_NCOLS = 1
+PANEL_SERIES_WIDTH_IN = 9.0
+PANEL_SERIES_HEIGHT_IN = 3.6   # the panel itself, before its title and tick labels
 # Minor-tick budget, pinned rather than left on LogLocator's "auto". Auto reads the axis'
 # estimated tick space, which shrinks with the tick label size — at the hero's larger type the
 # stride goes to 2 and the locator returns *no* minor ticks, silently dropping the grid.
@@ -101,7 +106,7 @@ class SeriesPanels(PanelAxes):
     """Series panels, which share no ground and so carry nothing beyond their axes."""
 
 
-def _centre_last_row(axes, n: int, ncols: int) -> None:
+def _centre_last_row(axes, n: int, ncols: int, *, per_panel: int = 2) -> None:
     """Shift a partial final row so its panels sit centred under the full rows above.
 
     The gridspec cannot express a half-column offset on a ``[1, hist] * ncols`` column grid,
@@ -109,14 +114,17 @@ def _centre_last_row(axes, n: int, ncols: int) -> None:
     ``balance_margins`` and ``match_map_heights`` use. The stride is *measured* off the first
     row rather than re-derived from wspace algebra; a partial last row only ever exists when
     there are two or more rows, so a full row is always there to measure.
+
+    ``per_panel`` is how many axes columns one panel occupies — two for a map and its
+    distribution, one for a series — which is the only way the two families differ here.
     """
     in_last = (n - 1) % ncols + 1
     spare = ncols - in_last
     if not spare:
         return
-    stride = axes[0, 2].get_position().x0 - axes[0, 0].get_position().x0
+    stride = axes[0, per_panel].get_position().x0 - axes[0, 0].get_position().x0
     shift = spare * stride / 2.0
-    for ax in axes[-1, :2 * in_last]:
+    for ax in axes[-1, :per_panel * in_last]:
         box = ax.get_position()
         ax.set_position([box.x0 + shift, box.y0, box.width, box.height])
 
@@ -186,8 +194,36 @@ def _raster_grid(ctx: PlotContext, layers: list[tuple[RasterLayer, ...]]) -> Ras
 
 
 def _series_grid(ctx: PlotContext, layers: list[tuple[SeriesLayer, ...]]) -> SeriesPanels:
-    """The series panels: one axes each, always in reading order."""
-    raise NotImplementedError("Series panel geometry is not laid out yet.")
+    """The series panels: one axes each, stacked, always in reading order.
+
+    No extent and no second axes — a series is located on the season rather than on the ground,
+    and it carries its spread in the same panel as its mean instead of beside it. Row height is
+    fixed rather than taken from a region's aspect, since nothing here is drawn to scale. A
+    series never has a difference panel (``_validate``), so reading order *is* panel order and
+    there is no permutation to apply.
+    """
+    n = _panel_count(ctx)
+    ncols = min(n, PANEL_SERIES_NCOLS)
+    nrows = ceil(n / ncols)
+
+    fig, axes = plt.subplots(
+        nrows, ncols, squeeze=False, sharex=True,
+        figsize=(PANEL_SERIES_WIDTH_IN * ncols,
+                 (PANEL_SERIES_HEIGHT_IN + PANEL_DECORATION_IN) * nrows),
+        gridspec_kw={"wspace": PANEL_WSPACE, "hspace": PANEL_HSPACE,
+                     "left": PANEL_LEFT, "right": PANEL_RIGHT,
+                     "top": PANEL_TOP, "bottom": PANEL_BOTTOM},
+    )
+    fig.patch.set_facecolor(DARK_OCEAN)
+
+    for spare in axes.ravel()[n:]:
+        spare.set_visible(False)
+    _centre_last_row(axes, n, ncols, per_panel=1)
+
+    return SeriesPanels(
+        fig=fig,
+        slots=tuple(SeriesSlot(axes[i // ncols, i % ncols]) for i in range(n)),
+    )
 
 
 _LAYOUTS = {RASTER: _raster_grid, SERIES: _series_grid}
@@ -202,6 +238,7 @@ def layout(ctx: PlotContext, layers: list[tuple]) -> PanelAxes:
 
 def frame_axes(ax, land: gpd.GeoDataFrame, extent: GridBounds, *,
                 zorder: int, fill: bool = True) -> None:
+    # Render concern, misleading name
     """Paint land over the dry cells (wet cells keep their ice colours) and clamp the view.
 
     ``fill=False`` when the basemap already supplies the land: only the coastline is drawn,

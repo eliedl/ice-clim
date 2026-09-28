@@ -51,10 +51,10 @@ PALETTES: dict[str, list[tuple[float, str]]] = {
 # nothing from a value — it needs one colour per mark. Keyed by ``SeriesPalette`` field, so the
 # two stay in step and a mark added there fails loudly here rather than drawing uncoloured.
 SERIES_COLORS: dict[str, str] = {
-    "points":     "#a05422",
-    "mean":       "#ded9d2",
-    "inner_band": "#1b4a69",
-    "outer_band": "#95bbd0",
+    "points":     "#95bbd0",
+    "mean":       "#1b4a69",
+    "inner_band": "#a05422",
+    "outer_band": "#ded9d2",
 }
 
 def style_axes(ax) -> None:

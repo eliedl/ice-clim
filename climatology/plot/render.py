@@ -19,7 +19,7 @@ from typing import TYPE_CHECKING
 import numpy as np
 from matplotlib.colors import Colormap, Normalize
 from matplotlib.figure import Figure
-from matplotlib.ticker import FuncFormatter, LogLocator, NullFormatter
+from matplotlib.ticker import FuncFormatter, LogLocator, NullFormatter, PercentFormatter
 
 from climatology.plot.basemap import draw_basemap_labels, draw_basemap_land, load_basemap
 from climatology.plot.colors import (
@@ -39,10 +39,12 @@ from climatology.plot.layout import (
     PANEL_HIST_BIN_DAYS,
     PANEL_HIST_MINOR_NUMTICKS,
     PANEL_HIST_XLIM,
+    PANEL_SERIES_YLIM,
     PanelAxes,
     RasterPanels,
     RasterSlot,
     SeriesPanels,
+    SeriesSlot,
     balance_margins,
     frame_axes,
     match_map_heights,
@@ -58,6 +60,8 @@ if TYPE_CHECKING:
 SUPTITLE_PT = 14
 PANEL_TITLE_PT = 11
 PANEL_TICK_PT = 7
+SERIES_POINT_SIZE = 4         # one dot per season per chart day: 1560 on a 30 x 52 series
+SERIES_MEAN_LW = 1.8
 
 
 # --- primitives -------------------------------------------------------------
@@ -159,10 +163,88 @@ def _render_maps(layers: list[tuple[RasterLayer, ...]], labels: list[RasterLabel
     return fig
 
 
+def _style_series_axes(ax, lab: SeriesLabel, palette: SeriesPalette) -> None:
+    """The panel's frame: the fixed share range, the ticked months, and the dark theme."""
+    ax.set_facecolor(DARK_OCEAN)
+    ax.set_ylim(*PANEL_SERIES_YLIM)
+    ax.yaxis.set_major_formatter(PercentFormatter(xmax=1.0, decimals=0))
+
+    # The last tick is the *start* of the final month, so closing the axis on it would cut the
+    # columns inside that month (May 07 and May 14 on manic-roi). One more month's width — the
+    # median gap between ticks — closes it without the calendar wrap an exact +1 month risks.
+    ax.set_xlim(palette.ticks[0], palette.ticks[-1] + np.median(np.diff(palette.ticks)))
+    ax.set_xticks(palette.ticks)
+    ax.set_xticklabels(lab.format_ticks(palette.ticks), fontsize=PANEL_TICK_PT)
+
+    ax.set_title(lab.axis_title, fontsize=PANEL_TITLE_PT, pad=6, color=DARK_FG)
+    ax.set_xlabel(lab.x_axis, fontsize=PANEL_TICK_PT, color=DARK_FG, labelpad=2)
+    ax.set_ylabel(lab.y_axis, fontsize=PANEL_TICK_PT, color=DARK_FG, labelpad=2)
+    ax.tick_params(axis="both", labelsize=PANEL_TICK_PT, colors=DARK_FG, length=2, pad=1)
+    for side, spine in ax.spines.items():
+        spine.set_visible(side in ("left", "bottom"))
+        spine.set_edgecolor(DARK_LINE)
+
+    ax.grid(True, which="major", linestyle=":", linewidth=0.5, color=DARK_LINE, alpha=0.9)
+    ax.set_axisbelow(True)
+
+
+def _draw_series_panel(slot: SeriesSlot, layers: tuple[SeriesLayer, ...],
+                       lab: SeriesLabel, palette: SeriesPalette) -> None:
+    """One series panel: every season's values, their daily mean, and the spread around it.
+
+    Only the *first* tier is drawn, which for a multi-tier region is the coarsest — the tiers
+    cover the same ground at different resolutions, and a series has already compressed the
+    domain away, so there is no extent left to nest one inside the other. On a single-tier
+    region (``manic-roi``) that is the whole product and the panel is exact. On an adaptive
+    region it is a coarse-resolution reading of the same water: the quantity is the same
+    domain mean, estimated on a 1 km grid rather than a 100 m one, so the curve is sound but
+    its precision near the coast is not the finest the archive holds. Combining the tiers onto
+    a common grid before compressing is the fix if that precision is ever wanted; until then
+    the footer is where the resolution actually drawn belongs, once it is assembled.
+    """
+    ax = slot.series_ax
+    values = layers[0].values                      # (n_seasons, n_days)
+    days = palette.days
+    mean, sd = values.mean(axis=0), values.std(axis=0)
+
+
+    outer = ax.fill_between(days, mean - sd, mean + sd,
+                                color=palette.outer_band, linewidth=0)
+    inner = ax.fill_between(days, mean - 0.5 * sd, mean + 0.5 * sd,
+                                color=palette.inner_band, linewidth=0)
+    line, = ax.plot(days, mean, color=palette.mean, linewidth=SERIES_MEAN_LW)
+    points = ax.scatter(np.tile(days, values.shape[0]), values.ravel(),
+                        s=SERIES_POINT_SIZE, color=palette.points, linewidths=0)
+    
+    
+
+    _style_series_axes(ax, lab, palette)
+
+    # Marks in ``SeriesPalette`` field order, which is the order ``SERIES_LEGEND`` is written
+    # in; ``strict`` fails loudly if a mark is added to one table and not the other.
+    entries = list(zip((points, line, inner, outer), lab.legend, strict=True))
+    ax.legend([mark for mark, _ in entries], [name for _, name in entries],
+              loc="upper right", fontsize=PANEL_TICK_PT, labelcolor=DARK_FG,
+              facecolor=DARK_OCEAN, edgecolor=DARK_LINE, framealpha=0.8)
+
+
 def _render_series(layers: list[tuple[SeriesLayer, ...]], labels: list[SeriesLabel],
                    palettes: list[SeriesPalette], panels: SeriesPanels) -> Figure:
-    """Draw every series panel: its per-season values, their daily mean, and the spread around it."""
-    raise NotImplementedError("The series engine is not written yet.")
+    """Draw every series panel, then the figure-level furniture.
+
+    One pass, where the maps need three: nothing here holds an aspect that shrinks at draw
+    time, and there are no colourbars to place under boxes that have settled.
+    """
+    fig = panels.fig
+    for slot, stack, lab, palette in zip(panels.slots, layers, labels, palettes, strict=True):
+        _draw_series_panel(slot, stack, lab, palette)
+
+    # Figure-level text is identical on every label; drawn once, off the first.
+    fig.suptitle(labels[0].figure_title, wrap=True, x=0.5,
+                 ha="center", ma="center", fontsize=SUPTITLE_PT, color=DARK_FG)
+    margin = balance_margins(fig)
+    footer(fig, labels[0].footer, x=margin)
+    return fig
 
 
 _RENDERERS = {RASTER: _render_maps, SERIES: _render_series}
