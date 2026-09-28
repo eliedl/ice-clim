@@ -29,7 +29,7 @@ DARK_LINE  = "#3a3f47"
 
 PALETTES: dict[str, list[tuple[float, str]]] = {
     # 7-stop cool-to-warm sequential ramp (teal -> indigo -> plum -> ember -> red).
-    "cool_to_warm_7": [
+    "clim_metric": [
         (0.0,     "#7dc6d5"),
         (1 / 6,   "#6576bb"),
         (2 / 6,   "#5b389a"),
@@ -38,32 +38,15 @@ PALETTES: dict[str, list[tuple[float, str]]] = {
         (5 / 6,   "#ed5009"),
         (1.0,     "#f63601"),
     ],
-    # 5-stop coarser variant of the same family.
-    "cool_to_warm_5": [
-        (0.00, "#7ec8d5"),
-        (0.25, "#5e61b5"),
-        (0.50, "#7d4b78"),
-        (0.75, "#d47123"),
-        (1.00, "#ee5009"),
-    ],
-    # 5-stop palette tuned for wave-height style scales.
-    "waves_5": [
-        (0.00, "#7dc6d5"),
-        (0.25, "#5540ab"),
-        (0.50, "#b9663d"),
-        (0.75, "#ec5009"),
-        (1.00, "#f73700"),
+    "delta": [
+    (0.0, "#2166ac"), 
+    (0.25, "#67a9cf"), 
+    (0.5, "#f7f7f7"),
+    (0.75, "#ef8a62"), 
+    (1.0, "#b2182b"),
     ],
 }
 
-# Diverging palette for signed-change maps, anchored symmetrically about zero so
-# the *sign* of a change reads as the colour's direction (cool = earlier/less,
-# neutral = no change, warm = later/more), never as magnitude alone. Absolute
-# per-era values use a sequential scale; a difference must not.
-DELTA_PALETTE: list[tuple[float, str]] = [
-    (0.0, "#2166ac"), (0.25, "#67a9cf"), (0.5, "#f7f7f7"),
-    (0.75, "#ef8a62"), (1.0, "#b2182b"),
-]
 DELTA_FALLBACK_VABS = 1.0   # symmetric ± limit (days) when the delta is ~flat everywhere
 
 
@@ -77,6 +60,7 @@ def style_axes(ax) -> None:
 
 def style_colorbar(cbar, *, label: str, tick_values: list[float],
                    tick_labels: list[str]) -> None:
+    # Render concern
     """Dark-theme a colourbar and apply the metric's tick formatting."""
     cbar.set_ticks(tick_values)
     cbar.set_ticklabels(tick_labels, fontsize=8)
@@ -143,7 +127,7 @@ class SeriesPalette:
 def metric_scale(values: np.ndarray) -> RasterScale:
     """Sequential colour scale anchored on the value range (drops near-coast extremas)."""
     vmin, vmax = percentile_range(values, low=1, high=100)
-    cmap, norm = build_cmap("cool_to_warm_7", vmin=vmin, vmax=vmax)
+    cmap, norm = build_cmap("clim_metric", vmin=vmin, vmax=vmax)
     return RasterScale(cmap, norm, list(np.linspace(vmin, vmax, 6)))
 
 
@@ -162,9 +146,8 @@ def _delta_ticks(vabs: float) -> list[float]:
 def delta_scale(values: np.ndarray) -> RasterScale:
     """Diverging colour scale symmetric about zero, so a colour's direction reads as the sign of the change."""
     finite = values[np.isfinite(values)]
-    vabs = float(np.percentile(np.abs(finite), 99)) if finite.size else DELTA_FALLBACK_VABS
-    vabs = max(vabs, DELTA_FALLBACK_VABS)   # never collapse to a zero-width scale
-    cmap, norm = build_cmap(DELTA_PALETTE, vmin=-vabs, vmax=vabs)
+    vabs = float(np.percentile(np.abs(finite), 99)) # keep delta values up to the 99th percentile
+    cmap, norm = build_cmap(PALETTES["delta"], vmin=-vabs, vmax=vabs)
     return RasterScale(cmap, norm, _delta_ticks(vabs))
 
 

@@ -100,17 +100,12 @@ class PlotContext:
 
     @property
     def kind(self) -> str:
-        """Which family of objects every stage resolves into: ``raster`` or ``series``.
+        """Which family of objects every stage resolves into: ``raster`` or ``series``."""
 
-        Derived, not configured — like the figure's shape. Which layout a run archived is a
-        property of its metric, so ``--type series`` would be a claim the archive could
-        contradict; ``--type`` stays the raw/delta axis, which is a genuine choice.
-        """
         return SERIES if self.metric.slug in SERIES_METRICS else RASTER
 
     def assert_shared_regions(ctx: PlotContext) -> None:
-        """Region is pinned across the figure — panels that do not share a grid cannot be
-        overlaid on one extent, let alone differenced cell by cell."""
+        
         slugs = sorted({run.region.slug for run in ctx.runs})
         if len(slugs) > 1:
             raise ValueError(
@@ -118,11 +113,7 @@ class PlotContext:
                 f"{', '.join(COORDS)} instead.")
 
     def assert_shared_metrics(ctx: PlotContext) -> None:
-        """One metric across the figure — the reduction may branch, the quantity may not.
-
-        ``ctx.metric`` carries the figure's title, unit and colour scale and is read off the
-        first run, so a second quantity would be drawn under the first one's label.
-        """
+        
         slugs = sorted({run.metric.slug for run in ctx.runs})
         if len(slugs) > 1:
             raise ValueError(
@@ -141,42 +132,35 @@ class PlotContext:
 # --- stages -----------------------------------------------------------------
 
 def _resolve(runs: tuple[RunContext, ...], *, type: str) -> PlotContext:
-    """Bind the runs to a figure type, and announce it (mirrors ``pipeline._resolve``).
 
-    ``ctx.metric`` is the first run's — so it is bound to that run's reduction. Everything the
-    metric is asked for downstream — its title, its tick formatter, whether it counts steps —
-    is order-independent; the order-dependent labels are taken per panel, from that panel's
-    own reduction.
-    """
     ctx = PlotContext(runs=runs, type=type)
-    # Each run spelled as its own slugs, in the order the archive path spells them, so a log
-    # line greps straight against ``output/``.
+    
     log.info("Figure: %s %s | Metric: %s | Region: %s | Runs: %s",
              ctx.kind, ctx.type, ctx.metric.slug, ctx.region.slug,
-             " | ".join(" ".join(run.describe()) for run in ctx.runs))
+             " | ".join(" ".join(run.describe()) for run in ctx.runs)) # list individual run slugs
     return ctx
 
 def _validate(ctx: PlotContext) -> None:
-    """Reject an incoherent figure before a single layer is read.
-
-    Answerable from the context alone, which is why it runs before the archive is touched.
+    """Reject an incoherent figure before a single layer is read. 
+    
+    PlotContext-derivable, runs before the archive is touched.
     """
+
     ctx.assert_shared_regions()
     ctx.assert_shared_metrics()
-    if ctx.kind == SERIES and ctx.type == DELTA:
-        raise ValueError(
-            "A series figure has no difference panel: two periods hold different seasons, so "
-            "their season axes do not subtract. Branch on --period to draw them side by side.")
 
 
 def _fetch(ctx: PlotContext) -> list[tuple]:
     """Load each run's archived tiers, coarse first; append the per-tier difference for a delta."""
     layers = [load_archived(run) for run in ctx.runs]
-    if ctx.type == DELTA:                       # guarded to the raster family in ``_validate``
+    log.info("Loaded %d layer(s).", sum(len(stack) for stack in layers))
+
+    if ctx.type == DELTA:                       
         base, cand = layers[0], layers[1]
         layers.append(tuple(RasterLayer(c.values - b.values, c.bounds, c.res_m)
                             for b, c in zip(base, cand)))
-    log.info("Loaded %d layer(s).", sum(len(stack) for stack in layers))
+        log.info("Additional delta layer loaded.")
+    
     return layers
 
 
