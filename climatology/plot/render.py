@@ -46,6 +46,7 @@ from climatology.plot.layout import (
     SeriesSlot,
     balance_margins,
     frame_axes,
+    lattice_is_legible,
     match_map_heights,
 )
 from climatology.core.reduction.spatial import RasterLayer, area_weights
@@ -53,8 +54,10 @@ from climatology.utils._types import DataGrid, GridBounds
 
 if TYPE_CHECKING:
     from climatology.core.reduction.temporal import SeriesLayer
+    from climatology.core.regions import RegionLayer
     from climatology.plot.build import PlotContext
     from climatology.plot.labels import Label, RasterLabel, SeriesLabel
+    from climatology.utils._types import Grid
 
 SUPTITLE_PT = 14
 PANEL_TITLE_PT = 11
@@ -64,6 +67,11 @@ SERIES_MEAN_LW = 1.8
 SERIES_SIGMA_LW = 1.0
 SERIES_HIGHLIGHT_LW = 0.8     # thinner than the mean it is read against, and dashed
 SERIES_YLIM_HEADROOM = 1.08    # value axis top, as a fraction of the tallest mark drawn
+REGION_WET_LW = 0.6           # the wet domain's own outline
+REGION_WET_ALPHA = 0.45       # the one translucent mark in the figure, and the only one the
+                              # palette cannot pre-blend: what shows through varies with the
+                              # region, being the ocean here and the basemap's coast there
+REGION_LATTICE_LW = 0.2       # one cell edge
 
 
 # --- primitives -------------------------------------------------------------
@@ -127,6 +135,46 @@ def _draw_panel(slot: RasterSlot, layers: tuple[RasterLayer, ...], lab: RasterLa
     draw_distribution(hax, layers, scale,
                       tick_labels=lab.format_ticks(scale.ticks), unit=lab.distribution_y)
     return im
+
+
+# --- the figure's ground panel ----------------------------------------------
+
+def _draw_grid(ax, grid: Grid, *, color: str, zorder: int) -> None:
+    """The tier's cell edges, where drawn large enough to read as a resolution.
+
+    The grid's *footprint* needs no mark of its own: the panel is clamped to ``grid.bounds``,
+    so the axes frame already is it. Below the legibility floor the edges merge into a wash
+    that reads as a fill rather than as a resolution, and the frame carries the extent alone.
+    """
+    if not lattice_is_legible(grid):
+        return
+    xmin, ymin, xmax, ymax = grid.bounds
+    ax.vlines(np.linspace(xmin, xmax, grid.width + 1), ymin, ymax,
+              colors=color, linewidth=REGION_LATTICE_LW, zorder=zorder)
+    ax.hlines(np.linspace(ymin, ymax, grid.height + 1), xmin, xmax,
+              colors=color, linewidth=REGION_LATTICE_LW, zorder=zorder)
+
+
+def _draw_region_map(ax, region: RegionLayer, palette: SeriesPalette, *, tile, land) -> None:
+    """The figure's ground panel: the domain the series was compressed over, and the grid it ran on.
+
+    The one thing in a series figure drawn to scale, and composed exactly as ``_draw_panel``'s
+    map half is: the wet domain stands where the ice values stand there — under the basemap's
+    land, which covers the dry ground the domain was cut away from — then the coastline, then
+    the place names on top.
+    """
+    ax.set_facecolor(DARK_OCEAN)
+    region.wet.plot(ax=ax, facecolor=palette.wet, edgecolor=palette.wet,
+                       alpha=REGION_WET_ALPHA, linewidth=REGION_WET_LW, zorder=1)
+    _draw_grid(ax, region.grid, color=palette.grid, zorder=2)
+    draw_basemap_land(ax, tile, zorder=3)
+    frame_axes(ax, land, region.grid.bounds, zorder=4, fill=tile is None)
+    draw_basemap_labels(ax, tile, zorder=5)
+
+    ax.set_aspect("equal")
+    ax.tick_params(labelbottom=False, labelleft=False,
+                   bottom=False, left=False, top=False, right=False)
+    style_axes(ax)
 
 
 # --- the engine -------------------------------------------------------------
@@ -278,12 +326,21 @@ def _render_series(layers: list[tuple[SeriesLayer, ...]], labels: list[SeriesLab
                    palettes: list[SeriesPalette], panels: SeriesPanels) -> Figure:
     """Draw every series panel, then the figure-level furniture.
 
-    One pass, where the maps need three: nothing here holds an aspect that shrinks at draw
-    time, and there are no colourbars to place under boxes that have settled.
+    One pass, where the maps need three: the ground panel does hold an aspect that shrinks at
+    draw time, but nothing is pinned to its drawn box, and there are no colourbars to place
+    under boxes that have settled.
+
+    The ground layer ``_fetch`` appended is unpacked off the tail before the walk: it is one
+    panel however many runs the figure draws, so it is drawn once — like the suptitle and the
+    footer — and the ``strict`` zip stays over the per-run lists alone.
     """
     fig = panels.fig
-    for slot, stack, lab, palette in zip(panels.slots, layers, labels, palettes, strict=True):
+    *stacks, (region,) = layers
+    for slot, stack, lab, palette in zip(panels.slots, stacks, labels, palettes, strict=True):
         _draw_series_panel(slot, stack, lab, palette)
+
+    tile, land = load_basemap(region.grid.bounds)
+    _draw_region_map(panels.map_ax, region, palettes[0], tile=tile, land=land)
 
     # Figure-level text is identical on every label; drawn once, off the first.
     fig.suptitle(labels[0].figure_title, wrap=True, x=0.5,

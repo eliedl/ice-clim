@@ -23,11 +23,10 @@ from matplotlib.transforms import Bbox
 
 from climatology.plot.colors import DARK_COAST, DARK_LAND, DARK_OCEAN
 from climatology.plot.labels import DELTA, RASTER, RAW, SERIES
-from climatology.utils._types import GridBounds
+from climatology.utils._types import Grid, GridBounds
 
 if TYPE_CHECKING:
     from climatology.core.reduction.spatial import RasterLayer
-    from climatology.core.reduction.temporal import SeriesLayer
     from climatology.plot.build import PlotContext
 
 # --- panel grid: one metric across periods ----------------------------------
@@ -53,6 +52,19 @@ PANEL_SERIES_NCOLS = 1
 PANEL_SERIES_WIDTH_IN = 9.0
 PANEL_SERIES_HEIGHT_IN = 3.6   # the panel itself, before its title and tick labels
 PANEL_SERIES_TOP = 0.8
+# The ground panel standing beside the series column: the map's width, relative to a series
+# panel, and its own height in inches. The height is fixed rather than taken from the column
+# it is centred on, because a map sized by the gridspec would grow with the panel count — and
+# how many periods a figure draws is not a property of the region it shows.
+PANEL_SERIES_MAP_WIDTH = 0.42
+PANEL_SERIES_MAP_HEIGHT_IN = 3.4
+# Smallest drawn cell worth drawing the grid lattice at; below it the cell edges merge into a
+# wash that reads as a fill rather than as a resolution, and the footprint alone is drawn.
+# Approximated off the map's fixed height and its longer cell axis, the box being near-square.
+# A real fork, not a defensive one: the coarsest tier — the one the map shows — spans 34 x 36
+# cells (charlevoix) to 1176 x 785 (golfe), so 1.5 pt keeps the lattice on the MRC tiers and
+# the small ROIs and drops it on golfe, manic-roi and iles-de-la-madeleine.
+PANEL_MAP_MIN_CELL_PT = 1.5
 # Minor-tick budget, pinned rather than left on LogLocator's "auto". Auto reads the axis'
 # estimated tick space, which shrinks with the tick label size — at the hero's larger type the
 # stride goes to 2 and the locator returns *no* minor ticks, silently dropping the grid.
@@ -104,7 +116,15 @@ class RasterPanels(PanelAxes):
 
 @dataclass(frozen=True)
 class SeriesPanels(PanelAxes):
-    """Series panels, which share no ground and so carry nothing beyond their axes."""
+    """Series panels, plus the one map standing beside them.
+
+    ``map_ax`` is a field rather than a slot because the ground panel is figure-level, like the
+    suptitle and the footer: there is one whatever the panel count, it names no run coordinate
+    and it is drawn once. Keeping it out of ``slots`` is what lets the renderer's ``strict``
+    zip over the per-run lists stay in step.
+    """
+
+    map_ax: Axes
 
 
 def _centre_last_row(axes, n: int, ncols: int, *, per_panel: int = 2) -> None:
@@ -194,37 +214,56 @@ def _raster_grid(ctx: PlotContext, layers: list[tuple[RasterLayer, ...]]) -> Ras
     return RasterPanels(grid.fig, tuple(grid.slots[p] for p in order), grid.extent)
 
 
-def _series_grid(ctx: PlotContext, layers: list[tuple[SeriesLayer, ...]]) -> SeriesPanels:
-    """The series panels: one axes each, stacked, always in reading order.
+def _centre_series_map(fig, series_axes: list[Axes], map_ax: Axes) -> None:
+    """Pin the ground panel to its fixed height and centre it on the column of panels beside it.
 
-    No extent and no second axes — a series is located on the season rather than on the ground,
-    and it carries its spread in the same panel as its mean instead of beside it. Row height is
-    fixed rather than taken from a region's aspect, since nothing here is drawn to scale. A
-    series never has a difference panel (``_validate``), so reading order *is* panel order and
-    there is no permutation to apply.
+    The gridspec spans it over every row, which is the only way to give it the column's full
+    vertical reach; its own height is then set here so it does not grow with the panel count.
+    Post-hoc placement on the settled boxes, like ``_centre_last_row``'s — and safe before a
+    draw, because an equal-aspect axes shrinks about its anchor, so a box centred now is still
+    centred once matplotlib has fitted the map inside it.
+    """
+    height = PANEL_SERIES_MAP_HEIGHT_IN / fig.get_figheight()
+    top, bottom = series_axes[0].get_position().y1, series_axes[-1].get_position().y0
+    box = map_ax.get_position()
+    map_ax.set_position([box.x0, bottom + (top - bottom - height) / 2.0, box.width, height])
+
+
+def _series_grid(ctx: PlotContext, layers: list[tuple]) -> SeriesPanels:
+    """The series panels stacked in one column, with the figure's ground panel beside them.
+
+    A series is located on the season rather than on the ground, so its panels need no shared
+    extent and no second axes — they carry their spread in the same panel as their mean. Row
+    height is fixed rather than taken from a region's aspect, since nothing in a series panel is
+    drawn to scale; the map beside them is the one thing here that is. One column, so the same
+    month sits at the same x in every panel, and a series never has a difference panel
+    (``_validate``), so reading order *is* panel order and there is no permutation to apply.
+
+    The map spans the rows rather than taking one, and ``sharex`` is applied panel-by-panel
+    rather than figure-wide: the map's x axis is an easting and tying it to a day-of-season
+    would clamp every panel to the region's bounds.
     """
     n = _panel_count(ctx)
-    ncols = min(n, PANEL_SERIES_NCOLS)
-    nrows = ceil(n / ncols)
-
-    fig, axes = plt.subplots(
-        nrows, ncols, squeeze=False, sharex=True,
-        figsize=(PANEL_SERIES_WIDTH_IN * ncols,
-                 (PANEL_SERIES_HEIGHT_IN + PANEL_DECORATION_IN) * nrows),
-        gridspec_kw={"wspace": PANEL_WSPACE, "hspace": PANEL_HSPACE,
-                     "left": PANEL_LEFT, "right": PANEL_RIGHT,
-                     "top": PANEL_SERIES_TOP, "bottom": PANEL_BOTTOM},
+    fig = plt.figure(figsize=(PANEL_SERIES_WIDTH_IN * (PANEL_SERIES_NCOLS + PANEL_SERIES_MAP_WIDTH),
+                              (PANEL_SERIES_HEIGHT_IN + PANEL_DECORATION_IN) * n))
+    grid = fig.add_gridspec(
+        n, PANEL_SERIES_NCOLS + 1,
+        width_ratios=[1.0] * PANEL_SERIES_NCOLS + [PANEL_SERIES_MAP_WIDTH],
+        wspace=PANEL_WSPACE, hspace=PANEL_HSPACE,
+        left=PANEL_LEFT, right=PANEL_RIGHT, top=PANEL_SERIES_TOP, bottom=PANEL_BOTTOM,
     )
     fig.patch.set_facecolor(DARK_OCEAN)
 
-    for spare in axes.ravel()[n:]:
-        spare.set_visible(False)
-    _centre_last_row(axes, n, ncols, per_panel=1)
+    series: list[Axes] = []
+    for row in range(n):
+        series.append(fig.add_subplot(grid[row, 0], sharex=series[0] if series else None))
+    for ax in series[:-1]:
+        ax.tick_params(labelbottom=False)   # only the bottom panel carries the month labels
 
-    return SeriesPanels(
-        fig=fig,
-        slots=tuple(SeriesSlot(axes[i // ncols, i % ncols]) for i in range(n)),
-    )
+    map_ax = fig.add_subplot(grid[:, -1])
+    _centre_series_map(fig, series, map_ax)
+
+    return SeriesPanels(fig=fig, slots=tuple(SeriesSlot(ax) for ax in series), map_ax=map_ax)
 
 
 _LAYOUTS = {RASTER: _raster_grid, SERIES: _series_grid}
@@ -255,6 +294,11 @@ def frame_axes(ax, land: gpd.GeoDataFrame, extent: GridBounds, *,
     xmin, ymin, xmax, ymax = extent
     ax.set_xlim(xmin, xmax)
     ax.set_ylim(ymin, ymax)
+
+
+def lattice_is_legible(grid: Grid) -> bool:
+    """Whether the ground panel's cells are large enough drawn to carry a lattice."""
+    return 72.0 * PANEL_SERIES_MAP_HEIGHT_IN / max(grid.width, grid.height) >= PANEL_MAP_MIN_CELL_PT
 
 
 def balance_margins(fig) -> float:

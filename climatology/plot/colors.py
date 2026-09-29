@@ -63,6 +63,12 @@ SERIES_COLORS: dict[str, str] = {
     # The one highlighted winter, deliberately off the ramp: a near-white reads as emphasis
     # laid over the mean rather than as a fifth category competing with it on the same ramp.
     "highlight": "#a05b55",
+    # The figure's ground panel. Deliberately the quietest pair here: the map is context for
+    # the curves, not a mark competing with them, so the wet domain sits a step above the ocean
+    # it is drawn on and the lattice a step above the domain — legible on inspection, silent
+    # at a glance.
+    "wet":       "#b7cfe1",
+    "grid":      "#5c7d8a",
 }
 
 
@@ -131,6 +137,8 @@ class SeriesPalette:
     spread: str          # the mean ± 0.5 σ patch and the ±σ lines drawn on it
     envelope: str        # the across-season min-max patch
     highlight: str       # the one named winter drawn over the mean, if any
+    wet: str             # the ground panel's wet analysis domain
+    grid: str            # the ground panel's cell lattice
     ticks: list[float]   # month starts — the positions ``format_ticks`` labels
     highlight_season: int | None = None   # which winter wears ``highlight``; None draws no such mark
 
@@ -215,8 +223,7 @@ def series_months(layer: SeriesLayer) -> list[float]:
     return sorted({month_start(day) for day, keep in zip(layer.days, carries) if keep})
 
 
-def _series_scales(ctx: PlotContext,
-                   layers: list[tuple[SeriesLayer, ...]]) -> list[SeriesPalette]:
+def _series_scales(ctx: PlotContext, layers: list[tuple]) -> list[SeriesPalette]:
     """One palette per series panel, every panel read on the same months.
 
     The ticks pool across panels for the reason ``_one_sequential``'s scale does — a position
@@ -224,11 +231,14 @@ def _series_scales(ctx: PlotContext,
     sources chart on different lattices and one shared axis would misplace the finer one.
 
     The highlighted winter is pinned across the figure (``_validate`` has already checked it
-    falls inside every panel's period), so every palette carries the same one.
+    falls inside every panel's period), so every palette carries the same one. The ground layer
+    ``_fetch`` appended is unpacked off the tail: it is drawn from the same palette as the
+    panels but is not one, so it neither contributes months nor earns an entry.
     """
-    ticks = sorted({month for stack in layers for month in series_months(stack[0])})
+    *stacks, _region = layers
+    ticks = sorted({month for stack in stacks for month in series_months(stack[0])})
     return [SeriesPalette(**SERIES_COLORS, ticks=ticks, highlight_season=ctx.highlight)
-            for stack in layers]
+            for _stack in stacks]
 
 
 _SCALES = {RASTER: _raster_scales, SERIES: _series_scales}

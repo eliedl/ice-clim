@@ -13,7 +13,9 @@ its place in ``rasters``.
 
 Two callers, one path — the CLI here, and ``pipeline`` after it has emitted a run's archive.
 Neither hands in rasters: a figure is always built from what is on disk, so a plot is
-reproducible from the archive alone.
+reproducible from the archive alone — with one exception, the ``RegionLayer`` a series figure
+appends, whose ground no product records and which is therefore derived from the run's own
+region definition (and so from the reference polygons under ``utils.polygons``).
 
 Usage:
     python -m climatology.plot.build METRIC --region R --period P --source S --reduction X
@@ -71,7 +73,7 @@ from climatology.core.context import RunContext
 from climatology.core.metrics import SERIES_METRICS, Metric
 from climatology.core.reduction.spatial import RasterLayer
 from climatology.core.reduction.temporal import DOMAIN_SERIES, MEDIAN_THEN_THRESHOLD, Reduction
-from climatology.core.regions import Region
+from climatology.core.regions import Region, RegionLayer
 from climatology.core.export import load_archived
 from climatology.services.sources import ChartSource
 
@@ -175,16 +177,29 @@ def _validate(ctx: PlotContext) -> None:
 
 
 def _fetch(ctx: PlotContext) -> list[tuple]:
-    """Load each run's archived tiers, coarse first; append the per-tier difference for a delta."""
+    """Load each run's archived tiers, coarse first; append the delta a difference figure draws, or the ground a series figure stands on.
+
+    Both tails are appended here for the same reason — a figure draws them and no run archived
+    them — but they are not the same kind of thing. A delta *is* a panel, and every stage after
+    this one resolves it like any other. The region layer is not: it carries no run coordinates,
+    no label and no values, so the series stages unpack it off the tail
+    (``*stacks, (region,) = layers``) and keep their per-run lists index-aligned.
+    """
     layers = [load_archived(run) for run in ctx.runs]
     log.info("Loaded %d layer(s).", sum(len(stack) for stack in layers))
 
-    if ctx.type == DELTA:                       
+    if ctx.type == DELTA:
         base, cand = layers[0], layers[1]
         layers.append(tuple(RasterLayer(c.values - b.values, c.bounds, c.res_m)
                             for b, c in zip(base, cand)))
         log.info("Additional delta layer loaded.")
-    
+
+    if ctx.kind == SERIES:
+        # The coarsest tier: the one ``_draw_series_panel`` actually draws, so the map
+        # describes the panels above it rather than the region in the abstract.
+        layers.append((RegionLayer.from_tier(ctx.region.tiers[0]),))
+        log.info("Region layer built on the '%s' tier.", ctx.region.tiers[0].level)
+
     return layers
 
 

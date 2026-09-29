@@ -6,13 +6,14 @@ import logging
 from dataclasses import dataclass
 from functools import cached_property
 
+import geopandas as gpd
 import numpy as np
 import shapely
 from shapely.geometry.base import BaseGeometry
 
 from climatology.core.rasterize import build_grid, burn_mask
 from climatology.utils.polygons import _bbox_envelope, _coastline_buffer, _landmask, _mrc_polygon
-from climatology.utils._types import Grid
+from climatology.utils._types import GRID_CRS, Grid
 
 log = logging.getLogger(__name__)
 
@@ -113,7 +114,7 @@ class Tier:
 
 @dataclass(frozen=True)
 class RegionLayer:
-    """One tier's ground for a figure: the domain it analysed and the grid geometry over it.
+    """One tier's ground for a figure: the wet domain it analysed and the grid geometry over it.
 
     The third layer type a figure draws, beside ``RasterLayer`` and ``SeriesLayer`` — and the
     only one that carries no values, because what it shows *is* the geometry. A series has
@@ -122,13 +123,23 @@ class RegionLayer:
     read back from an archive, since no product records it.
     """
 
-    domain: BaseGeometry   # the pre-land polygon: region ∩ coastline buffer for a fine tier
+    wet: gpd.GeoSeries   # the wet analysis domain — the cells a value was ever burned into
     grid: Grid
 
     @classmethod
     def from_tier(cls, tier: Tier) -> RegionLayer:
-        """The ground one tier stands on, as a figure draws it."""
-        return cls(tier._domain, tier.grid)
+        """The ground one tier stands on, as a figure draws it.
+
+        ``wet`` rather than ``_domain``: the wet domain is what the kernels were burned over,
+        so it is the ground a series' km² actually came from, where the pre-land polygon is
+        only the region the tier was cut from.
+
+        Handed over as a ``GeoSeries`` rather than as the shapely geometry the tier holds:
+        shapely carries the algebra, geopandas the CRS and the draw. A figure needs the second,
+        and wrapping it here is what keeps geopandas out of the renderer — the same stance
+        ``RasterLayer`` takes by handing over values and bounds ready for ``imshow``.
+        """
+        return cls(gpd.GeoSeries([tier.wet], crs=GRID_CRS), tier.grid)
 
 
 @dataclass(frozen=True)
