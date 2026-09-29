@@ -19,7 +19,7 @@ from typing import TYPE_CHECKING
 import numpy as np
 from matplotlib.colors import Colormap, Normalize
 from matplotlib.figure import Figure
-from matplotlib.ticker import FuncFormatter, LogLocator, NullFormatter, PercentFormatter
+from matplotlib.ticker import FuncFormatter, LogLocator, NullFormatter
 
 from climatology.plot.basemap import draw_basemap_labels, draw_basemap_land, load_basemap
 from climatology.plot.colors import (
@@ -39,7 +39,6 @@ from climatology.plot.layout import (
     PANEL_HIST_BIN_DAYS,
     PANEL_HIST_MINOR_NUMTICKS,
     PANEL_HIST_XLIM,
-    PANEL_SERIES_YLIM,
     PanelAxes,
     RasterPanels,
     RasterSlot,
@@ -63,6 +62,7 @@ PANEL_TICK_PT = 7
 SERIES_POINT_SIZE = 4         # one dot per season's annual maximum: 30 on a 30 x 52 series
 SERIES_MEAN_LW = 1.8
 SERIES_SIGMA_LW = 1.0
+SERIES_YLIM_HEADROOM = 1.08    # value axis top, as a fraction of the tallest mark drawn
 
 
 # --- primitives -------------------------------------------------------------
@@ -164,11 +164,15 @@ def _render_maps(layers: list[tuple[RasterLayer, ...]], labels: list[RasterLabel
     return fig
 
 
-def _style_series_axes(ax, lab: SeriesLabel, palette: SeriesPalette) -> None:
-    """The panel's frame: the fixed share range, the ticked months, and the dark theme."""
+def _style_series_axes(ax, lab: SeriesLabel, palette: SeriesPalette, top: float) -> None:
+    """The panel's frame: the value axis, the ticked months and the dark theme."""
     ax.set_facecolor(DARK_OCEAN)
-    ax.set_ylim(*PANEL_SERIES_YLIM)
-    ax.yaxis.set_major_formatter(PercentFormatter(xmax=1.0, decimals=0))
+    # Zero-anchored, so a mark's height reads as the area it stands for, with a data-derived top
+    # plus headroom to keep the tallest mark off the frame and clear of the legend. The top is
+    # the panel's *own* maximum, so the same height means a different area in each panel — the
+    # trap the fixed PANEL_SERIES_YLIM avoided. A fixed area top (the tier's own wet area) is
+    # still owed here before this leaves the display test.
+    ax.set_ylim(0.0, top * SERIES_YLIM_HEADROOM)
 
     # The last tick is the *start* of the final month, so closing the axis on it would cut the
     # columns inside that month (May 07 and May 14 on manic-roi). One more month's width — the
@@ -198,14 +202,17 @@ def _draw_series_panel(slot: SeriesSlot, layers: tuple[SeriesLayer, ...],
     cover the same ground at different resolutions, and a series has already compressed the
     domain away, so there is no extent left to nest one inside the other. On a single-tier
     region (``manic-roi``) that is the whole product and the panel is exact. On an adaptive
-    region it is a coarse-resolution reading of the same water: the quantity is the same
-    domain mean, estimated on a 1 km grid rather than a 100 m one, so the curve is sound but
-    its precision near the coast is not the finest the archive holds. Combining the tiers onto
-    a common grid before compressing is the fix if that precision is ever wanted; until then
-    the footer is where the resolution actually drawn belongs, once it is assembled.
+    region it is a coarse-resolution reading of the same water — and now that the series is an
+    *area* rather than a domain mean, that is no longer only a loss of precision: each tier
+    wets a different amount of ground, so the km² a panel reads is the coarse tier's own domain,
+    not the region's. Combining the tiers onto a common grid before compressing is the fix;
+    until then the footer is where the resolution actually drawn belongs, once it is assembled.
     """
     ax = slot.series_ax
-    values = layers[0].values                      # (n_seasons, n_days)
+    # (n_seasons, n_days), in ice-covered cells; scaled here to km². ``res_m`` is the tier's
+    # *nominal* resolution, so this is ~2% off the true cell (build_grid ceils then stretches
+    # to the bbox) — good enough to read the curve, not to quote a number.
+    values = layers[0].values * layers[0].res_m ** 2 / 1e6
     days = palette.days
     # NaN where a season published no chart that day (DEC-056); the column still carries
     # the seasons that did, so the curve is the mean over the charted ones, not a gap.
@@ -234,7 +241,9 @@ def _draw_series_panel(slot: SeriesSlot, layers: tuple[SeriesLayer, ...],
     points = ax.scatter(peak_days, peaks,
                         s=SERIES_POINT_SIZE, color=palette.points, linewidths=0)
 
-    _style_series_axes(ax, lab, palette)
+    # The min-max envelope is the tallest mark: it contains every point, and mean + σ sits under
+    # the per-day maximum for any season count.
+    _style_series_axes(ax, lab, palette, top=float(np.nanmax(hi)))
 
     # Marks in the order ``SERIES_LEGEND`` is written in; ``strict`` fails loudly if a mark is
     # added to one table and not the other. Only the +σ handle stands for the σ pair — the two

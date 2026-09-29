@@ -201,7 +201,7 @@ UNITS: dict[type, Unit] = {
     ThresholdDuration:  Unit("days", "with", _count_ticks, "Days"),
     ThresholdDate:      Unit("date", "", _date_ticks, "Date"),
     ThresholdDateDelta: Unit("lag", "between", _count_ticks, "Days"),
-    DomainMean:         Unit("[%]", "", _month_ticks, ""),
+    DomainMean:         Unit("[km²]", "", _month_ticks, ""),
 }
 
 
@@ -277,6 +277,7 @@ def colorbar_labels(metric: Metric) -> tuple[str, Callable[[list[float]], list[s
 REGION_LABELS: dict[str, str] = {
     "golfe":                      "Gulf of St. Lawrence",
     "manic-roi":                  "Manicouagan ROI",
+    "kamou-roi":                  "AOI site d'étude Kamouraska",
     "avignon":                    "Avignon",
     "bonaventure":                "Bonaventure",
     "rocher-perce":               "Le Rocher-Percé",

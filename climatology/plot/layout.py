@@ -52,6 +52,7 @@ PANEL_SERIES_YLIM = (0.0, 1.0)
 PANEL_SERIES_NCOLS = 1
 PANEL_SERIES_WIDTH_IN = 9.0
 PANEL_SERIES_HEIGHT_IN = 3.6   # the panel itself, before its title and tick labels
+PANEL_SERIES_TOP = 0.8
 # Minor-tick budget, pinned rather than left on LogLocator's "auto". Auto reads the axis'
 # estimated tick space, which shrinks with the tick label size — at the hero's larger type the
 # stride goes to 2 and the locator returns *no* minor ticks, silently dropping the grid.
@@ -212,7 +213,7 @@ def _series_grid(ctx: PlotContext, layers: list[tuple[SeriesLayer, ...]]) -> Ser
                  (PANEL_SERIES_HEIGHT_IN + PANEL_DECORATION_IN) * nrows),
         gridspec_kw={"wspace": PANEL_WSPACE, "hspace": PANEL_HSPACE,
                      "left": PANEL_LEFT, "right": PANEL_RIGHT,
-                     "top": PANEL_TOP, "bottom": PANEL_BOTTOM},
+                     "top": PANEL_SERIES_TOP, "bottom": PANEL_BOTTOM},
     )
     fig.patch.set_facecolor(DARK_OCEAN)
 

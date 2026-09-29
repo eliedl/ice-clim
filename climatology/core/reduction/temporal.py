@@ -111,24 +111,25 @@ class ThresholdDuration:
 
 @dataclass(frozen=True)
 class DomainMean:
-    """Mean of the burned variable over the wet domain: one value per season, per day."""
+    """Sum of the burned variable over the wet domain: one value per season, per day — cells, which the draw site scales to km²."""
 
     def reduce(self, slices: SliceStream) -> DataGrid:
-        return np.stack([self._day_mean(values) for _ordinal, values in slices()], axis=-1)
+        return np.stack([self._day_sum(values) for _ordinal, values in slices()], axis=-1)
 
     @staticmethod
-    def _day_mean(values: VarWetStack) -> SeasonVector:
-        """One day's domain mean per season; NaN where the season published no chart (DEC-056)."""
-        # Cell size is constant within a tier, so sum(CTi*ai)/sum(ai) is the plain domain
-        # mean; the fixed n_wet denominator reads a cell no polygon covers as ice-free —
-        # in-domain gaps are dropped no-data polygons, never chart extent (DEC-056).
+    def _day_sum(values: VarWetStack) -> SeasonVector:
+        """One day's wet-domain sum per season, in cells; NaN where the season published no chart (DEC-056)."""
+        # Cell size is constant within a tier, so the sum is an ice-covered *cell count* —
+        # one cell area away from an area, and the /n_wet away from the domain mean it used
+        # to return. A cell no polygon covers reads as ice-free: in-domain gaps are dropped
+        # no-data polygons, never chart extent (DEC-056).
         # A season with no chart that day is an all-NaN row (_aligned_season_groups burns an
         # empty group), which nansum reports as 0: an absent chart is not an ice-free domain.
         # squeeze(-1) drops the n_vars axis and raises on a multi-column conversion, which
         # this kernel has no way to combine.
         charted = ~np.isnan(values).all(axis=-1)
-        mean = np.nansum(values, axis=-1) / values.shape[-1]
-        return np.where(charted, mean, np.nan).squeeze(-1)
+        total = np.nansum(values, axis=-1)
+        return np.where(charted, total, np.nan).squeeze(-1)
 
 
 Kernel = ThresholdDate | ThresholdDateDelta | ThresholdDuration | DomainMean

@@ -32,10 +32,12 @@ class RegionDef:
 ADAPTIVE_TIERS  = (("coarse", 1000.0), ("fine", 100.0))
 GOLFE_TIERS     = (("full", 1000.0),)            # full-gulf product grid (1 km)
 MANIC_ROI_TIERS = (("full", 100.0),)             # externally-supplied ROI, used whole (100 m)
+KAMOU_ROI_TIERS = (("full", 50.0),)              # externally-supplied ROI, used whole (50 m)
 
 REGIONS: dict[str, RegionDef] = {
     "golfe":                      RegionDef(GOLFE_TIERS),
     "manic-roi":                  RegionDef(MANIC_ROI_TIERS),
+    "kamou-roi":                  RegionDef(KAMOU_ROI_TIERS),
     "avignon":                    RegionDef(ADAPTIVE_TIERS, mrc_fid=54),
     "bonaventure":                RegionDef(ADAPTIVE_TIERS, mrc_fid=56),
     "rocher-perce":               RegionDef(ADAPTIVE_TIERS, mrc_fid=69),
