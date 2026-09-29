@@ -12,7 +12,7 @@ import numpy as np
 from climatology.core.conversion import value_columns
 from climatology.core.rasterize import burn_value_stack
 from climatology.core.regions import Tier
-from climatology.services.calendar import day_of_season, filter_admissible_days
+from climatology.services.calendar import Period, day_of_season, filter_admissible_days
 from climatology.utils._types import (
     BoolVector, ConvertedPolygons, DataGrid, DateConvertedPolygons,
     SeasonVector, VarWetStack, VarWetVector, WetStack, WetVector,
@@ -264,21 +264,73 @@ class DomainSeries(Reduction):
         return kernel.reduce(lambda: _stream_day_stacks(df, tier=tier))
 
 
+# --- the archived series and the two axes it is read on ----------------------
+
+# The one week a 52-week lattice stretches to absorb the 365th day: CIS weekly charts run
+# Jan 1 + 7k up to Nov 26, then resume on Dec 4 rather than Dec 3. Every ordinal past it
+# therefore sits one day later than a constant step would place it.
+WEEK_RESET_DAY = day_of_season("11-26")
+
+
+def series_days(first_day: int, last_day: int, day_step: int, n_days: int) -> np.ndarray:
+    """A series' column axis: the day-of-season ordinals its archived extent spans."""
+    days = first_day + day_step * np.arange(n_days)
+    if days[-1] == last_day:
+        return days                                   # constant step throughout (daily charts)
+    if days[-1] + 1 == last_day:
+        return days + (days > WEEK_RESET_DAY)         # 52-week lattice, one 8-day week
+    raise ValueError(
+        f"Series day axis does not reach its recorded extent: {first_day} + {day_step} × "
+        f"{n_days} columns ends on day {days[-1]}, but the manifest records {last_day}.")
+
+
+def _seasons(period_slug: str, n_seasons: int) -> tuple[int, ...]:
+    """A series' row axis: the winter each row holds, named by the year it ends in, ascending.
+
+    Read off the period rather than stored, which holds only while every winter in it was
+    charted — one absent season would shift every row after it. So the count is *checked*
+    against the array, the way ``last_day`` checks the reconstructed day axis.
+    """
+    y1, y2 = Period(period_slug).years
+    seasons = tuple(range(y1, y2 + 1))
+    if len(seasons) != n_seasons:
+        raise ValueError(
+            f"Period {period_slug} names {len(seasons)} winters but the series carries "
+            f"{n_seasons} rows — the row axis cannot be labelled from the period alone.")
+    return seasons
+
+
 @dataclass(frozen=True)
 class SeriesLayer:
-    """One archived domain-compressed series: its values and the day-of-season extent its columns span.
+    """One archived domain-compressed series: its values and the two axes they are read on.
 
-    The counterpart of ``RasterLayer`` for the other product layout, and carried the same way —
-    the array, plus the manifest fields locating it. A raster is located on the ground (bounds,
-    resolution), a series on the season (first day, last day, step). Neither holds the
-    per-cell coordinates; both leave the consumer to derive them.
+    The counterpart of ``RasterLayer`` for the other product layout. A raster is located on the
+    ground (bounds, resolution) and leaves the consumer to derive the per-cell coordinates; a
+    series is located on the season, and the manifest fields locating it are spent at
+    construction — what the layer carries is the reconstructed axes themselves.
     """
 
     values: DataGrid          # (n_seasons, n_days)
-    first_day: int            # day-of-season ordinal of the first column
-    last_day: int             # ... and of the last, which is what checks a reconstructed axis
-    day_step: int             # days one chart stands for (``ChartSource.step_days``)
+    days: np.ndarray          # day-of-season ordinal of each column
+    seasons: tuple[int, ...]  # the winter each row holds, named by the year it ends in
     res_m: float              # the grid the domain was compressed over — provenance, for the figure footer
+
+    @classmethod
+    def from_manifest(cls, values: DataGrid, manifest: dict) -> SeriesLayer:
+        """One archived series with both its axes reconstructed from the manifest that located it."""
+        n_seasons, n_days = values.shape
+        return cls(values=values,
+                   days=series_days(manifest["first_day"], manifest["last_day"],
+                                    manifest["day_step"], n_days),
+                   seasons=_seasons(manifest["period"], n_seasons),
+                   res_m=manifest["grid_res_m"])
+
+    def row_for(self, season: int) -> int:
+        """Row index of one winter; raises if the series does not carry it."""
+        if season not in self.seasons:
+            raise ValueError(f"Series carries the winters {self.seasons[0]}-{self.seasons[-1]}, "
+                             f"not {season}.")
+        return self.seasons.index(season)
 
 
 MEDIAN_THEN_THRESHOLD   = StatThenThreshold("mediantt", _nanmedian_high)

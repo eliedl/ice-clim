@@ -62,6 +62,7 @@ PANEL_TICK_PT = 7
 SERIES_POINT_SIZE = 4         # one dot per season's annual maximum: 30 on a 30 x 52 series
 SERIES_MEAN_LW = 1.8
 SERIES_SIGMA_LW = 1.0
+SERIES_HIGHLIGHT_LW = 0.8     # thinner than the mean it is read against, and dashed
 SERIES_YLIM_HEADROOM = 1.08    # value axis top, as a fraction of the tallest mark drawn
 
 
@@ -193,10 +194,25 @@ def _style_series_axes(ax, lab: SeriesLabel, palette: SeriesPalette, top: float)
     ax.set_axisbelow(True)
 
 
+def _draw_highlight(ax, layer: SeriesLayer, values: DataGrid, palette: SeriesPalette):
+    """One named winter's own series, drawn over the mean it is read against.
+
+    Takes the panel's already-scaled ``values`` rather than the layer's own, so the highlighted
+    winter is in the same unit as every other mark; the layer is what names its row. Returns
+    the mark for the legend, or None when no winter is named — which is what keeps the legend
+    tables in step on either branch.
+    """
+    if palette.highlight_season is None:
+        return None
+    line, = ax.plot(layer.days, values[layer.row_for(palette.highlight_season)],
+                    color=palette.highlight, linewidth=SERIES_HIGHLIGHT_LW, linestyle="-")
+    return line
+
+
 def _draw_series_panel(slot: SeriesSlot, layers: tuple[SeriesLayer, ...],
                        lab: SeriesLabel, palette: SeriesPalette) -> None:
-    """One series panel: each season's annual maximum, the daily mean, the σ spread about it, and
-    the min-max envelope across seasons.
+    """One series panel: each season's annual maximum, the daily mean, the σ spread about it, the
+    min-max envelope across seasons, and — when one is named — a single winter's own series.
 
     Only the *first* tier is drawn, which for a multi-tier region is the coarsest — the tiers
     cover the same ground at different resolutions, and a series has already compressed the
@@ -213,7 +229,7 @@ def _draw_series_panel(slot: SeriesSlot, layers: tuple[SeriesLayer, ...],
     # *nominal* resolution, so this is ~2% off the true cell (build_grid ceils then stretches
     # to the bbox) — good enough to read the curve, not to quote a number.
     values = layers[0].values * layers[0].res_m ** 2 / 1e6
-    days = palette.days
+    days = layers[0].days
     # NaN where a season published no chart that day (DEC-056); the column still carries
     # the seasons that did, so the curve is the mean over the charted ones, not a gap.
     mean, sd = np.nanmean(values, axis=0), np.nanstd(values, axis=0)
@@ -238,6 +254,7 @@ def _draw_series_panel(slot: SeriesSlot, layers: tuple[SeriesLayer, ...],
     ax.plot(days, mean - sd, color=palette.spread,
             linewidth=SERIES_SIGMA_LW, linestyle="-.")
     line, = ax.plot(days, mean, color=palette.mean, linewidth=SERIES_MEAN_LW)
+    highlighted = _draw_highlight(ax, layers[0], values, palette)
     points = ax.scatter(peak_days, peaks,
                         s=SERIES_POINT_SIZE, color=palette.points, linewidths=0)
 
@@ -248,7 +265,10 @@ def _draw_series_panel(slot: SeriesSlot, layers: tuple[SeriesLayer, ...],
     # Marks in the order ``SERIES_LEGEND`` is written in; ``strict`` fails loudly if a mark is
     # added to one table and not the other. Only the +σ handle stands for the σ pair — the two
     # lines are identical, so one entry names both.
-    entries = list(zip((points, line, sigma, half, envelope), lab.legend, strict=True))
+    marks = [points, line, sigma, half, envelope]
+    if highlighted is not None:
+        marks.insert(2, highlighted)   # beside the mean, mirroring ``labels._highlighted_legend``
+    entries = list(zip(marks, lab.legend, strict=True))
     ax.legend([mark for mark, _ in entries], [name for _, name in entries],
               loc="upper right", fontsize=PANEL_TICK_PT, labelcolor=DARK_FG,
               facecolor=DARK_OCEAN, edgecolor=DARK_LINE, framealpha=0.8)

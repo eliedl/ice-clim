@@ -367,6 +367,18 @@ SERIES_X_AXIS = "Month"
 SERIES_LEGEND = ("Annual max", "Mean", "± σ", "± 0.5 σ", "Min-max")
 
 
+def _highlighted_legend(season: int | None) -> tuple[str, ...]:
+    """The mark table, with a highlighted winter named right after the mean it is read against.
+
+    A winter is named by the two calendar years it spans, not by the single year it ends in
+    that ``--highlight`` and the season axis are keyed on: on the figure the span is what
+    reads, since the season opens in September of the year before.
+    """
+    if season is None:
+        return SERIES_LEGEND
+    return SERIES_LEGEND[:2] + (f"{season - 1}-{season}",) + SERIES_LEGEND[2:]
+
+
 def branch(runs: tuple[RunContext, ...]) -> tuple[dict[str, str], tuple[dict[str, str], ...]]:
     """Split the runs' coordinates into what the whole figure shares and what each panel names.
 
@@ -496,7 +508,7 @@ def _series_labels(ctx: PlotContext, layers: list[tuple[SeriesLayer, ...]]) -> l
         format_ticks=unit.format_ticks,
         x_axis=SERIES_X_AXIS,
         y_axis=y_axis,
-        legend=SERIES_LEGEND,
+        legend=_highlighted_legend(ctx.highlight),
     ) for panel_slugs in panels_slugs]
 
 

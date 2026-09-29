@@ -10,7 +10,7 @@ import numpy as np
 from matplotlib.colors import Colormap, LinearSegmentedColormap, Normalize
 
 from climatology.plot.labels import DELTA, RASTER, RAW, SERIES
-from climatology.services.calendar import day_of_season, month_start
+from climatology.services.calendar import month_start
 from climatology.utils.arithmetics import percentile_range
 
 if TYPE_CHECKING:
@@ -56,10 +56,13 @@ PALETTES: dict[str, list[tuple[float, str]]] = {
 # salience, not by field: envelope < spread < points < mean, so the eye lands on the mean.
 # Assumes that same draw order.
 SERIES_COLORS: dict[str, str] = {
-    "points":   "#6098a5",
-    "mean":     "#f08a23",
-    "spread":   "#4e5c91",   # the ±0.5 σ patch and the ±σ lines
-    "envelope": "#332457",   # the min-max patch
+    "points":    "#6098a5",
+    "mean":      "#f08a23",
+    "spread":    "#4e5c91",   # the ±0.5 σ patch and the ±σ lines
+    "envelope":  "#332457",   # the min-max patch
+    # The one highlighted winter, deliberately off the ramp: a near-white reads as emphasis
+    # laid over the mean rather than as a fifth category competing with it on the same ramp.
+    "highlight": "#a05b55",
 }
 
 
@@ -127,8 +130,9 @@ class SeriesPalette:
     mean: str            # the across-season daily mean
     spread: str          # the mean ± 0.5 σ patch and the ±σ lines drawn on it
     envelope: str        # the across-season min-max patch
-    days: np.ndarray     # x position of every column, in the ordinals ``ticks`` is measured in
+    highlight: str       # the one named winter drawn over the mean, if any
     ticks: list[float]   # month starts — the positions ``format_ticks`` labels
+    highlight_season: int | None = None   # which winter wears ``highlight``; None draws no such mark
 
 
 def _ticks_values(vmin: float, vmax: float, type: str) -> list[float]:
@@ -156,32 +160,6 @@ def _scale(values: np.ndarray, type: str) -> RasterScale:
         vmin, vmax = percentile_range(values, low=1, high=100)  # drops near-coast extremas
     cmap, norm = build_cmap(type, vmin=vmin, vmax=vmax)
     return RasterScale(cmap, norm, _ticks_values(vmin, vmax, type))
-
-
-# --- the series' day axis ----------------------------------------------------
-# A series panel is anchored on days rather than on a value range, so its axis is resolved
-# here beside the colour scales: same concern — what the panel's positions mean — read off
-# the archive rather than off the data drawn on it.
-
-# The one week a 52-week lattice stretches to absorb the 365th day: CIS weekly charts run
-# Jan 1 + 7k up to Nov 26, then resume on Dec 4 rather than Dec 3. Every ordinal past it
-# therefore sits one day later than a constant step would place it.
-WEEK_RESET_DAY = day_of_season("11-26")
-
-
-def series_days(layer: SeriesLayer) -> np.ndarray:
-    # Labels concern
-    """A series' column axis: the day-of-season ordinals its archived extent spans."""
-    
-    days = layer.first_day + layer.day_step * np.arange(layer.values.shape[1])
-    if days[-1] == layer.last_day:
-        return days                                   # constant step throughout (daily charts)
-    if days[-1] + 1 == layer.last_day:
-        return days + (days > WEEK_RESET_DAY)         # 52-week lattice, one 8-day week
-    raise ValueError(
-        f"Series day axis does not reach its recorded extent: {layer.first_day} + "
-        f"{layer.day_step} × {layer.values.shape[1]} columns ends on day {days[-1]}, but the "
-        f"manifest records {layer.last_day}.")
 
 
 # --- scale policy: which panels pool into one scale --------------------------
@@ -229,13 +207,12 @@ def series_months(layer: SeriesLayer) -> list[float]:
     Filtered, not merely derived. The weekly charts run year-round, so a concentration series
     holds a five-month summer plateau of exact zeros; ticking those months would spend half the
     axis labelling an empty stretch. The set collapses the four-or-five columns that share a
-    month — ``series_days`` is strictly increasing, so nothing upstream needs deduplicating.
+    month — ``layer.days`` is strictly increasing, so nothing upstream needs deduplicating.
     """
-    days = series_days(layer)
     # nanmax, not max: a chartless season is NaN (DEC-056) and would propagate through a
     # plain max, silently dropping the tick for a month the charted seasons do carry ice in.
     carries = np.nanmax(layer.values, axis=0) > 0.0
-    return sorted({month_start(day) for day, keep in zip(days, carries) if keep})
+    return sorted({month_start(day) for day, keep in zip(layer.days, carries) if keep})
 
 
 def _series_scales(ctx: PlotContext,
@@ -243,11 +220,14 @@ def _series_scales(ctx: PlotContext,
     """One palette per series panel, every panel read on the same months.
 
     The ticks pool across panels for the reason ``_one_sequential``'s scale does — a position
-    has to mean the same month everywhere — while ``days`` stays per panel, since two sources
-    chart on different lattices and one shared axis would misplace the finer one.
+    has to mean the same month everywhere — where each layer's own ``days`` do not, since two
+    sources chart on different lattices and one shared axis would misplace the finer one.
+
+    The highlighted winter is pinned across the figure (``_validate`` has already checked it
+    falls inside every panel's period), so every palette carries the same one.
     """
     ticks = sorted({month for stack in layers for month in series_months(stack[0])})
-    return [SeriesPalette(**SERIES_COLORS, days=series_days(stack[0]), ticks=ticks)
+    return [SeriesPalette(**SERIES_COLORS, ticks=ticks, highlight_season=ctx.highlight)
             for stack in layers]
 
 

@@ -70,7 +70,7 @@ from climatology.plot.layout import layout
 from climatology.core.context import RunContext
 from climatology.core.metrics import SERIES_METRICS, Metric
 from climatology.core.reduction.spatial import RasterLayer
-from climatology.core.reduction.temporal import MEDIAN_THEN_THRESHOLD, Reduction
+from climatology.core.reduction.temporal import DOMAIN_SERIES, MEDIAN_THEN_THRESHOLD, Reduction
 from climatology.core.regions import Region
 from climatology.core.export import load_archived
 from climatology.services.sources import ChartSource
@@ -97,6 +97,7 @@ class PlotContext:
 
     runs: tuple[RunContext, ...]
     type: str = RAW                 # raw | delta
+    highlight: int | None = None    # one winter drawn over the mean, series figures only
 
     @property
     def kind(self) -> str:
@@ -120,6 +121,26 @@ class PlotContext:
                 f"A figure draws one metric; got {slugs}. One metric per figure — "
                 "branch on reduction to compare estimators of the same quantity.")
 
+    def assert_highlight_kind(ctx: PlotContext) -> None:
+
+        if ctx.highlight is not None and ctx.kind != SERIES:
+            raise ValueError(
+                f"--highlight names one winter to draw against the mean, which only a series "
+                f"panel draws; {ctx.metric.slug} resolves to a {ctx.kind} here. Pass "
+                f"--reduction {DOMAIN_SERIES.slug}.")
+
+    def assert_highlight_in_periods(ctx: PlotContext) -> None:
+        """The highlighted winter is pinned across the figure, so every panel must carry it."""
+        if ctx.highlight is None:
+            return
+        outside = sorted({run.period.slug for run in ctx.runs
+                          if not run.period.years[0] <= ctx.highlight <= run.period.years[1]})
+        if outside:
+            raise ValueError(
+                f"--highlight {ctx.highlight} falls outside the period(s) {', '.join(outside)}. "
+                "One winter is drawn across the whole figure, so it must sit inside every "
+                "panel's period.")
+
     @property
     def region(self) -> Region:
         return self.runs[0].region
@@ -131,10 +152,11 @@ class PlotContext:
 
 # --- stages -----------------------------------------------------------------
 
-def _resolve(runs: tuple[RunContext, ...], *, type: str) -> PlotContext:
+def _resolve(runs: tuple[RunContext, ...], *, type: str,
+             highlight: int | None) -> PlotContext:
 
-    ctx = PlotContext(runs=runs, type=type)
-    
+    ctx = PlotContext(runs=runs, type=type, highlight=highlight)
+
     log.info("Figure: %s %s | Metric: %s | Region: %s | Runs: %s",
              ctx.kind, ctx.type, ctx.metric.slug, ctx.region.slug,
              " | ".join(" ".join(run.describe()) for run in ctx.runs)) # list individual run slugs
@@ -148,6 +170,8 @@ def _validate(ctx: PlotContext) -> None:
 
     ctx.assert_shared_regions()
     ctx.assert_shared_metrics()
+    ctx.assert_highlight_kind()
+    ctx.assert_highlight_in_periods()
 
 
 def _fetch(ctx: PlotContext) -> list[tuple]:
@@ -164,7 +188,8 @@ def _fetch(ctx: PlotContext) -> list[tuple]:
     return layers
 
 
-def build_figure(runs: tuple[RunContext, ...], *, type: str = RAW) -> Figure:
+def build_figure(runs: tuple[RunContext, ...], *, type: str = RAW,
+                 highlight: int | None = None) -> Figure:
     """Build one figure from the archive; the caller writes it via ``export.save_figure``.
 
     The four stages after the guard each resolve one concern over the same panel list, and
@@ -173,7 +198,7 @@ def build_figure(runs: tuple[RunContext, ...], *, type: str = RAW) -> Figure:
     family of objects those four hold follows from ``ctx.kind``, and each stage resolves it
     itself — the sequence below is the same whichever it is.
     """
-    ctx = _resolve(runs, type=type)
+    ctx = _resolve(runs, type=type, highlight=highlight)
     _validate(ctx)
     layers = _fetch(ctx)
     labels = label(ctx, layers)
@@ -244,6 +269,10 @@ def _parse_args() -> argparse.Namespace:
                         f"branch. Choices: {', '.join(Reduction.slugs())}.")
     p.add_argument("--type", choices=(RAW, DELTA), default=RAW,
                    help="Absolute values, or the signed change between products.")
+    p.add_argument("--highlight", type=int, default=None, metavar="WINTER",
+                   help="Draw one winter's own series over the across-season mean, named by "
+                        "the year it ends in (2025 = the 2024-2025 winter). Pinned across the "
+                        "figure, and only meaningful on a series reduction.")
     args = p.parse_args()
     _assert_uniform(p, {"period": args.period, "source": args.source,
                         "reduction": args.reduction})
@@ -264,7 +293,7 @@ def main() -> None:
                         format="%(asctime)s %(levelname)s %(message)s")
     args = _parse_args()
     runs = _broadcast(args.region, args.metric, args.period, args.source, args.reduction)
-    figure = build_figure(runs, type=args.type)
+    figure = build_figure(runs, type=args.type, highlight=args.highlight)
     output_path = figure_path(runs, args.type)
     save_figure(figure, output_path)
 

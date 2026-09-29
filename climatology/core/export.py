@@ -95,7 +95,9 @@ def _series_extent(ctx: RunContext, fetch: FetchResult, result: Result) -> dict:
     A series has no grid to locate: its columns are days, and its extent is the span they cover.
     The ordinals themselves are not stored because the lattice is regular but for the single
     week that absorbs the 365th day, so first/last/step reconstruct it — with ``last_day``
-    checking the reconstruction rather than merely describing it (``plot.colors.series_days``).
+    checking the reconstruction rather than merely describing it
+    (``reduction.temporal.series_days``). The season axis is reconstructed the same way, off
+    the identity half's ``period``, checked against ``n_seasons`` (``temporal._seasons``).
     """
     n_seasons, n_days = result.values.shape
     days = fetch.df["day_of_season"]
@@ -164,8 +166,7 @@ def load_archived(ctx: RunContext) -> tuple[RasterLayer, ...] | tuple[SeriesLaye
     """
     archived = find_archived(ctx)
     if ctx.metric.slug in SERIES_METRICS:
-        return tuple(SeriesLayer(np.load(npz)["values"],
-                                 m["first_day"], m["last_day"], m["day_step"], m["grid_res_m"])
+        return tuple(SeriesLayer.from_manifest(np.load(npz)["values"], m)
                      for npz, m in archived)
     return tuple(RasterLayer(np.load(npz)["values"], m["bounds"], m["grid_res_m"])
                  for npz, m in archived)

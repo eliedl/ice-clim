@@ -112,6 +112,26 @@ class Tier:
 
 
 @dataclass(frozen=True)
+class RegionLayer:
+    """One tier's ground for a figure: the domain it analysed and the grid geometry over it.
+
+    The third layer type a figure draws, beside ``RasterLayer`` and ``SeriesLayer`` — and the
+    only one that carries no values, because what it shows *is* the geometry. A series has
+    compressed the domain away, so nothing else in a series figure says what ground its km²
+    were measured over; this is that statement. Derived from the run's own region rather than
+    read back from an archive, since no product records it.
+    """
+
+    domain: BaseGeometry   # the pre-land polygon: region ∩ coastline buffer for a fine tier
+    grid: Grid
+
+    @classmethod
+    def from_tier(cls, tier: Tier) -> RegionLayer:
+        """The ground one tier stands on, as a figure draws it."""
+        return cls(tier._domain, tier.grid)
+
+
+@dataclass(frozen=True)
 class Region:
     """A resolved region: identity (slug) + ordered tiers (coarse -> fine)."""
 
