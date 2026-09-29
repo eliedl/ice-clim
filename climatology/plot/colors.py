@@ -51,14 +51,15 @@ PALETTES: dict[str, list[tuple[float, str]]] = {
 # nothing from a value — it needs one colour per mark. Keyed by ``SeriesPalette`` field, so the
 # two stay in step and a mark added there fails loudly here rather than drawing uncoloured.
 # Sampled off PALETTES[RAW] — bands from its cool half, the mean from its ember stop — and
-# pre-blended toward DARK_OCEAN rather than drawn with alpha: two translucent patches would make
-# the inner band a product of two alphas. Ordered by salience, not by field: outer < inner <
-# points < mean, so the eye lands on the mean. Assumes that same draw order.
+# pre-blended toward DARK_OCEAN rather than drawn with alpha: the ±0.5 σ patch sits inside the
+# envelope, and two translucent patches would make it a product of two alphas. Ordered by
+# salience, not by field: envelope < spread < points < mean, so the eye lands on the mean.
+# Assumes that same draw order.
 SERIES_COLORS: dict[str, str] = {
-    "points":     "#6098a5",
-    "mean":       "#f08a23",
-    "inner_band": "#4e5c91",
-    "outer_band": "#332457",
+    "points":   "#6098a5",
+    "mean":     "#f08a23",
+    "spread":   "#4e5c91",   # the ±0.5 σ patch and the ±σ lines
+    "envelope": "#332457",   # the min-max patch
 }
 
 
@@ -122,10 +123,10 @@ class SeriesPalette:
     Neither half means anything without the other, which is why paired stages produce them.
     """
 
-    points: str          # the per-season values
+    points: str          # the per-season annual maxima
     mean: str            # the across-season daily mean
-    inner_band: str      # mean ± half a standard deviation
-    outer_band: str      # mean ± a standard deviation
+    spread: str          # the mean ± 0.5 σ patch and the ±σ lines drawn on it
+    envelope: str        # the across-season min-max patch
     days: np.ndarray     # x position of every column, in the ordinals ``ticks`` is measured in
     ticks: list[float]   # month starts — the positions ``format_ticks`` labels
 

@@ -60,8 +60,9 @@ if TYPE_CHECKING:
 SUPTITLE_PT = 14
 PANEL_TITLE_PT = 11
 PANEL_TICK_PT = 7
-SERIES_POINT_SIZE = 4         # one dot per season per chart day: 1560 on a 30 x 52 series
+SERIES_POINT_SIZE = 4         # one dot per season's annual maximum: 30 on a 30 x 52 series
 SERIES_MEAN_LW = 1.8
+SERIES_SIGMA_LW = 1.0
 
 
 # --- primitives -------------------------------------------------------------
@@ -190,7 +191,8 @@ def _style_series_axes(ax, lab: SeriesLabel, palette: SeriesPalette) -> None:
 
 def _draw_series_panel(slot: SeriesSlot, layers: tuple[SeriesLayer, ...],
                        lab: SeriesLabel, palette: SeriesPalette) -> None:
-    """One series panel: every season's values, their daily mean, and the spread around it.
+    """One series panel: each season's annual maximum, the daily mean, the σ spread about it, and
+    the min-max envelope across seasons.
 
     Only the *first* tier is drawn, which for a multi-tier region is the coarsest — the tiers
     cover the same ground at different resolutions, and a series has already compressed the
@@ -208,23 +210,36 @@ def _draw_series_panel(slot: SeriesSlot, layers: tuple[SeriesLayer, ...],
     # NaN where a season published no chart that day (DEC-056); the column still carries
     # the seasons that did, so the curve is the mean over the charted ones, not a gap.
     mean, sd = np.nanmean(values, axis=0), np.nanstd(values, axis=0)
+    lo, hi = np.nanmin(values, axis=0), np.nanmax(values, axis=0)
 
+    # One dot per season, not per season-day: the date axis is compressed away by a max, so a
+    # dot is that season's peak plotted on the day it fell — NaN days drop out of both the
+    # value and the date. ``nanargmax`` raises on an all-NaN season, which is the loud failure
+    # wanted: a season with no chart at all has no peak to place.
+    peaks = np.nanmax(values, axis=1)
+    peak_days = days[np.nanargmax(values, axis=1)]
 
-    outer = ax.fill_between(days, mean - sd, mean + sd,
-                                color=palette.outer_band, linewidth=0)
-    inner = ax.fill_between(days, mean - 0.5 * sd, mean + 0.5 * sd,
-                                color=palette.inner_band, linewidth=0)
+    # Widest first, so each mark is drawn over the one that contains it.
+    envelope = ax.fill_between(days, lo, hi, color=palette.envelope, linewidth=0)
+    half = ax.fill_between(days, mean - 0.5 * sd, mean + 0.5 * sd,
+                           color=palette.spread, linewidth=0)
+    # ±σ as a pair of lines rather than a third patch: inside the min-max envelope a filled band
+    # reads as a bound on the envelope, where two dash-dot edges read as a spread about the mean.
+    # Same colour as the ±0.5 σ patch — one hue for the whole σ family.
+    sigma, = ax.plot(days, mean + sd, color=palette.spread,
+                     linewidth=SERIES_SIGMA_LW, linestyle="-.")
+    ax.plot(days, mean - sd, color=palette.spread,
+            linewidth=SERIES_SIGMA_LW, linestyle="-.")
     line, = ax.plot(days, mean, color=palette.mean, linewidth=SERIES_MEAN_LW)
-    points = ax.scatter(np.tile(days, values.shape[0]), values.ravel(),
+    points = ax.scatter(peak_days, peaks,
                         s=SERIES_POINT_SIZE, color=palette.points, linewidths=0)
-    
-    
 
     _style_series_axes(ax, lab, palette)
 
-    # Marks in ``SeriesPalette`` field order, which is the order ``SERIES_LEGEND`` is written
-    # in; ``strict`` fails loudly if a mark is added to one table and not the other.
-    entries = list(zip((points, line, inner, outer), lab.legend, strict=True))
+    # Marks in the order ``SERIES_LEGEND`` is written in; ``strict`` fails loudly if a mark is
+    # added to one table and not the other. Only the +σ handle stands for the σ pair — the two
+    # lines are identical, so one entry names both.
+    entries = list(zip((points, line, sigma, half, envelope), lab.legend, strict=True))
     ax.legend([mark for mark, _ in entries], [name for _, name in entries],
               loc="upper right", fontsize=PANEL_TICK_PT, labelcolor=DARK_FG,
               facecolor=DARK_OCEAN, edgecolor=DARK_LINE, framealpha=0.8)

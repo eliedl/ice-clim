@@ -360,9 +360,10 @@ LABELS: dict[str, dict[str, str]] = {
 # series — a season, read in months — and the legend names the marks rather than the data, so
 # neither varies with the metric the way the y axis does.
 SERIES_X_AXIS = "Month"
-# One entry per mark, in ``SeriesPalette`` field order: the renderer zips the two together, so
-# a mark added to the palette without an entry here fails loudly rather than drawing unnamed.
-SERIES_LEGEND = ("Observations", "Mean", "± 0.5 σ", "± σ")
+# One entry per mark, in the order the renderer draws them — not ``SeriesPalette`` field order,
+# since one colour can carry two marks (the σ family). The renderer zips the two together, so a
+# mark added there without an entry here fails loudly rather than drawing unnamed.
+SERIES_LEGEND = ("Annual max", "Mean", "± σ", "± 0.5 σ", "Min-max")
 
 
 def branch(runs: tuple[RunContext, ...]) -> tuple[dict[str, str], tuple[dict[str, str], ...]]:
