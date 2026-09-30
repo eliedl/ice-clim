@@ -19,6 +19,8 @@ from typing import TYPE_CHECKING
 import numpy as np
 from matplotlib.colors import Colormap, Normalize
 from matplotlib.figure import Figure
+from matplotlib.legend_handler import HandlerPatch
+from matplotlib.patches import Patch, Rectangle
 from matplotlib.ticker import FuncFormatter, LogLocator, NullFormatter
 
 from climatology.plot.basemap import draw_basemap_labels, draw_basemap_land, load_basemap
@@ -56,12 +58,13 @@ if TYPE_CHECKING:
     from climatology.core.reduction.temporal import SeriesLayer
     from climatology.core.regions import RegionLayer
     from climatology.plot.build import PlotContext
-    from climatology.plot.labels import Label, RasterLabel, SeriesLabel
+    from climatology.plot.labels import Label, RasterLabel, RegionLabel, SeriesLabel
     from climatology.utils._types import Grid
 
 SUPTITLE_PT = 14
 PANEL_TITLE_PT = 11
 PANEL_TICK_PT = 7
+KM2 = 1e6                     # m² per km²: the series panel's cell areas are metric, its axis is not
 SERIES_POINT_SIZE = 4         # one dot per season's annual maximum: 30 on a 30 x 52 series
 SERIES_MEAN_LW = 1.8
 SERIES_SIGMA_LW = 1.0
@@ -72,6 +75,13 @@ REGION_WET_ALPHA = 0.45       # the one translucent mark in the figure, and the 
                               # palette cannot pre-blend: what shows through varies with the
                               # region, being the ocean here and the basemap's coast there
 REGION_LATTICE_LW = 0.2       # one cell edge
+REGION_KEY_LW = 0.8           # a key mark carries the colour, not the weight: the lattice's own
+                              # 0.2 pt is invisible at legend-swatch size
+REGION_KEY_HEIGHT = 1.0       # key box height in font units, over matplotlib's 0.7: the squared
+                              # cell key is sized off this, and 0.7 em reads as a dash
+REGION_KEY_ANCHOR = (0.5, 1.0)   # the key's bottom centre on the map's top edge — above the map,
+                                 # the one side no geometry can be hidden on and the description
+                                 # strip below it does not claim
 
 
 # --- primitives -------------------------------------------------------------
@@ -79,6 +89,18 @@ REGION_LATTICE_LW = 0.2       # one cell edge
 def footer(fig, text: str, *, x: float = 0.01) -> None:
     """Draw a figure's provenance strip; the text itself is assembled in ``labels``."""
     fig.text(x, 0.01, text, fontsize=6, color=DARK_MUTED)
+
+
+def _legend(ax, marks: list, names: tuple[str, ...], **opts) -> None:
+    """One key in the figure's single legend style; where it sits and how its keys are shaped is the caller's.
+
+    ``strict`` is the point of pairing the two here: a mark added to a draw without an entry in
+    its label table fails loudly rather than drawing unnamed.
+    """
+    entries = list(zip(marks, names, strict=True))
+    ax.legend([mark for mark, _ in entries], [name for _, name in entries],
+              fontsize=PANEL_TICK_PT, labelcolor=DARK_FG, facecolor=DARK_OCEAN,
+              edgecolor=DARK_LINE, framealpha=0.8, **opts)
 
 
 def _draw_layers(ax, layers: list[tuple[DataGrid, GridBounds]],
@@ -155,7 +177,39 @@ def _draw_grid(ax, grid: Grid, *, color: str, zorder: int) -> None:
               colors=color, linewidth=REGION_LATTICE_LW, zorder=zorder)
 
 
-def _draw_region_map(ax, region: RegionLayer, palette: SeriesPalette, *, tile, land) -> None:
+def _square_key(legend, orig_handle, xdescent, ydescent, width, height, fontsize):
+    """A legend key as wide as it is tall, right-aligned in the handle box the legend allotted.
+
+    Matplotlib sizes every key in one legend alike, so a square one is a per-handle override
+    rather than a legend setting: the box is kept and the mark inside it squared off the box's
+    height. Right-aligned within that box, because the text column is the one edge every row
+    shares — pinning the marks to it keeps each key the same distance from the name it stands
+    for, where a left-aligned square would leave a gap the full-width row above does not have.
+    ``HandlerPatch`` copies the proxy's own colours onto what this returns, so only the geometry
+    is decided here.
+    """
+    return Rectangle((-xdescent + width - height, -ydescent), height, height)
+
+
+def _region_marks(palette: SeriesPalette) -> tuple[list[Patch], dict]:
+    """The ground panel's key marks in draw order, and the handler that shapes the odd one.
+
+    Proxies, because neither geometry hands a handle back: ``GeoSeries.plot`` returns the axes
+    rather than its collection, and the lattice is not drawn at all below the legibility floor.
+    Both read off the same palette the map is drawn from, so a proxy says exactly what the map
+    says. The domain keeps the legend's landscape key — its shape is a coastline no swatch can
+    claim to reproduce — where the cell is squared, a cell being square by construction
+    (``build_grid`` spaces both axes by one ``res_m``); a landscape swatch there would misstate
+    the grid. The cell is outlined rather than filled, since what a cell contributes is an edge.
+    """
+    domain = Patch(facecolor=palette.wet, edgecolor=palette.wet,
+                   alpha=REGION_WET_ALPHA, linewidth=REGION_WET_LW)
+    cell = Patch(facecolor="none", edgecolor=palette.grid, linewidth=REGION_KEY_LW)
+    return [domain, cell], {cell: HandlerPatch(patch_func=_square_key)}
+
+
+def _draw_region_map(ax, region: RegionLayer, lab: RegionLabel, palette: SeriesPalette,
+                     *, tile, land) -> None:
     """The figure's ground panel: the domain the series was compressed over, and the grid it ran on.
 
     The one thing in a series figure drawn to scale, and composed exactly as ``_draw_panel``'s
@@ -175,6 +229,12 @@ def _draw_region_map(ax, region: RegionLayer, palette: SeriesPalette, *, tile, l
     ax.tick_params(labelbottom=False, labelleft=False,
                    bottom=False, left=False, top=False, right=False)
     style_axes(ax)
+
+    # Outside the map, not inset: the panel is the figure's smallest box and its whole content is
+    # the two geometries the key names, so a key laid over it would hide what it explains.
+    marks, handlers = _region_marks(palette)
+    _legend(ax, marks, lab.legend, loc="lower center", bbox_to_anchor=REGION_KEY_ANCHOR,
+            handler_map=handlers, handleheight=REGION_KEY_HEIGHT)
 
 
 # --- the engine -------------------------------------------------------------
@@ -273,10 +333,10 @@ def _draw_series_panel(slot: SeriesSlot, layers: tuple[SeriesLayer, ...],
     until then the footer is where the resolution actually drawn belongs, once it is assembled.
     """
     ax = slot.series_ax
-    # (n_seasons, n_days), in ice-covered cells; scaled here to km². ``res_m`` is the tier's
-    # *nominal* resolution, so this is ~2% off the true cell (build_grid ceils then stretches
-    # to the bbox) — good enough to read the curve, not to quote a number.
-    values = layers[0].values * layers[0].res_m ** 2 / 1e6
+    # (n_seasons, n_days), in ice-covered cells; scaled here to km² on the grid's *true* cell,
+    # which the archive records. The nominal res_m² this used to read by is ~1 % high (-1.223 %
+    # on kamou-roi, 14.940 vs 14.757 km² at peak; probe 035), so the axis is now quotable.
+    values = layers[0].values * layers[0].cell_area_m2 / KM2
     days = layers[0].days
     # NaN where a season published no chart that day (DEC-056); the column still carries
     # the seasons that did, so the curve is the mean over the charted ones, not a gap.
@@ -310,19 +370,16 @@ def _draw_series_panel(slot: SeriesSlot, layers: tuple[SeriesLayer, ...],
     # the per-day maximum for any season count.
     _style_series_axes(ax, lab, palette, top=float(np.nanmax(hi)))
 
-    # Marks in the order ``SERIES_LEGEND`` is written in; ``strict`` fails loudly if a mark is
-    # added to one table and not the other. Only the +σ handle stands for the σ pair — the two
-    # lines are identical, so one entry names both.
+    # Marks in the order ``SERIES_LEGEND`` is written in. Only the +σ handle stands for the σ
+    # pair — the two lines are identical, so one entry names both.
     marks = [points, line, sigma, half, envelope]
     if highlighted is not None:
         marks.insert(2, highlighted)   # beside the mean, mirroring ``labels._highlighted_legend``
-    entries = list(zip(marks, lab.legend, strict=True))
-    ax.legend([mark for mark, _ in entries], [name for _, name in entries],
-              loc="upper right", fontsize=PANEL_TICK_PT, labelcolor=DARK_FG,
-              facecolor=DARK_OCEAN, edgecolor=DARK_LINE, framealpha=0.8)
+    _legend(ax, marks, lab.legend, loc="upper right")
 
 
-def _render_series(layers: list[tuple[SeriesLayer, ...]], labels: list[SeriesLabel],
+def _render_series(layers: list[tuple[SeriesLayer, ...]],
+                   labels: list[SeriesLabel | RegionLabel],
                    palettes: list[SeriesPalette], panels: SeriesPanels) -> Figure:
     """Draw every series panel, then the figure-level furniture.
 
@@ -330,30 +387,35 @@ def _render_series(layers: list[tuple[SeriesLayer, ...]], labels: list[SeriesLab
     draw time, but nothing is pinned to its drawn box, and there are no colourbars to place
     under boxes that have settled.
 
-    The ground layer ``_fetch`` appended is unpacked off the tail before the walk: it is one
-    panel however many runs the figure draws, so it is drawn once — like the suptitle and the
-    footer — and the ``strict`` zip stays over the per-run lists alone.
+    The ground layer ``_fetch`` appended and the ``RegionLabel`` naming it are unpacked off their
+    tails before the walk: the panel is one however many runs the figure draws, so it is drawn
+    once — like the suptitle and the footer — and the ``strict`` zip stays over the per-run lists
+    alone. Palettes carry no such tail; the ground is drawn from the panels' own palette, since
+    every mark in the figure belongs to one colour vocabulary.
     """
     fig = panels.fig
     *stacks, (region,) = layers
-    for slot, stack, lab, palette in zip(panels.slots, stacks, labels, palettes, strict=True):
+    *series_labels, region_label = labels
+    for slot, stack, lab, palette in zip(panels.slots, stacks, series_labels, palettes,
+                                         strict=True):
         _draw_series_panel(slot, stack, lab, palette)
 
     tile, land = load_basemap(region.grid.bounds)
-    _draw_region_map(panels.map_ax, region, palettes[0], tile=tile, land=land)
+    _draw_region_map(panels.map_ax, region, region_label, palettes[0], tile=tile, land=land)
 
-    # Figure-level text is identical on every label; drawn once, off the first.
-    fig.suptitle(labels[0].figure_title, wrap=True, x=0.5,
+    # Figure-level text is identical on every panel's label; drawn once, off the first — the
+    # *panel* labels, since the ground panel's carries neither.
+    fig.suptitle(series_labels[0].figure_title, wrap=True, x=0.5,
                  ha="center", ma="center", fontsize=SUPTITLE_PT, color=DARK_FG)
     margin = balance_margins(fig)
-    footer(fig, labels[0].footer, x=margin)
+    footer(fig, series_labels[0].footer, x=margin)
     return fig
 
 
 _RENDERERS = {RASTER: _render_maps, SERIES: _render_series}
 
 
-def render(ctx: PlotContext, layers: list[tuple], labels: list[Label],
+def render(ctx: PlotContext, layers: list[tuple], labels: list[Label | RegionLabel],
            scales: list, panels: PanelAxes) -> Figure:
     """Draw the figure with the engine its kind calls for.
 

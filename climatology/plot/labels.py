@@ -366,6 +366,15 @@ SERIES_X_AXIS = "Month"
 # mark added there without an entry here fails loudly rather than drawing unnamed.
 SERIES_LEGEND = ("Annual max", "Mean", "± σ", "± 0.5 σ", "Min-max")
 
+# One entry per geometry the ground panel draws, in ``_draw_region_map``'s draw order. The first
+# names what the domain *is* rather than how it was cut: ``Tier.wet`` is a difference against the
+# landmask, and on a fine tier also an intersection with the coastline buffer, so no one operator
+# describes it on every tier. The second names the lattice's unit, and its key is drawn square
+# because a cell is. Below ``lattice_is_legible`` no cell is drawn at all — on golfe, manic-roi
+# and iles-de-la-madeleine the entry names a resolution the map states only through its frame,
+# which is the one place this table outruns what the panel shows.
+REGION_LEGEND = ("Analysis domain", "Grid cell")
+
 
 def _highlighted_legend(season: int | None) -> tuple[str, ...]:
     """The mark table, with a highlighted winter named right after the mean it is read against.
@@ -463,6 +472,20 @@ class SeriesLabel(Label):
     legend: tuple[str, ...]      # one entry per mark, in draw order
 
 
+@dataclass(frozen=True)
+class RegionLabel:
+    """The ground panel's own text: one entry per geometry it draws.
+
+    Not a ``Label``, for the reason ``RegionLayer`` is not a ``SeriesLayer``: the ground panel is
+    one panel however many runs the figure draws, and it names no coordinate, no quantity and no
+    tick — there is nothing for the four fields a ``Label`` carries to hold. So it rides the same
+    way its layer does: ``_series_labels`` appends it off the tail and ``_render_series`` unpacks
+    it there, which keeps the per-run lists index-aligned.
+    """
+
+    legend: tuple[str, ...]      # one entry per geometry, in draw order
+
+
 def _raster_labels(ctx: PlotContext, layers: list[tuple[RasterLayer, ...]]) -> list[RasterLabel]:
     """One label per map panel — a delta figure's last stack is the difference, which names itself."""
     shared_slugs, panels_slugs = branch(ctx.runs)
@@ -489,19 +512,24 @@ def _raster_labels(ctx: PlotContext, layers: list[tuple[RasterLayer, ...]]) -> l
     return labels
 
 
-def _series_labels(ctx: PlotContext, layers: list[tuple[SeriesLayer, ...]]) -> list[SeriesLabel]:
-    """One label per series panel — the same split as the maps: what the figure shares titles it, what varies names the panel.
+def _series_labels(ctx: PlotContext,
+                   layers: list[tuple[SeriesLayer, ...]]) -> list[SeriesLabel | RegionLabel]:
+    """One label per series panel, then the ground panel's own off the tail — the same split as the maps: what the figure shares titles it, what varies names the panel.
 
     The y axis is composed rather than tabled: ``METRIC_LABELS`` names the quantity and the
     kernel's ``Unit`` carries its unit, so neither table has to repeat what the other says. No
     delta tail, since ``_validate`` refuses a series difference — the panels are exactly the runs.
+
+    The tail mirrors the one ``_fetch`` appends, and for the same reason: the ground panel is
+    drawn once however many runs the figure holds, so its text is not a panel's and joins the
+    list where its layer does rather than being zipped over the runs.
     """
     shared_slugs, panels_slugs = branch(ctx.runs)
     title = _title(shared_slugs)
     unit = UNITS[type(ctx.metric.kernel)]
     y_axis = f"{_as_label('metric', ctx.metric.slug)} {unit.noun}"
 
-    return [SeriesLabel(
+    labels: list[SeriesLabel | RegionLabel] = [SeriesLabel(
         figure_title=title,
         axis_title=_title(panel_slugs),
         footer="",                     # the provenance strip is not assembled for a series yet
@@ -510,11 +538,13 @@ def _series_labels(ctx: PlotContext, layers: list[tuple[SeriesLayer, ...]]) -> l
         y_axis=y_axis,
         legend=_highlighted_legend(ctx.highlight),
     ) for panel_slugs in panels_slugs]
+    labels.append(RegionLabel(REGION_LEGEND))
+    return labels
 
 
 _LABELLERS = {RASTER: _raster_labels, SERIES: _series_labels}
 
 
-def label(ctx: PlotContext, layers: list[tuple]) -> list[Label]:
-    """One Label per layer stack, index-aligned — a delta figure's last stack is the difference."""
+def label(ctx: PlotContext, layers: list[tuple]) -> list[Label | RegionLabel]:
+    """One label per layer stack, index-aligned — a delta figure's last stack is the difference, a series figure's last the ground it stands on."""
     return _LABELLERS[ctx.kind](ctx, layers)

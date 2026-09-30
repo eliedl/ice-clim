@@ -180,5 +180,5 @@ def load_archived(ctx: RunContext) -> tuple[RasterLayer, ...] | tuple[SeriesLaye
 def save_figure(fig, png_path: Path) -> None:
     """Write the figure to disk under the dark theme, keeping the margins ``balance_margins`` set."""
     png_path.parent.mkdir(parents=True, exist_ok=True)
-    fig.savefig(png_path, dpi=300, facecolor=fig.get_facecolor())
+    fig.savefig(png_path, dpi=500, facecolor=fig.get_facecolor())
     log.info("Map saved to %s", png_path)

@@ -284,6 +284,22 @@ def series_days(first_day: int, last_day: int, day_step: int, n_days: int) -> np
         f"{n_days} columns ends on day {days[-1]}, but the manifest records {last_day}.")
 
 
+def _cell_area(manifest: dict) -> float:
+    """The true ground area of one cell, which is what scales a series' cell counts to an area.
+
+    Required, not defaulted: a series manifest records no bounds and no shape — its extent
+    half is the day axis — so an archive without this field cannot locate itself on the
+    ground at all, and the nominal ``grid_res_m ** 2`` is the ~1 % wrong answer that hiding
+    the gap would keep returning (probe 035).
+    """
+    if "cell_area_m2" not in manifest:
+        raise KeyError(
+            f"Archived series {manifest.get('raster', '?')} records no 'cell_area_m2', so "
+            "the ground its values cover is unknown: a series manifest stores no bounds or "
+            "shape to recover it from. Re-run the sweep for this run to re-archive it.")
+    return float(manifest["cell_area_m2"])
+
+
 def _seasons(period_slug: str, n_seasons: int) -> tuple[int, ...]:
     """A series' row axis: the winter each row holds, named by the year it ends in, ascending.
 
@@ -310,10 +326,10 @@ class SeriesLayer:
     construction — what the layer carries is the reconstructed axes themselves.
     """
 
-    values: DataGrid          # (n_seasons, n_days)
+    values: DataGrid          # (n_seasons, n_days), in ice-covered cells
     days: np.ndarray          # day-of-season ordinal of each column
     seasons: tuple[int, ...]  # the winter each row holds, named by the year it ends in
-    res_m: float              # the grid the domain was compressed over — provenance, for the figure footer
+    cell_area_m2: float       # true ground area of one cell — what turns the values into an area
 
     @classmethod
     def from_manifest(cls, values: DataGrid, manifest: dict) -> SeriesLayer:
@@ -323,7 +339,7 @@ class SeriesLayer:
                    days=series_days(manifest["first_day"], manifest["last_day"],
                                     manifest["day_step"], n_days),
                    seasons=_seasons(manifest["period"], n_seasons),
-                   res_m=manifest["grid_res_m"])
+                   cell_area_m2=_cell_area(manifest))
 
     def row_for(self, season: int) -> int:
         """Row index of one winter; raises if the series does not carry it."""
