@@ -123,6 +123,14 @@ climatology/
   (volume metric — attribution specified in DEC-029/044, not yet implemented)
 refs/ (WMO PDF)   docker-compose.yml · .env
 
+### Refactor scope: probes are frozen, not maintained
+`backend/probes/NNN_*/` are point-in-time evidence artifacts, not production code. On a
+refactor or new implementation, adapt **only** the production codebase (`backend/ingestion/`,
+`climatology/`); probes may deliberately be left broken against the new API. Their value is
+the recorded result (README.md + output/), which stays valid regardless of whether the script
+still runs. Do not spend effort re-wiring a probe unless it must actually be re-run — in that
+case, fix it as its own task.
+
 ## Session start protocol
 ~/CLAUDE.md and this file are auto-loaded into context each session, so reading them from
 disk is not normally needed. Re-read a file from disk only if you suspect it changed during

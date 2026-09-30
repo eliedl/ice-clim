@@ -124,6 +124,11 @@ def _build_manifest(ctx: RunContext, fetch: FetchResult, result: Result) -> dict
         "n_polygons": len(fetch.df),
         "tier": result.tier.level,
         "grid_res_m": result.tier.res_m,   # the domain a series was compressed over is still its provenance
+        # The true cell beside the nominal one it is ~1 % under. Identity rather than extent
+        # because a *series* has no extent half to put it in, and a series is the layout that
+        # cannot recover it: a raster's ``bounds`` + ``grid_shape`` rebuild the grid, where a
+        # series archives neither and would otherwise have to re-instantiate the region live.
+        "cell_area_m2": result.tier.grid.cell_area,
     }
     extent = (_series_extent(ctx, fetch, result) if metric in SERIES_METRICS
               else _grid_extent(result.tier))

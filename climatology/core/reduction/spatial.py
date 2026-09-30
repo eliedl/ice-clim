@@ -17,7 +17,7 @@ from typing import TYPE_CHECKING
 
 import numpy as np
 
-from climatology.utils._types import DataGrid, GridBounds
+from climatology.utils._types import DataGrid, Grid, GridBounds
 
 if TYPE_CHECKING:
     from climatology.core.regions import Tier
@@ -25,17 +25,22 @@ if TYPE_CHECKING:
 # ``Tier.res_m`` is the *requested* resolution: build_grid rounds the cell count up
 # (ceil) and then stretches the cells to span the wet bbox exactly, so true cells are
 # slightly smaller than nominal, not square, and never off by more than ~1/width.
-# Areas must therefore come from bounds/shape, never from res_m²; res_m is only a
-# sanity anchor, so the check is a band and not an equality.
+# Areas must therefore come from the grid, never from res_m²; res_m is only a sanity
+# anchor, so the check is a band and not an equality.
 CELL_SIZE_TOL = 0.02
 
 
 def _cell_size(shape: tuple[int, int], bounds: GridBounds,
                *, res_m: float | None = None) -> tuple[float, float]:
-    """A raster's true (x, y) cell size from its bounds and shape, sanity-checked against the tier's nominal resolution."""
+    """An archived raster's true (x, y) cell size, sanity-checked against the tier's nominal resolution.
+
+    The size itself is ``Grid``'s to answer — an archived raster carries no affine, so the
+    grid is rebuilt from the extent and shape the manifest does record. What stays here is
+    the guard, which is about the *manifest* agreeing with itself and so has no place on a
+    type that knows nothing of ``res_m``.
+    """
     height, width = shape
-    xmin, ymin, xmax, ymax = bounds
-    res_x, res_y = (xmax - xmin) / width, (ymax - ymin) / height
+    res_x, res_y = Grid.from_bounds(bounds, height, width).cell_size
     if res_m is not None:
         lo, hi = res_m * (1.0 - CELL_SIZE_TOL), res_m * (1.0 + CELL_SIZE_TOL)
         if not (lo <= res_x <= hi and lo <= res_y <= hi):

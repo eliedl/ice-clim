@@ -36,9 +36,19 @@ def day_of_season(month_day: str) -> int:
     return (date(year, m, d) - SEASON_ORIGIN).days
 
 
+def _season_date(day: int) -> date:
+    """The date a Sep-1-anchored ordinal falls on, in the origin's leap-safe epoch."""
+    return SEASON_ORIGIN + timedelta(days=int(day))
+
+
+def season_day_label(day: int) -> str:
+    """"MM-DD" of a Sep-1-anchored ordinal — the inverse of ``day_of_season``."""
+    return _season_date(day).strftime("%m-%d")
+
+
 def month_start(day: int) -> int:
     """Sep-1-anchored ordinal of the first of the month a day-of-season ordinal falls in."""
-    return day_of_season((SEASON_ORIGIN + timedelta(days=int(day))).strftime("%m-01"))
+    return day_of_season(_season_date(day).strftime("%m-01"))
 
 
 def winter_season(obs_date: pd.Series) -> pd.Series:

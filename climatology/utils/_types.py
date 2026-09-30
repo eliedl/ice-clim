@@ -26,6 +26,9 @@ from affine import Affine
 from jaxtyping import Bool, Float
 import numpy as np
 import pandas as pd
+# Aliased: ``Grid.from_bounds`` is the constructor this backs, and the bare name would read
+# as a recursive call inside it. Pure affine arithmetic — no I/O despite the rasterio origin.
+from rasterio.transform import from_bounds as _affine_from_bounds
 
 # rasters (H, W)
 # A product array in either of its two layouts: (H, W) when the reduction scatters
@@ -68,3 +71,35 @@ class Grid(NamedTuple):
     height: int
     width: int
     bounds: GridBounds
+
+    @classmethod
+    def from_bounds(cls, bounds: GridBounds, height: int, width: int) -> "Grid":
+        """A grid from its extent and shape — the two things a manifest records.
+
+        The transform is redundant with them (``rasterio.transform.from_bounds`` is a pure
+        function of the four bounds and the two counts), so a grid read back from an archive
+        needs no stored affine: this reconstructs the same one ``build_grid`` laid down.
+        """
+        xmin, ymin, xmax, ymax = bounds
+        return cls(_affine_from_bounds(xmin, ymin, xmax, ymax, width, height),
+                   height, width, (xmin, ymin, xmax, ymax))
+
+    @property
+    def cell_size(self) -> tuple[float, float]:
+        """True (x, y) cell size, in grid-CRS units.
+
+        Read off the affine rather than divided out of bounds and shape: ``from_bounds`` sets
+        ``a = (xmax-xmin)/width`` and ``e = -(ymax-ymin)/height``, so the grid already *holds*
+        its cell size and re-deriving it would be a second source of truth for one number.
+
+        Not ``Tier.res_m``, which is the resolution a tier *asked* for: ``build_grid`` ceils
+        the cell count and then stretches the cells to span the bbox exactly, so true cells
+        are slightly smaller than nominal and not square (measured -1.2 % on ``kamou-roi``).
+        """
+        return self.transform.a, -self.transform.e
+
+    @property
+    def cell_area(self) -> float:
+        """Ground area of one cell, in squared grid-CRS units (m² under ``GRID_CRS``)."""
+        res_x, res_y = self.cell_size
+        return res_x * res_y

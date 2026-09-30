@@ -6,7 +6,6 @@ import logging
 import numpy as np
 from jaxtyping import Float, Int
 from rasterio.features import rasterize as rio_rasterize
-from rasterio.transform import from_bounds
 
 from climatology.utils._types import BoolGrid, Grid, VarWetStack
 
@@ -61,12 +60,16 @@ def burn_value_stack(groups, grid: Grid, *, wet: BoolGrid) -> VarWetStack:
 
 
 def build_grid(wet, res_m: float) -> Grid:
-    """Return the raster ``Grid`` for the ``wet`` domain's bbox at resolution ``res_m``."""
+    """Return the raster ``Grid`` for the ``wet`` domain's bbox at resolution ``res_m``.
+
+    The ceil is what makes ``res_m`` nominal: the cell count covers the bbox, then
+    ``Grid.from_bounds`` stretches the cells back onto it exactly, so the true cell
+    (``grid.cell_size``) is slightly under ``res_m`` and not square.
+    """
     xmin, ymin, xmax, ymax = wet.bounds
     width  = int(np.ceil((xmax - xmin) / res_m))
     height = int(np.ceil((ymax - ymin) / res_m))
-    transform = from_bounds(xmin, ymin, xmax, ymax, width, height)
-    return Grid(transform, height, width, (xmin, ymin, xmax, ymax))
+    return Grid.from_bounds((xmin, ymin, xmax, ymax), height, width)
 
 
 
