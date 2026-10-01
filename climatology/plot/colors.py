@@ -9,7 +9,7 @@ import matplotlib.colors as mcolors
 import numpy as np
 from matplotlib.colors import Colormap, LinearSegmentedColormap, Normalize
 
-from climatology.plot.labels import DELTA, RASTER, RAW, SERIES
+from climatology.plot.kinds import DELTA, RASTER, RAW, SERIES
 from climatology.services.calendar import month_start
 from climatology.utils.arithmetics import percentile_range
 

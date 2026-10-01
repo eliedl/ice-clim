@@ -23,7 +23,7 @@ from matplotlib.figure import Figure
 from matplotlib.transforms import Bbox
 
 from climatology.plot.colors import DARK_COAST, DARK_LAND, DARK_OCEAN
-from climatology.plot.labels import DELTA, RASTER, RAW, SERIES
+from climatology.plot.kinds import DELTA, RASTER, RAW, SERIES
 from climatology.utils._types import BoolGrid, Grid, GridBounds
 
 if TYPE_CHECKING:

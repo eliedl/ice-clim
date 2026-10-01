@@ -15,7 +15,8 @@ from climatology.core.metrics import SERIES_METRICS
 from climatology.core.reduction.spatial import RasterLayer
 from climatology.core.reduction.temporal import SeriesLayer
 from climatology.core.regions import Tier
-from climatology.plot.labels import DELTA, branch
+from climatology.plot.kinds import DELTA
+from climatology.plot.labels import branch
 
 log = logging.getLogger(__name__)
 

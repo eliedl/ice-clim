@@ -28,8 +28,10 @@ from climatology.core.reduction.temporal import (
     ThresholdDateDelta,
     ThresholdDuration,
 )
+from climatology.plot.kinds import DELTA, RASTER, SERIES
+from climatology.plot.layout import lattice_is_legible
 from climatology.services.calendar import SEASON_ORIGIN
-from climatology.utils._types import GRID_CRS, KM2
+from climatology.utils._types import GRID_CRS, KM2, Grid
 
 if TYPE_CHECKING:
     from climatology.core.context import RunContext
@@ -38,14 +40,6 @@ if TYPE_CHECKING:
     from climatology.core.regions import RegionLayer
     from climatology.plot.build import PlotContext
 
-
-RAW, DELTA = "raw", "delta"
-
-# What a figure draws, and therefore which family of objects each stage resolves. Not
-# configured but *derived* from the metric (``PlotContext.kind``): the two product layouts are
-# located in different spaces, so which one a run archived is not a presentation choice.
-# Orthogonal to RAW/DELTA, which asks whether a raster figure shows values or their change.
-RASTER, SERIES = "raster", "series"
 
 # Every coordinate a title can name, in reading order — which is also the order
 # ``RunContext.describe`` returns them in; ``branch`` zips the two together.
@@ -371,10 +365,12 @@ SERIES_LEGEND = ("Annual max", "Mean", "± σ", "± 0.5 σ", "Min-max")
 # landmask, and on a fine tier also an intersection with the coastline buffer, so no one operator
 # describes it on every tier. The second names the lattice's unit, and its key is drawn square
 # because a cell is. The third names the cells that unit's lattice selected — the ones the mask
-# burned, and the ones the strip's surface counts. Below ``lattice_is_legible`` neither cell entry
-# is drawn at all — on golfe, manic-roi and iles-de-la-madeleine the two name a resolution and a
-# selection the map states only through its frame, which is where this table outruns the panel.
+# burned, and the ones the strip's surface counts.
 REGION_LEGEND = ("Analysis domain", "Grid cell", "Wet cells")
+# Both cell entries stand on a drawn cell, so neither survives the legibility floor: on golfe,
+# manic-roi and iles-de-la-madeleine the panel draws no lattice to key, and a named resolution the
+# map states only through its frame is an entry pointing at nothing.
+REGION_LEGEND_NO_LATTICE = REGION_LEGEND[:1]
 
 
 def _highlighted_legend(season: int | None) -> tuple[str, ...]:
@@ -387,6 +383,17 @@ def _highlighted_legend(season: int | None) -> tuple[str, ...]:
     if season is None:
         return SERIES_LEGEND
     return SERIES_LEGEND[:2] + (f"{season - 1}-{season}",) + SERIES_LEGEND[2:]
+
+
+def _region_legend(grid: Grid) -> tuple[str, ...]:
+    """The ground panel's mark table, less the two cell entries when the floor drew no cells.
+
+    The same shape as ``_highlighted_legend``: the table is selected here, where the text lives,
+    and ``_draw_region_map`` re-takes the same branch off the same predicate — ``_legend``'s
+    ``strict`` zip is what holds the two to one answer. A grid is all the predicate reads, and the
+    layer carries it, so deciding this needs nothing the labelling stage does not already hold.
+    """
+    return REGION_LEGEND if lattice_is_legible(grid) else REGION_LEGEND_NO_LATTICE
 
 
 def branch(runs: tuple[RunContext, ...]) -> tuple[dict[str, str], tuple[dict[str, str], ...]]:
@@ -558,7 +565,7 @@ def _series_labels(ctx: PlotContext,
         y_axis=y_axis,
         legend=_highlighted_legend(ctx.highlight),
     ) for panel_slugs in panels_slugs]
-    labels.append(RegionLabel(REGION_LEGEND, _region_footer_text(region)))
+    labels.append(RegionLabel(_region_legend(region.grid), _region_footer_text(region)))
     return labels
 
 

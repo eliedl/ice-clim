@@ -67,7 +67,8 @@ from typing import TYPE_CHECKING
 
 from climatology.plot.render import render
 from climatology.plot.colors import style
-from climatology.plot.labels import COORDS, DELTA, RASTER, RAW, SERIES, label
+from climatology.plot.kinds import DELTA, RASTER, RAW, SERIES
+from climatology.plot.labels import COORDS, label
 from climatology.plot.layout import layout
 from climatology.core.context import RunContext, broadcast
 from climatology.core.metrics import SERIES_METRICS, Metric

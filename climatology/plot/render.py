@@ -36,7 +36,7 @@ from climatology.plot.colors import (
     style_axes,
     style_colorbar,
 )
-from climatology.plot.labels import RASTER, SERIES
+from climatology.plot.kinds import RASTER, SERIES
 from climatology.plot.layout import (
     PANEL_CBAR_GAP,
     PANEL_CBAR_THICK,
@@ -86,8 +86,13 @@ REGION_WET_CELL_ALPHA = 0.6  # just off opaque: the lattice edge underneath stay
                               # sit on — this one blends with whatever edge it covers
 REGION_KEY_LW = 0.8           # a key mark carries the colour, not the weight: the lattice's own
                               # 0.2 pt is invisible at legend-swatch size
+REGION_KEY_ALPHA = 0.8        # the selected-cell key, over its 0.6 on the map: a key has no
+                              # lattice edge under it to blend with, only the legend's own panel
 REGION_KEY_HEIGHT = 1.0       # key box height in font units, over matplotlib's 0.7: the squared
                               # cell key is sized off this, and 0.7 em reads as a dash
+REGION_KEY_COLSPACING = 0.8      # under matplotlib's 2.0, and REGION_KEY_TEXTPAD under its 0.8:
+REGION_KEY_TEXTPAD = 0.4         # three keys read in one row over a map 0.42 of a series panel
+                                 # wide, so the row is only as wide as the map if it is tightened
 REGION_KEY_ANCHOR = (0.5, 1.0)   # the key's bottom centre on the map's top edge — above the map,
                                  # the one side no geometry can be hidden on and the description
                                  # strip below it does not claim
@@ -195,11 +200,9 @@ def _draw_grid(ax, grid: Grid, *, color: str, zorder: int) -> None:
     """The tier's cell edges, where drawn large enough to read as a resolution.
 
     The grid's *footprint* needs no mark of its own: the panel is clamped to ``grid.bounds``,
-    so the axes frame already is it. Below the legibility floor the edges merge into a wash
-    that reads as a fill rather than as a resolution, and the frame carries the extent alone.
+    so the axes frame already is it. Whether the cells are large enough drawn is the caller's
+    decision, taken once for the lattice, the selection over it and the keys naming both.
     """
-    if not lattice_is_legible(grid):
-        return
     xmin, ymin, xmax, ymax = grid.bounds
     ax.vlines(np.linspace(xmin, xmax, grid.width + 1), ymin, ymax,
               colors=color, linewidth=REGION_LATTICE_LW, zorder=zorder)
@@ -212,16 +215,14 @@ def _draw_wet_cells(ax, mask: BoolGrid, grid: Grid, *, color: str, zorder: int) 
 
     Stroked rather than filled: what the mask selects is cells of the lattice, and an edge is
     what a cell contributes — a fill would read as a second domain laid over the first, where a
-    re-stroked edge reads as the lattice itself, marked. Drawn under the same legibility gate as
-    the lattice, because what this draws *is* lattice: below the floor the edges merge into a wash
+    re-stroked edge reads as the lattice itself, marked. It therefore stands or falls with the
+    lattice under the caller's legibility decision: below that floor the edges merge into a wash
     and a selected one no longer reads as selected.
 
-    One ``LineCollection`` over a patch per cell: the gate caps the map's long axis at ~100 cells,
+    One ``LineCollection`` over a patch per cell: the floor caps the map's long axis at ~100 cells,
     so this is tens of thousands of segments at worst, and nothing about a cell is styled or
     picked individually.
     """
-    if not lattice_is_legible(grid):
-        return
     ax.add_collection(LineCollection(cell_edge_segments(mask, grid), colors=color,
                                      linewidths=REGION_WET_CELL_LW,
                                      alpha=REGION_WET_CELL_ALPHA, zorder=zorder))
@@ -238,26 +239,32 @@ def _square_key(legend, orig_handle, xdescent, ydescent, width, height, fontsize
     ``HandlerPatch`` copies the proxy's own colours onto what this returns, so only the geometry
     is decided here.
     """
-    return Rectangle((-xdescent + width - height, -ydescent), height, height)
+    return Rectangle((-xdescent + 0.5 * (width - height), -ydescent), height, height)
 
 
-def _region_marks(palette: RegionPalette) -> tuple[list[Patch], dict]:
+def _region_marks(palette: RegionPalette, *, lattice: bool) -> tuple[list[Patch], dict]:
     """The ground panel's key marks in draw order, and the handler that shapes the square ones.
 
     Proxies, because none of the three geometries hands a usable handle back: ``GeoSeries.plot``
-    returns the axes rather than its collection, and neither the lattice nor the selected edges
-    are drawn at all below the legibility floor. All three read off the same palette the map is
-    drawn from, so a proxy says exactly what the map says. The domain keeps the legend's landscape
-    key — its shape is a coastline no swatch can claim to reproduce — where both cell keys are
-    squared, a cell being square by construction (``build_grid`` spaces both axes by one
-    ``res_m``); a landscape swatch there would misstate the grid. Both are outlined rather than
-    filled, since what a cell contributes is an edge, and the pair then differs in exactly what
-    the map differs in: the colour of the stroke.
+    returns the axes rather than its collection, and the two line collections are not drawn at all
+    below the legibility floor. All three read off the same palette the map is drawn from, so a
+    proxy says exactly what the map says. The domain keeps the legend's landscape key — its shape
+    is a coastline no swatch can claim to reproduce — where both cell keys are squared, a cell
+    being square by construction (``build_grid`` spaces both axes by one ``res_m``); a landscape
+    swatch there would misstate the grid. Both are outlined rather than filled, since what a cell
+    contributes is an edge, and the pair then differs in exactly what the map differs in: the
+    colour of the stroke.
+
+    ``lattice`` drops both cell keys together, since both stand on a drawn cell —
+    ``labels._region_legend`` drops their two names off the same predicate.
     """
     domain = Patch(facecolor=palette.wet, edgecolor=palette.wet,
                    alpha=REGION_WET_ALPHA, linewidth=REGION_WET_LW)
+    if not lattice:
+        return [domain], {}
     cell = Patch(facecolor="none", edgecolor=palette.grid, linewidth=REGION_KEY_LW)
-    wet_cell = Patch(facecolor="none", edgecolor=palette.wet_cells, alpha=REGION_WET_CELL_ALPHA+0.2, linewidth=REGION_KEY_LW)
+    wet_cell = Patch(facecolor="none", edgecolor=palette.wet_cells,
+                     alpha=REGION_KEY_ALPHA, linewidth=REGION_KEY_LW)
     square = HandlerPatch(patch_func=_square_key)
     return [domain, cell, wet_cell], {cell: square, wet_cell: square}
 
@@ -275,13 +282,20 @@ def _draw_region_map(ax, region: RegionLayer, lab: RegionLabel, palette: RegionP
     was rasterized onto (the lattice), and the cells that rasterization selected (the lattice,
     re-stroked). The gap between the first and the third is the discretization, which is what the
     strip's surface was measured over.
+
+    The legibility floor is read once, here: it decides the lattice, the selection drawn over it
+    and the two keys naming them, which is three consequences of one question about cell size.
+    ``labels._region_legend`` asks it again of the same grid to drop the two names, and
+    ``_legend``'s ``strict`` zip is what holds the two answers to one.
     """
+    lattice = lattice_is_legible(region.grid)
     ax.set_facecolor(DARK_OCEAN)
     region.wet.plot(ax=ax, facecolor=palette.wet, edgecolor=palette.wet,
                        alpha=REGION_WET_ALPHA, linewidth=REGION_WET_LW, zorder=Z_WET)
-    _draw_grid(ax, region.grid, color=palette.grid, zorder=Z_LATTICE)
-    _draw_wet_cells(ax, region.wet_mask, region.grid, color=palette.wet_cells,
-                    zorder=Z_WET_CELLS)
+    if lattice:
+        _draw_grid(ax, region.grid, color=palette.grid, zorder=Z_LATTICE)
+        _draw_wet_cells(ax, region.wet_mask, region.grid, color=palette.wet_cells,
+                        zorder=Z_WET_CELLS)
     draw_basemap_land(ax, tile, zorder=Z_LAND)
     frame_axes(ax, land, region.grid.bounds, zorder=Z_COAST, fill=tile is None)
     draw_basemap_labels(ax, tile, zorder=Z_NAMES)
@@ -292,10 +306,13 @@ def _draw_region_map(ax, region: RegionLayer, lab: RegionLabel, palette: RegionP
     style_axes(ax)
 
     # Outside the map, not inset: the panel is the figure's smallest box and its whole content is
-    # the two geometries the key names, so a key laid over it would hide what it explains.
-    marks, handlers = _region_marks(palette)
+    # the geometries the key names, so a key laid over it would hide what it explains. One row
+    # rather than one column — above the map the free space is horizontal, and a stack of three
+    # would push the suptitle up by its own height.
+    marks, handlers = _region_marks(palette, lattice=lattice)
     _legend(ax, marks, lab.legend, loc="lower center", bbox_to_anchor=REGION_KEY_ANCHOR,
-            handler_map=handlers, handleheight=REGION_KEY_HEIGHT)
+            handler_map=handlers, handleheight=REGION_KEY_HEIGHT, ncols=len(marks),
+            columnspacing=REGION_KEY_COLSPACING, handletextpad=REGION_KEY_TEXTPAD)
 
     # Under the map, where the key is above it: the strip qualifies the geometry rather than
     # naming it, and the two would compete for the same corner on the same side.
@@ -371,12 +388,11 @@ def _draw_highlight(ax, layer: SeriesLayer, values: DataGrid, palette: SeriesPal
     """One named winter's own series, drawn over the mean it is read against.
 
     Takes the panel's already-scaled ``values`` rather than the layer's own, so the highlighted
-    winter is in the same unit as every other mark; the layer is what names its row. Returns
-    the mark for the legend, or None when no winter is named — which is what keeps the legend
-    tables in step on either branch.
+    winter is in the same unit as every other mark; the layer is what names its row. Whether a
+    winter is named at all is the caller's decision, taken once for the curve and for the handle
+    keying it — the same hierarchy the legibility floor has in ``_draw_region_map``; this draws
+    the winter it is given and returns its mark.
     """
-    if palette.highlight_season is None:
-        return None
     line, = ax.plot(layer.days, values[layer.row_for(palette.highlight_season)],
                     color=palette.highlight, linewidth=SERIES_HIGHLIGHT_LW, linestyle="-")
     return line
@@ -428,7 +444,10 @@ def _draw_series_panel(slot: SeriesSlot, layers: tuple[SeriesLayer, ...],
     ax.plot(days, mean - sd, color=palette.spread,
             linewidth=SERIES_SIGMA_LW, linestyle="-.")
     line, = ax.plot(days, mean, color=palette.mean, linewidth=SERIES_MEAN_LW)
-    highlighted = _draw_highlight(ax, layers[0], values, palette)
+    # Drawn in place rather than beside the insert below, because draw order is z order — a named
+    # winter belongs over the mean it is read against and under the peaks.
+    if palette.highlight_season is not None:
+        highlighted = _draw_highlight(ax, layers[0], values, palette)
     points = ax.scatter(peak_days, peaks,
                         s=SERIES_POINT_SIZE, color=palette.points, linewidths=0)
 
@@ -437,9 +456,11 @@ def _draw_series_panel(slot: SeriesSlot, layers: tuple[SeriesLayer, ...],
     _style_series_axes(ax, lab, palette, top=float(np.nanmax(hi)))
 
     # Marks in the order ``SERIES_LEGEND`` is written in. Only the +σ handle stands for the σ
-    # pair — the two lines are identical, so one entry names both.
+    # pair — the two lines are identical, so one entry names both. The named winter is keyed off
+    # the same season the draw above read, so the branch is taken once per panel, as the legibility
+    # floor is in ``_draw_region_map``; ``labels._highlighted_legend`` takes it again to name it.
     marks = [points, line, sigma, half, envelope]
-    if highlighted is not None:
+    if palette.highlight_season is not None:
         marks.insert(2, highlighted)   # beside the mean, mirroring ``labels._highlighted_legend``
     _legend(ax, marks, lab.legend, loc="upper right")
 
