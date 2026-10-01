@@ -35,6 +35,28 @@ class RunContext:
                 self.source.slug, self.metric.reduction_slug)
 
 
+def broadcast(region: str, metrics: tuple[str, ...], periods: tuple[str, ...],
+              sources: tuple[str, ...],
+              reductions: tuple[str | None, ...]) -> list[RunContext]:
+    """Zip the coordinate axes into runs, broadcasting the pinned (length-1) ones.
+
+    The one place a CLI's axes become runs: an entrypoint collects colon-separated coordinates
+    (``utils.cli.axis``) and hands them here, and everything downstream — ``pipeline.run``,
+    ``plot.build_figure`` — takes resolved runs. Zip, not cross product, so n runs need n
+    values on at most one axis; ``utils.cli.assert_uniform`` is what refuses the ragged case
+    before this is reached.
+
+    Region is pinned by signature rather than by guard: it is the one coordinate no caller
+    varies — a figure's panels must overlay on one grid, and a batch over regions is a shell
+    loop, not an axis.
+    """
+    axes = {"metric": metrics, "period": periods, "source": sources, "reduction": reductions}
+    n = max(len(values) for values in axes.values())
+    picked = ({k: v[0] if len(v) == 1 else v[i] for k, v in axes.items()} for i in range(n))
+    return [RunContext.build(region, p["metric"], p["period"], p["source"], p["reduction"])
+            for p in picked]
+
+
 @dataclass(frozen=True)
 class FetchResult:
     """The chart-polygon rows fetched once for a run, under the season calendar (the fetch-stage output)."""

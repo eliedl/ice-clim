@@ -69,13 +69,14 @@ from climatology.plot.render import render
 from climatology.plot.colors import style
 from climatology.plot.labels import COORDS, DELTA, RASTER, RAW, SERIES, label
 from climatology.plot.layout import layout
-from climatology.core.context import RunContext
+from climatology.core.context import RunContext, broadcast
 from climatology.core.metrics import SERIES_METRICS, Metric
 from climatology.core.reduction.spatial import RasterLayer
 from climatology.core.reduction.temporal import DOMAIN_SERIES, MEDIAN_THEN_THRESHOLD, Reduction
 from climatology.core.regions import Region, RegionLayer
 from climatology.core.export import load_archived
 from climatology.services.sources import ChartSource
+from climatology.utils.cli import assert_uniform, axis
 
 if TYPE_CHECKING:
     from matplotlib.figure import Figure
@@ -225,60 +226,19 @@ def build_figure(runs: tuple[RunContext, ...], *, type: str = RAW,
 
 # --- CLI --------------------------------------------------------------------
 
-def _axis(name: str, choices: tuple[str, ...] | None = None):
-    #arg parse concern
-    """An argparse type for one run coordinate as a branch: ``a`` or ``a:b:c``."""
-    def parse(spec: str) -> tuple[str, ...]:
-        values = tuple(spec.split(":"))
-        if choices is not None:
-            bad = [v for v in values if v not in choices]
-            if bad:
-                raise argparse.ArgumentTypeError(
-                    f"Unknown {name} {bad}; choose from {', '.join(sorted(choices))}.")
-        return values
-    return parse
-
-
-def _assert_uniform(parser: argparse.ArgumentParser, axes: dict[str, tuple[str, ...]]) -> None:
-    """Reject ragged branches — one branch length is allowed beside the pinned length 1.
-
-    A coordinate is either held across the figure or carries one value per panel.
-    ``--reduction a:b`` against ``--period x:y:z`` is a mistake, not a request for the
-    six-panel cross product.
-    """
-    n = max(len(values) for values in axes.values())
-    ragged = {k: v for k, v in axes.items() if len(v) not in (1, n)}
-    if ragged:
-        parser.error(
-            f"Coordinate axes must be length 1 or {n}; got "
-            + ", ".join(f"--{k} with {len(v)}" for k, v in ragged.items())
-            + ". Pin a coordinate to one value, or give it one value per panel.")
-
-
-def _broadcast(region: str, metric: str, periods: tuple[str, ...], sources: tuple[str, ...],
-               reductions: tuple[str, ...]) -> tuple[RunContext, ...]:
-    # resolve concern
-    """Zip the coordinate axes into runs, broadcasting the pinned (length-1) ones."""
-    axes = {"period": periods, "source": sources, "reduction": reductions}
-    n = max(len(values) for values in axes.values())
-    picked = ({k: v[0] if len(v) == 1 else v[i] for k, v in axes.items()} for i in range(n))
-    return tuple(RunContext.build(region, metric, p["period"], p["source"], p["reduction"])
-                 for p in picked)
-
-
 def _parse_args() -> argparse.Namespace:
     p = argparse.ArgumentParser(description=__doc__.splitlines()[0])
     p.add_argument("metric", choices=Metric.slugs(), metavar="METRIC")
     p.add_argument("--region", choices=Region.slugs(), required=True, metavar="REGION",
                    help="Pinned across the figure — panels must overlay on one grid.")
-    p.add_argument("--period", type=_axis("period"), default=("1991-2020",),
+    p.add_argument("--period", type=axis("period"), default=("1991-2020",),
                    metavar="YYYY-YYYY[:...]",
                    help="Climatology period(s) in winters; colon-separated to branch.")
-    p.add_argument("--source", type=_axis("source", tuple(ChartSource.slugs())),
+    p.add_argument("--source", type=axis("source", tuple(ChartSource.slugs())),
                    default=("sgrdr",), metavar="SOURCE[:...]",
                    help=f"Chart table(s); colon-separated to branch. "
                         f"Choices: {', '.join(ChartSource.slugs())}.")
-    p.add_argument("--reduction", type=_axis("reduction", tuple(Reduction.slugs())),
+    p.add_argument("--reduction", type=axis("reduction", tuple(Reduction.slugs())),
                    default=(MEDIAN_THEN_THRESHOLD.slug,), metavar="REDUCTION[:...]",
                    help=f"Reduction order(s) whose archives to read; colon-separated to "
                         f"branch. Choices: {', '.join(Reduction.slugs())}.")
@@ -289,8 +249,8 @@ def _parse_args() -> argparse.Namespace:
                         "the year it ends in (2025 = the 2024-2025 winter). Pinned across the "
                         "figure, and only meaningful on a series reduction.")
     args = p.parse_args()
-    _assert_uniform(p, {"period": args.period, "source": args.source,
-                        "reduction": args.reduction})
+    assert_uniform(p, {"period": args.period, "source": args.source,
+                       "reduction": args.reduction})
     return args
 
 
@@ -301,13 +261,14 @@ def main() -> None:
 
     # Only on the CLI path: MAPBOX_TOKEN reaches `plot.basemap` through the environment, and
     # importing this module (as `pipeline` does) must not have the side effect of setting it.
-    # Every other entry point — main, sweep — bootstraps the same way.
+    # Every other entry point — main — bootstraps the same way.
     load_dotenv(Path(__file__).parents[2] / ".env")
 
     logging.basicConfig(level=logging.INFO, datefmt="%H:%M:%S",
                         format="%(asctime)s %(levelname)s %(message)s")
     args = _parse_args()
-    runs = _broadcast(args.region, args.metric, args.period, args.source, args.reduction)
+    runs = tuple(broadcast(args.region, (args.metric,), args.period,
+                           args.source, args.reduction))
     figure = build_figure(runs, type=args.type, highlight=args.highlight)
     output_path = figure_path(runs, args.type)
     save_figure(figure, output_path)

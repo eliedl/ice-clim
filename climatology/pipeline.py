@@ -23,18 +23,6 @@ log = logging.getLogger(__name__)
 
 # --- run stages ------------------------------------------------------------
 
-def _resolve(metric: str, region: str, source: str,
-             period: str, reduction: str) -> RunContext:
-    """Resolve slugs to metric/source/region/period objects (the run's identity)."""
-    
-    ctx = RunContext.build(region, metric, period, source, reduction)
-    
-    log.info("Region: %s | Metric: %s | Reduction: %s | Source: %s | Winters: %s | %d tier(s)",
-             ctx.region.slug, ctx.metric.slug, ctx.metric.reduction_slug,
-             ctx.source.slug, ctx.period.slug, len(ctx.region.tiers))
-    return ctx
-
-
 def _fetch(ctx: RunContext) -> FetchResult:
     """Pull chart polygons once over tiers[0]'s (coarse or full) wet domain (covers every tier)."""
     bbox = ctx.region.tiers[0].fetch_wkt
@@ -80,17 +68,19 @@ def _plot(ctx: RunContext) -> None:
     save_figure(figure, path)
 
 
-def run(metric: str, region: str, source: str, period: str,
-        reduction: str, plot: bool) -> None:
-    """Compute climatologies for one (metric, region, source, period, reduction order). 
-        Archives a .npz and .json manifest and plots if wanted.
+def run(ctx: RunContext, *, plot: bool = False) -> None:
+    """Compute one resolved run's climatologies: archive a .npz and .json manifest per tier, and plot if wanted.
+
+    Takes the run already resolved — the same contract as ``plot.build_figure`` — so the
+    slug-to-object step lives once, in ``context.broadcast``, for every entrypoint.
     """
-    context = _resolve(metric, region, source, period, reduction)
-    fetch = _fetch(context)
-    results = _compute_tiers(fetch, context)
+    log.info("Running %s over %d tier(s).", ctx.region.slug, len(ctx.region.tiers))
+
+    fetch = _fetch(ctx)
+    results = _compute_tiers(fetch, ctx)
 
     for r in results:
-        archive_product(context, fetch, r)
+        archive_product(ctx, fetch, r)
 
-    if plot and metric not in SERIES_METRICS:   # a series carries no map to draw
-        _plot(context)
+    if plot and ctx.metric.slug not in SERIES_METRICS:   # a series carries no map to draw
+        _plot(ctx)
