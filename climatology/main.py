@@ -7,9 +7,15 @@ therefore hold metric and period fixed and vary only the reducer (DEC-054), whic
 comparison the axis exists for. A failing run is recorded and the batch continues; the exit
 status reflects whether any failed.
 
+The two batch shapes, and why there are two. By default the axes are *zipped*: n runs take n
+values on at most one axis and one value everywhere else, so the runs stay aligned and each is
+a panel the next figure can branch on. ``--cross`` runs the product instead
+(``context.cross_broadcast``) — the sweep shape, for opening two axes at once (every metric
+over each 30-year normal), where no alignment is intended and none is enforced.
+
 Usage:
     python -m climatology.main METRIC[:...] REGION [--period YYYY-YYYY[:...]]
-        [--source SOURCE[:...]] [--reduction REDUCTION[:...]] [--plot] [--dry-run]
+        [--source SOURCE[:...]] [--reduction REDUCTION[:...]] [--cross] [--plot] [--dry-run]
 
     # one run, no figure
     python -m climatology.main freeze_up_date manicouagan --period 2011-2020 --source sgrda
@@ -17,6 +23,10 @@ Usage:
     # four reducers over one period and source: four runs, four archives
     python -m climatology.main first_occurrence_date golfe --period 1991-2020 \\
         --source sgrdr --reduction mediantt:ttmedian:meantt:ttmean
+
+    # the sweep: two metrics over the three 30-year normals, six runs
+    python -m climatology.main freeze_up_date:breakup_date manicouagan --cross \\
+        --period 1971-2000:1981-2010:1991-2020 --source sgrdr
 """
 
 from __future__ import annotations
@@ -33,7 +43,7 @@ load_dotenv(Path(__file__).parents[1] / ".env")
 sys.path.insert(0, str(Path(__file__).parents[1]))
 
 from climatology.pipeline import run
-from climatology.core.context import RunContext, broadcast
+from climatology.core.context import RunContext, broadcast, cross_broadcast
 from climatology.core.regions import Region
 from climatology.core.metrics import Metric
 from climatology.services.sources import ChartSource
@@ -77,14 +87,19 @@ def _parse_args() -> argparse.Namespace:
                         "collapses the seasons per day and then folds the kernel (DEC-027); "
                         "tt{median,mean,mpo} folds per season and then collapses (DEC-049/053). "
                         f"Default: the metric's own. Choices: {', '.join(Reduction.slugs())}.")
+    p.add_argument("--cross", action="store_true",
+                   help="Run every combination of the axes instead of zipping them: "
+                        "metric a:b with --period x:y is 4 runs, not 2. Lifts the "
+                        "length-1-or-n constraint on the branches.")
     p.add_argument("--plot", action="store_true",
                    help="Also build each run's figure from the archive it just wrote "
                         "(plot.build); off by default.")
     p.add_argument("--dry-run", action="store_true",
                    help="List the runs that would execute, then exit.")
     args = p.parse_args()
-    assert_uniform(p, {"metric": args.metric, "period": args.period,
-                       "source": args.source, "reduction": args.reduction})
+    if not args.cross:   # a cross product has no alignment to keep, so no uniform length
+        assert_uniform(p, {"metric": args.metric, "period": args.period,
+                           "source": args.source, "reduction": args.reduction})
     return args
 
 
@@ -116,7 +131,8 @@ def _report(outcomes: list[Outcome]) -> None:
 
 if __name__ == "__main__":
     args = _parse_args()
-    runs = broadcast(args.region, args.metric, args.period, args.source, args.reduction)
+    resolve = cross_broadcast if args.cross else broadcast
+    runs = resolve(args.region, args.metric, args.period, args.source, args.reduction)
 
     if args.dry_run:
         for ctx in runs:

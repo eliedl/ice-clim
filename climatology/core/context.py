@@ -57,6 +57,21 @@ def broadcast(region: str, metrics: tuple[str, ...], periods: tuple[str, ...],
             for p in picked]
 
 
+def cross_broadcast(region: str, metrics: tuple[str, ...], periods: tuple[str, ...],
+                    sources: tuple[str, ...],
+                    reductions: tuple[str | None, ...]) -> list[RunContext]:
+    """Every combination of the coordinate axes, metrics outermost — the product ``broadcast`` refuses.
+
+    The batch shape a comparison cannot use but a sweep needs: two axes open at once, e.g.
+    every metric over each 30-year normal. Reduction is innermost so one period's reducers
+    sit adjacent in the log, and metrics are outermost so a sweep reads as one block per
+    metric.
+    """
+    return [RunContext.build(region, metric, period, source, reduction)
+            for metric in metrics for period in periods
+            for source in sources for reduction in reductions]
+
+
 @dataclass(frozen=True)
 class FetchResult:
     """The chart-polygon rows fetched once for a run, under the season calendar (the fetch-stage output)."""
