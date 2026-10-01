@@ -99,7 +99,7 @@ class Tier:
 
     @cached_property
     def wet_mask(self) -> np.ndarray:
-        """BoolGrid, True on wet cells (excludes land + seaward rectangle fill)."""
+        """BoolGrid, True on wet cells (excludes land + seaward grid rectangle fill)."""
         m = burn_mask([self.wet], self.grid)
         cells = self.grid.height * self.grid.width
         log.info("Tier '%s' wet cells: %s / %s (%.1f%%)", self.level,
@@ -125,6 +125,18 @@ class RegionLayer:
 
     wet: gpd.GeoSeries   # the wet analysis domain — the cells a value was ever burned into
     grid: Grid
+    wet_mask: np.ndarray   # BoolGrid, True on the cells the series was compressed over
+    res_m: float           # the tier's *nominal* resolution; ``grid.cell_size`` is the true one
+
+    @property
+    def wet_area_m2(self) -> float:
+        """Ground area of the analysis domain, as the grid resolved it: wet cells × true cell area.
+
+        The rasterized area, not ``wet.area``: a cell count is the denominator the series' own
+        km² were measured against, where the vector area is the domain before discretization.
+        ``grid.cell_area`` rather than ``res_m ** 2``, which is ~1 % high (probe 035).
+        """
+        return float(self.wet_mask.sum()) * self.grid.cell_area
 
     @classmethod
     def from_tier(cls, tier: Tier) -> RegionLayer:
@@ -138,8 +150,11 @@ class RegionLayer:
         shapely carries the algebra, geopandas the CRS and the draw. A figure needs the second,
         and wrapping it here is what keeps geopandas out of the renderer — the same stance
         ``RasterLayer`` takes by handing over values and bounds ready for ``imshow``.
+
+        The mask rides along with the geometry it was burned from: the panel states the domain's
+        surface, and only the mask says how much of it the grid actually resolved.
         """
-        return cls(gpd.GeoSeries([tier.wet], crs=GRID_CRS), tier.grid)
+        return cls(gpd.GeoSeries([tier.wet], crs=GRID_CRS), tier.grid, tier.wet_mask, tier.res_m)
 
 
 @dataclass(frozen=True)

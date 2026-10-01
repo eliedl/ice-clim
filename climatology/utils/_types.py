@@ -62,6 +62,7 @@ GridBounds = tuple[float, float, float, float]   # (xmin, ymin, xmax, ymax) in g
 # Canonical analysis CRS
 GRID_CRS = 32198  # NAD83 / Québec Lambert
 GRID_RES = 35     # default grid resolution (m); legacy single-tier regions
+KM2 = 1e6         # m² per km²: grid-CRS areas are metric, the figures' are not
 
 
 class Grid(NamedTuple):

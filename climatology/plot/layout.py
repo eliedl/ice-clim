@@ -17,13 +17,14 @@ from typing import TYPE_CHECKING, NamedTuple
 
 import geopandas as gpd
 import matplotlib.pyplot as plt
+import numpy as np
 from matplotlib.axes import Axes
 from matplotlib.figure import Figure
 from matplotlib.transforms import Bbox
 
 from climatology.plot.colors import DARK_COAST, DARK_LAND, DARK_OCEAN
 from climatology.plot.labels import DELTA, RASTER, RAW, SERIES
-from climatology.utils._types import Grid, GridBounds
+from climatology.utils._types import BoolGrid, Grid, GridBounds
 
 if TYPE_CHECKING:
     from climatology.core.reduction.spatial import RasterLayer
@@ -299,6 +300,37 @@ def frame_axes(ax, land: gpd.GeoDataFrame, extent: GridBounds, *,
 def lattice_is_legible(grid: Grid) -> bool:
     """Whether the ground panel's cells are large enough drawn to carry a lattice."""
     return 72.0 * PANEL_SERIES_MAP_HEIGHT_IN / max(grid.width, grid.height) >= PANEL_MAP_MIN_CELL_PT
+
+
+def cell_edge_segments(mask: BoolGrid, grid: Grid) -> np.ndarray:
+    """The lattice edges incident to a masked cell, as ``(n_edges, 2, 2)`` endpoint pairs.
+
+    An edge belongs to the set when *either* cell it separates is masked, so a masked cell is
+    outlined on all four sides and the edge two of them share is returned once. Cut from the
+    same ``linspace`` the full lattice is drawn from, which is what makes a re-stroked edge land
+    exactly on the one it covers.
+
+    Geometry only — which edges exist, not what they are drawn with. The row axis runs ymax to
+    ymin, the orientation ``burn_mask`` burns in.
+    """
+    xmin, ymin, xmax, ymax = grid.bounds
+    xs = np.linspace(xmin, xmax, grid.width + 1)
+    ys = np.linspace(ymax, ymin, grid.height + 1)
+
+    vertical = np.zeros((grid.height, grid.width + 1), dtype=bool)
+    vertical[:, :-1] |= mask     # each cell claims the edge on its left ...
+    vertical[:, 1:] |= mask      # ... and the one on its right
+    horizontal = np.zeros((grid.height + 1, grid.width), dtype=bool)
+    horizontal[:-1] |= mask
+    horizontal[1:] |= mask
+
+    rows, cols = np.nonzero(vertical)
+    down = np.stack([np.column_stack([xs[cols], ys[rows]]),
+                     np.column_stack([xs[cols], ys[rows + 1]])], axis=1)
+    rows, cols = np.nonzero(horizontal)
+    across = np.stack([np.column_stack([xs[cols], ys[rows]]),
+                       np.column_stack([xs[cols + 1], ys[rows]])], axis=1)
+    return np.concatenate([down, across])
 
 
 def balance_margins(fig) -> float:

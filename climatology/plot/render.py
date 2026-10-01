@@ -17,6 +17,7 @@ from __future__ import annotations
 from typing import TYPE_CHECKING
 
 import numpy as np
+from matplotlib.collections import LineCollection
 from matplotlib.colors import Colormap, Normalize
 from matplotlib.figure import Figure
 from matplotlib.legend_handler import HandlerPatch
@@ -30,6 +31,7 @@ from climatology.plot.colors import (
     DARK_MUTED,
     DARK_OCEAN,
     RasterScale,
+    RegionPalette,
     SeriesPalette,
     style_axes,
     style_colorbar,
@@ -47,12 +49,13 @@ from climatology.plot.layout import (
     SeriesPanels,
     SeriesSlot,
     balance_margins,
+    cell_edge_segments,
     frame_axes,
     lattice_is_legible,
     match_map_heights,
 )
 from climatology.core.reduction.spatial import RasterLayer, area_weights
-from climatology.utils._types import DataGrid, GridBounds
+from climatology.utils._types import KM2, BoolGrid, DataGrid, GridBounds
 
 if TYPE_CHECKING:
     from climatology.core.reduction.temporal import SeriesLayer
@@ -64,7 +67,7 @@ if TYPE_CHECKING:
 SUPTITLE_PT = 14
 PANEL_TITLE_PT = 11
 PANEL_TICK_PT = 7
-KM2 = 1e6                     # m² per km²: the series panel's cell areas are metric, its axis is not
+FOOTER_PT = 6                 # the provenance strips, figure-level and panel-level alike
 SERIES_POINT_SIZE = 4         # one dot per season's annual maximum: 30 on a 30 x 52 series
 SERIES_MEAN_LW = 1.8
 SERIES_SIGMA_LW = 1.0
@@ -75,6 +78,12 @@ REGION_WET_ALPHA = 0.45       # the one translucent mark in the figure, and the 
                               # palette cannot pre-blend: what shows through varies with the
                               # region, being the ocean here and the basemap's coast there
 REGION_LATTICE_LW = 0.2       # one cell edge
+REGION_WET_CELL_LW = 0.2      # a selected cell's edge, over the lattice's 0.2: it has to win the
+                              # pixel it shares with the edge it re-strokes
+REGION_WET_CELL_ALPHA = 0.6  # just off opaque: the lattice edge underneath stays faintly legible
+                              # through the selection, so the green reads as laid *on* the grid.
+                              # Not pre-blended like the series marks, which have one another to
+                              # sit on — this one blends with whatever edge it covers
 REGION_KEY_LW = 0.8           # a key mark carries the colour, not the weight: the lattice's own
                               # 0.2 pt is invisible at legend-swatch size
 REGION_KEY_HEIGHT = 1.0       # key box height in font units, over matplotlib's 0.7: the squared
@@ -82,13 +91,34 @@ REGION_KEY_HEIGHT = 1.0       # key box height in font units, over matplotlib's 
 REGION_KEY_ANCHOR = (0.5, 1.0)   # the key's bottom centre on the map's top edge — above the map,
                                  # the one side no geometry can be hidden on and the description
                                  # strip below it does not claim
+REGION_FOOTER_PAD = 0.02         # the strip's top below the map's bottom edge, in axes fractions
+REGION_FOOTER_LINESPACING = 1.5  # over matplotlib's 1.2: four 6 pt lines read as a block otherwise
+
+# The ground panel's draw order, named: the domain, its lattice, the cells selected out of it,
+# then the basemap over all three — land first, since it covers the dry ground the domain was cut
+# away from, then the coastline, then the place names, a label being annotation rather than
+# geography. The selected edges sit above the lattice so a shared edge reads as selected.
+Z_WET, Z_LATTICE, Z_WET_CELLS, Z_LAND, Z_COAST, Z_NAMES = 1, 2, 3, 4, 5, 6
 
 
 # --- primitives -------------------------------------------------------------
 
 def footer(fig, text: str, *, x: float = 0.01) -> None:
     """Draw a figure's provenance strip; the text itself is assembled in ``labels``."""
-    fig.text(x, 0.01, text, fontsize=6, color=DARK_MUTED)
+    fig.text(x, 0.01, text, fontsize=FOOTER_PT, color=DARK_MUTED)
+
+
+def _panel_footer(ax, text: str) -> None:
+    """Draw one panel's own provenance strip, outside its lower-left corner.
+
+    Axes fractions, so the strip follows the drawn box rather than the one the layout allotted:
+    an equal-aspect map shrinks inside its cell at draw time, and ``transAxes`` is resolved then
+    — which is also why this needs no settled box, where ``_map_colorbar``, adding axes of its
+    own, does. Left-aligned on the map's own left edge; one artist for the whole block, so the
+    lines share that edge and one line spacing.
+    """
+    ax.text(0.0, -REGION_FOOTER_PAD, text, transform=ax.transAxes, ha="left", va="top",
+            fontsize=FOOTER_PT, color=DARK_MUTED, linespacing=REGION_FOOTER_LINESPACING)
 
 
 def _legend(ax, marks: list, names: tuple[str, ...], **opts) -> None:
@@ -177,6 +207,26 @@ def _draw_grid(ax, grid: Grid, *, color: str, zorder: int) -> None:
               colors=color, linewidth=REGION_LATTICE_LW, zorder=zorder)
 
 
+def _draw_wet_cells(ax, mask: BoolGrid, grid: Grid, *, color: str, zorder: int) -> None:
+    """Re-stroke the lattice edges the wet mask selected, so a cell's own outline says it was analysed.
+
+    Stroked rather than filled: what the mask selects is cells of the lattice, and an edge is
+    what a cell contributes — a fill would read as a second domain laid over the first, where a
+    re-stroked edge reads as the lattice itself, marked. Drawn under the same legibility gate as
+    the lattice, because what this draws *is* lattice: below the floor the edges merge into a wash
+    and a selected one no longer reads as selected.
+
+    One ``LineCollection`` over a patch per cell: the gate caps the map's long axis at ~100 cells,
+    so this is tens of thousands of segments at worst, and nothing about a cell is styled or
+    picked individually.
+    """
+    if not lattice_is_legible(grid):
+        return
+    ax.add_collection(LineCollection(cell_edge_segments(mask, grid), colors=color,
+                                     linewidths=REGION_WET_CELL_LW,
+                                     alpha=REGION_WET_CELL_ALPHA, zorder=zorder))
+
+
 def _square_key(legend, orig_handle, xdescent, ydescent, width, height, fontsize):
     """A legend key as wide as it is tall, right-aligned in the handle box the legend allotted.
 
@@ -191,24 +241,28 @@ def _square_key(legend, orig_handle, xdescent, ydescent, width, height, fontsize
     return Rectangle((-xdescent + width - height, -ydescent), height, height)
 
 
-def _region_marks(palette: SeriesPalette) -> tuple[list[Patch], dict]:
-    """The ground panel's key marks in draw order, and the handler that shapes the odd one.
+def _region_marks(palette: RegionPalette) -> tuple[list[Patch], dict]:
+    """The ground panel's key marks in draw order, and the handler that shapes the square ones.
 
-    Proxies, because neither geometry hands a handle back: ``GeoSeries.plot`` returns the axes
-    rather than its collection, and the lattice is not drawn at all below the legibility floor.
-    Both read off the same palette the map is drawn from, so a proxy says exactly what the map
-    says. The domain keeps the legend's landscape key — its shape is a coastline no swatch can
-    claim to reproduce — where the cell is squared, a cell being square by construction
-    (``build_grid`` spaces both axes by one ``res_m``); a landscape swatch there would misstate
-    the grid. The cell is outlined rather than filled, since what a cell contributes is an edge.
+    Proxies, because none of the three geometries hands a usable handle back: ``GeoSeries.plot``
+    returns the axes rather than its collection, and neither the lattice nor the selected edges
+    are drawn at all below the legibility floor. All three read off the same palette the map is
+    drawn from, so a proxy says exactly what the map says. The domain keeps the legend's landscape
+    key — its shape is a coastline no swatch can claim to reproduce — where both cell keys are
+    squared, a cell being square by construction (``build_grid`` spaces both axes by one
+    ``res_m``); a landscape swatch there would misstate the grid. Both are outlined rather than
+    filled, since what a cell contributes is an edge, and the pair then differs in exactly what
+    the map differs in: the colour of the stroke.
     """
     domain = Patch(facecolor=palette.wet, edgecolor=palette.wet,
                    alpha=REGION_WET_ALPHA, linewidth=REGION_WET_LW)
     cell = Patch(facecolor="none", edgecolor=palette.grid, linewidth=REGION_KEY_LW)
-    return [domain, cell], {cell: HandlerPatch(patch_func=_square_key)}
+    wet_cell = Patch(facecolor="none", edgecolor=palette.wet_cells, alpha=REGION_WET_CELL_ALPHA+0.2, linewidth=REGION_KEY_LW)
+    square = HandlerPatch(patch_func=_square_key)
+    return [domain, cell, wet_cell], {cell: square, wet_cell: square}
 
 
-def _draw_region_map(ax, region: RegionLayer, lab: RegionLabel, palette: SeriesPalette,
+def _draw_region_map(ax, region: RegionLayer, lab: RegionLabel, palette: RegionPalette,
                      *, tile, land) -> None:
     """The figure's ground panel: the domain the series was compressed over, and the grid it ran on.
 
@@ -216,14 +270,21 @@ def _draw_region_map(ax, region: RegionLayer, lab: RegionLabel, palette: SeriesP
     map half is: the wet domain stands where the ice values stand there — under the basemap's
     land, which covers the dry ground the domain was cut away from — then the coastline, then
     the place names on top.
+
+    Three marks for two things, deliberately: the domain as it was *cut* (a polygon), the grid it
+    was rasterized onto (the lattice), and the cells that rasterization selected (the lattice,
+    re-stroked). The gap between the first and the third is the discretization, which is what the
+    strip's surface was measured over.
     """
     ax.set_facecolor(DARK_OCEAN)
     region.wet.plot(ax=ax, facecolor=palette.wet, edgecolor=palette.wet,
-                       alpha=REGION_WET_ALPHA, linewidth=REGION_WET_LW, zorder=1)
-    _draw_grid(ax, region.grid, color=palette.grid, zorder=2)
-    draw_basemap_land(ax, tile, zorder=3)
-    frame_axes(ax, land, region.grid.bounds, zorder=4, fill=tile is None)
-    draw_basemap_labels(ax, tile, zorder=5)
+                       alpha=REGION_WET_ALPHA, linewidth=REGION_WET_LW, zorder=Z_WET)
+    _draw_grid(ax, region.grid, color=palette.grid, zorder=Z_LATTICE)
+    _draw_wet_cells(ax, region.wet_mask, region.grid, color=palette.wet_cells,
+                    zorder=Z_WET_CELLS)
+    draw_basemap_land(ax, tile, zorder=Z_LAND)
+    frame_axes(ax, land, region.grid.bounds, zorder=Z_COAST, fill=tile is None)
+    draw_basemap_labels(ax, tile, zorder=Z_NAMES)
 
     ax.set_aspect("equal")
     ax.tick_params(labelbottom=False, labelleft=False,
@@ -235,6 +296,10 @@ def _draw_region_map(ax, region: RegionLayer, lab: RegionLabel, palette: SeriesP
     marks, handlers = _region_marks(palette)
     _legend(ax, marks, lab.legend, loc="lower center", bbox_to_anchor=REGION_KEY_ANCHOR,
             handler_map=handlers, handleheight=REGION_KEY_HEIGHT)
+
+    # Under the map, where the key is above it: the strip qualifies the geometry rather than
+    # naming it, and the two would compete for the same corner on the same side.
+    _panel_footer(ax, lab.footer)
 
 
 # --- the engine -------------------------------------------------------------
@@ -330,7 +395,8 @@ def _draw_series_panel(slot: SeriesSlot, layers: tuple[SeriesLayer, ...],
     *area* rather than a domain mean, that is no longer only a loss of precision: each tier
     wets a different amount of ground, so the km² a panel reads is the coarse tier's own domain,
     not the region's. Combining the tiers onto a common grid before compressing is the fix;
-    until then the footer is where the resolution actually drawn belongs, once it is assembled.
+    until then the ground panel's strip is what states it — the surface and resolution it quotes
+    are that same first tier's, so the figure says which domain its km² were measured over.
     """
     ax = slot.series_ax
     # (n_seasons, n_days), in ice-covered cells; scaled here to km² on the grid's *true* cell,
@@ -380,28 +446,31 @@ def _draw_series_panel(slot: SeriesSlot, layers: tuple[SeriesLayer, ...],
 
 def _render_series(layers: list[tuple[SeriesLayer, ...]],
                    labels: list[SeriesLabel | RegionLabel],
-                   palettes: list[SeriesPalette], panels: SeriesPanels) -> Figure:
+                   palettes: list[SeriesPalette | RegionPalette],
+                   panels: SeriesPanels) -> Figure:
     """Draw every series panel, then the figure-level furniture.
 
     One pass, where the maps need three: the ground panel does hold an aspect that shrinks at
     draw time, but nothing is pinned to its drawn box, and there are no colourbars to place
     under boxes that have settled.
 
-    The ground layer ``_fetch`` appended and the ``RegionLabel`` naming it are unpacked off their
-    tails before the walk: the panel is one however many runs the figure draws, so it is drawn
-    once — like the suptitle and the footer — and the ``strict`` zip stays over the per-run lists
-    alone. Palettes carry no such tail; the ground is drawn from the panels' own palette, since
-    every mark in the figure belongs to one colour vocabulary.
+    The ground panel's three pieces — the layer ``_fetch`` appended, the ``RegionLabel`` naming it
+    and the ``RegionPalette`` it is drawn in — are each unpacked off their list's tail before the
+    walk: the panel is one however many runs the figure draws, so it is drawn once, like the
+    suptitle and the footer, and the ``strict`` zip stays over the per-run lists alone. Its own
+    palette rather than a panel's: the ground is geometry, and the one colour that says a cell was
+    selected belongs to no series mark.
     """
     fig = panels.fig
     *stacks, (region,) = layers
     *series_labels, region_label = labels
-    for slot, stack, lab, palette in zip(panels.slots, stacks, series_labels, palettes,
+    *series_palettes, region_palette = palettes
+    for slot, stack, lab, palette in zip(panels.slots, stacks, series_labels, series_palettes,
                                          strict=True):
         _draw_series_panel(slot, stack, lab, palette)
 
     tile, land = load_basemap(region.grid.bounds)
-    _draw_region_map(panels.map_ax, region, region_label, palettes[0], tile=tile, land=land)
+    _draw_region_map(panels.map_ax, region, region_label, region_palette, tile=tile, land=land)
 
     # Figure-level text is identical on every panel's label; drawn once, off the first — the
     # *panel* labels, since the ground panel's carries neither.

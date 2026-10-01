@@ -63,12 +63,21 @@ SERIES_COLORS: dict[str, str] = {
     # The one highlighted winter, deliberately off the ramp: a near-white reads as emphasis
     # laid over the mean rather than as a fifth category competing with it on the same ramp.
     "highlight": "#a05b55",
-    # The figure's ground panel. Deliberately the quietest pair here: the map is context for
-    # the curves, not a mark competing with them, so the wet domain sits a step above the ocean
-    # it is drawn on and the lattice a step above the domain — legible on inspection, silent
-    # at a glance.
-    "wet":       "#b7cfe1",
-    "grid":      "#5c7d8a",
+}
+
+# A sibling of SERIES_COLORS, not rows in it: those colour marks read against one another on one
+# value ramp, where these colour *geometry*, and the ground panel is drawn once however many
+# series panels the figure holds. Keyed by ``RegionPalette`` field, same as its sibling.
+# The first two are deliberately the quietest colours in the figure: the map is context for the
+# curves, not a mark competing with them, so the wet domain sits a step above the ocean it is
+# drawn on and the lattice a step above the domain — legible on inspection, silent at a glance.
+# The third breaks that on purpose, and is the one colour here sampled off no ramp at all: a
+# neon stroke reads as a *selection* laid over the lattice, where any ramp colour would read as
+# a third category to be compared with the other two.
+REGION_COLORS: dict[str, str] = {
+    "wet":       "#b7cfe1",   # the wet analysis domain
+    "grid":      "#5c7d8a",   # the cell lattice
+    "wet_cells": "#a5ff99",   # the lattice edges the wet mask selected
 }
 
 
@@ -137,10 +146,23 @@ class SeriesPalette:
     spread: str          # the mean ± 0.5 σ patch and the ±σ lines drawn on it
     envelope: str        # the across-season min-max patch
     highlight: str       # the one named winter drawn over the mean, if any
-    wet: str             # the ground panel's wet analysis domain
-    grid: str            # the ground panel's cell lattice
     ticks: list[float]   # month starts — the positions ``format_ticks`` labels
     highlight_season: int | None = None   # which winter wears ``highlight``; None draws no such mark
+
+
+@dataclass(frozen=True)
+class RegionPalette:
+    """What the figure's ground panel is drawn with: the domain, its lattice, and the cells selected out of it.
+
+    Not a ``SeriesPalette``, for the reason ``RegionLabel`` is not a ``Label``: the ground panel
+    draws no mark on the series' axis, so it carries no ticks and no highlighted winter — only
+    the three colours its geometry is drawn in. It rides the palette list the way its layer and
+    its label ride theirs, appended off the tail and unpacked there.
+    """
+
+    wet: str             # the wet analysis domain
+    grid: str            # the cell lattice
+    wet_cells: str       # the lattice edges the wet mask selected
 
 
 def _ticks_values(vmin: float, vmax: float, type: str) -> list[float]:
@@ -223,7 +245,8 @@ def series_months(layer: SeriesLayer) -> list[float]:
     return sorted({month_start(day) for day, keep in zip(layer.days, carries) if keep})
 
 
-def _series_scales(ctx: PlotContext, layers: list[tuple]) -> list[SeriesPalette]:
+def _series_scales(ctx: PlotContext,
+                   layers: list[tuple]) -> list[SeriesPalette | RegionPalette]:
     """One palette per series panel, every panel read on the same months.
 
     The ticks pool across panels for the reason ``_one_sequential``'s scale does — a position
@@ -232,20 +255,22 @@ def _series_scales(ctx: PlotContext, layers: list[tuple]) -> list[SeriesPalette]
 
     The highlighted winter is pinned across the figure (``_validate`` has already checked it
     falls inside every panel's period), so every palette carries the same one. The ground layer
-    ``_fetch`` appended is unpacked off the tail: it is drawn from the same palette as the
-    panels but is not one, so it neither contributes months nor earns an entry.
+    ``_fetch`` appended is unpacked off the tail: it contributes no months, being located on the
+    ground rather than on the season — then its own palette joins the list where its layer and
+    its label join theirs, since it is drawn in colours no series panel uses.
     """
     *stacks, _region = layers
     ticks = sorted({month for stack in stacks for month in series_months(stack[0])})
-    return [SeriesPalette(**SERIES_COLORS, ticks=ticks, highlight_season=ctx.highlight)
-            for _stack in stacks]
+    panels = [SeriesPalette(**SERIES_COLORS, ticks=ticks, highlight_season=ctx.highlight)
+              for _stack in stacks]
+    return [*panels, RegionPalette(**REGION_COLORS)]
 
 
 _SCALES = {RASTER: _raster_scales, SERIES: _series_scales}
 
 
 def style(ctx: PlotContext,
-          layers: list[tuple]) -> list[RasterScale] | list[SeriesPalette]:
+          layers: list[tuple]) -> list[RasterScale] | list[SeriesPalette | RegionPalette]:
     """One scale or palette per layer stack, index-aligned — a delta figure's last stack is the difference.
 
     Panels sharing a scale share one frozen instance, so "same colour, same value" holds by

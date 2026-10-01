@@ -29,13 +29,13 @@ from climatology.core.reduction.temporal import (
     ThresholdDuration,
 )
 from climatology.services.calendar import SEASON_ORIGIN
-from climatology.utils._types import GRID_CRS
+from climatology.utils._types import GRID_CRS, KM2
 
 if TYPE_CHECKING:
     from climatology.core.context import RunContext
     from climatology.core.metrics import Metric
     from climatology.core.reduction.spatial import RasterLayer
-    from climatology.core.reduction.temporal import SeriesLayer
+    from climatology.core.regions import RegionLayer
     from climatology.plot.build import PlotContext
 
 
@@ -370,10 +370,11 @@ SERIES_LEGEND = ("Annual max", "Mean", "± σ", "± 0.5 σ", "Min-max")
 # names what the domain *is* rather than how it was cut: ``Tier.wet`` is a difference against the
 # landmask, and on a fine tier also an intersection with the coastline buffer, so no one operator
 # describes it on every tier. The second names the lattice's unit, and its key is drawn square
-# because a cell is. Below ``lattice_is_legible`` no cell is drawn at all — on golfe, manic-roi
-# and iles-de-la-madeleine the entry names a resolution the map states only through its frame,
-# which is the one place this table outruns what the panel shows.
-REGION_LEGEND = ("Analysis domain", "Grid cell")
+# because a cell is. The third names the cells that unit's lattice selected — the ones the mask
+# burned, and the ones the strip's surface counts. Below ``lattice_is_legible`` neither cell entry
+# is drawn at all — on golfe, manic-roi and iles-de-la-madeleine the two name a resolution and a
+# selection the map states only through its frame, which is where this table outruns the panel.
+REGION_LEGEND = ("Analysis domain", "Grid cell", "Wet cells")
 
 
 def _highlighted_legend(season: int | None) -> tuple[str, ...]:
@@ -435,6 +436,20 @@ def _footer_text(ctx: PlotContext, tiers: tuple[RasterLayer, ...]) -> str:
             f"EPSG:{GRID_CRS} | Land: {_CREDIT}")
 
 
+def _region_footer_text(region: RegionLayer) -> str:
+    """The ground panel's own strip: the surface it measured, at what resolution, in what projection, over whose land.
+
+    Not ``_footer_text``: that one is the *figure's* provenance and leads with the chart series
+    every panel read, which this panel does not read at all — it carries no values, only the
+    ground. One statement per line, stacked under the map rather than run together, because each
+    line qualifies the surface above it.
+    """
+    return "\n".join((f"Surface : {region.wet_area_m2 / KM2:,.2f} km²",
+                      f"Resolution : {int(round(region.res_m))} m",
+                      f"Projection : EPSG:{GRID_CRS}",
+                      _CREDIT))
+
+
 # --- panel text -------------------------------------------------------------
 
 @dataclass(frozen=True)
@@ -474,16 +489,19 @@ class SeriesLabel(Label):
 
 @dataclass(frozen=True)
 class RegionLabel:
-    """The ground panel's own text: one entry per geometry it draws.
+    """The ground panel's own text: one entry per geometry it draws, and the strip under it.
 
     Not a ``Label``, for the reason ``RegionLayer`` is not a ``SeriesLayer``: the ground panel is
     one panel however many runs the figure draws, and it names no coordinate, no quantity and no
-    tick — there is nothing for the four fields a ``Label`` carries to hold. So it rides the same
-    way its layer does: ``_series_labels`` appends it off the tail and ``_render_series`` unpacks
-    it there, which keeps the per-run lists index-aligned.
+    tick — there is nothing for a ``Label``'s title or ticks to hold. Its ``footer`` is not
+    ``Label.footer`` either: that one is figure-level and identical on every panel's label, where
+    this is the ground panel's own, drawn under its map alone. So it rides the same way its layer
+    does: ``_series_labels`` appends it off the tail and ``_render_series`` unpacks it there,
+    which keeps the per-run lists index-aligned.
     """
 
     legend: tuple[str, ...]      # one entry per geometry, in draw order
+    footer: str                  # panel-level provenance, drawn under the map
 
 
 def _raster_labels(ctx: PlotContext, layers: list[tuple[RasterLayer, ...]]) -> list[RasterLabel]:
@@ -513,7 +531,7 @@ def _raster_labels(ctx: PlotContext, layers: list[tuple[RasterLayer, ...]]) -> l
 
 
 def _series_labels(ctx: PlotContext,
-                   layers: list[tuple[SeriesLayer, ...]]) -> list[SeriesLabel | RegionLabel]:
+                   layers: list[tuple]) -> list[SeriesLabel | RegionLabel]:
     """One label per series panel, then the ground panel's own off the tail — the same split as the maps: what the figure shares titles it, what varies names the panel.
 
     The y axis is composed rather than tabled: ``METRIC_LABELS`` names the quantity and the
@@ -522,8 +540,10 @@ def _series_labels(ctx: PlotContext,
 
     The tail mirrors the one ``_fetch`` appends, and for the same reason: the ground panel is
     drawn once however many runs the figure holds, so its text is not a panel's and joins the
-    list where its layer does rather than being zipped over the runs.
+    list where its layer does rather than being zipped over the runs. It is read off the same
+    tail, since its surface is the one string here measured from a layer rather than named.
     """
+    (region,) = layers[-1]
     shared_slugs, panels_slugs = branch(ctx.runs)
     title = _title(shared_slugs)
     unit = UNITS[type(ctx.metric.kernel)]
@@ -538,7 +558,7 @@ def _series_labels(ctx: PlotContext,
         y_axis=y_axis,
         legend=_highlighted_legend(ctx.highlight),
     ) for panel_slugs in panels_slugs]
-    labels.append(RegionLabel(REGION_LEGEND))
+    labels.append(RegionLabel(REGION_LEGEND, _region_footer_text(region)))
     return labels
 
 
