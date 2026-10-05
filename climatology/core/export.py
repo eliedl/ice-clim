@@ -9,6 +9,7 @@ from datetime import datetime
 from operator import itemgetter
 from pathlib import Path
 import numpy as np
+import rasterio
 
 from climatology.core.context import RunContext, Result, FetchResult
 from climatology.core.metrics import SERIES_METRICS
@@ -17,6 +18,7 @@ from climatology.core.reduction.temporal import SeriesLayer
 from climatology.core.regions import Tier
 from climatology.plot.kinds import DELTA
 from climatology.plot.labels import branch
+from climatology.utils._types import GRID_CRS
 
 log = logging.getLogger(__name__)
 
@@ -135,6 +137,43 @@ def _build_manifest(ctx: RunContext, fetch: FetchResult, result: Result) -> dict
               else _grid_extent(result.tier))
     return identity | extent | _git_state()
 
+def write_geotiff(path: Path, ctx: RunContext, result: Result) -> Path:
+    """Write one full-tier raster product as a single-band float32 GeoTIFF.
+
+    Float rather than integer because a reduced product is not integral: a ``ttmean``
+    duration is a mean over seasons, so its cells carry fractional days that an integer
+    cast would quantize away (a 1 km kamou-roi run: 840 distinct values collapsing to 54).
+    The NaN nodata of ``DataGrid`` carries through in-band, so no sentinel is needed.
+    """
+    grid = result.tier.grid
+    values = result.values
+    if values.shape != (grid.height, grid.width):
+        raise ValueError(f"Result raster {values.shape} does not match the "
+                         f"'{result.tier.level}' grid of {ctx.region.slug} "
+                         f"{(grid.height, grid.width)}.")
+
+    profile = {
+        "driver": "GTiff",
+        "height": grid.height,
+        "width": grid.width,
+        "count": 1,                    # one band: the metric raster
+        "dtype": "float32",
+        "crs": f"EPSG:{GRID_CRS}",
+        "transform": grid.transform,
+        "nodata": float("nan"),
+        "compress": "lzw",
+        "predictor": 3,                # floating-point predictor; wrong for integer bands
+        "tiled": True,
+    }
+
+    path.parent.mkdir(parents=True, exist_ok=True)
+    with rasterio.open(path, "w", **profile) as dst:
+        dst.write(values.astype("float32"), 1)
+
+    log.info("GeoTIFF saved to %s", path)
+    return path
+
+
 def archive_product(ctx: RunContext, fetch: FetchResult, result: Result) -> Path:
     """Persist the product raster + run manifest under ``<product-dir>/archive/``."""
     manifest = _build_manifest(ctx, fetch, result)
@@ -151,6 +190,11 @@ def archive_product(ctx: RunContext, fetch: FetchResult, result: Result) -> Path
     npz.with_suffix(".json").write_text(json.dumps(manifest, indent=2, default=str))
 
     log.info("Archived product raster: %s", npz)
+
+    # A single-tier region is the only one whose raster stands alone as a product: an
+    # adaptive region's tiers are composited at draw time, so neither is the deliverable.
+    if result.tier.level == "full" and ctx.metric.slug not in SERIES_METRICS:
+        write_geotiff(product_path(ctx, ext="tif"), ctx, result)
 
     return npz
 
