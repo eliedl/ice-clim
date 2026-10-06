@@ -141,13 +141,14 @@ _SPECS: dict[str, Metric] = {
                                                         combine=np.any),
                                       fields=_EGG_FIELDS, conversion=DEVELOPED_ICE_CONVERSION),
     "concentration":            M(DomainMean(), reduction=DOMAIN_SERIES),
+    "landfast_concentration":   M(DomainMean(), reduction=DOMAIN_SERIES, fields=("FA",), conversion=LANDFAST_CONVERSION),
 }
 
 
 # Metrics whose product is a ``(n_seasons, n_days)`` series rather than an (H, W) raster —
 # the one thing a product's layout cannot be read off, since both archive as the same .npz.
 # With the manifest's ``reduction`` field, this names what a consumer is holding.
-SERIES_METRICS: frozenset[str] = frozenset({"concentration"})
+SERIES_METRICS: frozenset[str] = frozenset({"concentration", "landfast_concentration"})
 
 _METRICS: dict[str, Metric] = {slug: replace(spec, slug=slug)
                                for slug, spec in _SPECS.items()}

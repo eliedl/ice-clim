@@ -325,6 +325,7 @@ METRIC_LABELS: dict[str, str] = {
     "developed_ice_duration":       "Developed ice duration",
     "developed_ice_exposure":       "Developed ice absence duration",
     "concentration":                "Ice coverage",
+    "landfast_concentration":       "Landfast ice coverage",
 }
 
 # The chart cadence in one word. ``ChartSource.display_label`` is the *footer* attribution —
