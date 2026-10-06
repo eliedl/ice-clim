@@ -458,6 +458,24 @@ def _region_footer_text(region: RegionLayer) -> str:
                       _CREDIT))
 
 
+def _coverage_text(tiers: tuple[RasterLayer, ...]) -> str:
+    """The ground a panel's values actually cover, in km².
+
+    NaN is a raster's only no-data sentinel, so the cells that are *not* NaN are exactly the
+    cells carrying a value, and the tier's own cell area turns that count into ground.
+
+    Read off the first tier alone — the coarsest on an adaptive region, the whole product on a
+    single-tier one — so a panel quotes one surface rather than a tier breakdown. On an adaptive
+    region that surface is therefore the coarse tier's own wet domain and not the region's: the
+    tiers wet different amounts of ground, and summing them would double-count what the finer
+    ones re-cover. ``area_weights`` is what resolves that overlap into a union, and a coverage
+    read through it is the fix when a panel needs the region's surface rather than a tier's.
+    """
+    tier = tiers[0]
+    covered = (~np.isnan(tier.values)).sum() * tier.cell_area / KM2
+    return f"Extent: {covered:,.0f} km²".replace(",", " ")
+
+
 # --- panel text -------------------------------------------------------------
 
 @dataclass(frozen=True)
@@ -480,10 +498,11 @@ class Label:
 
 @dataclass(frozen=True)
 class RasterLabel(Label):
-    """A map panel's own text: what its colourbar means, and what its distribution is measured in."""
+    """A map panel's own text: its colourbar, its distribution's unit, and the ground it covers."""
 
     colorbar: str
     distribution_y: str          # unit of observation on the distribution's value axis
+    coverage_label: str | None   # None where a panel has no ground of its own to quote
 
 
 @dataclass(frozen=True)
@@ -519,11 +538,14 @@ def _raster_labels(ctx: PlotContext, layers: list[tuple[RasterLayer, ...]]) -> l
     unit = UNITS[type(ctx.metric.kernel)].axis
 
     labels = []
-    for run, panel_slugs in zip(ctx.runs, panels_slugs):
+    # ``layers`` carries the delta stack at its tail where ``ctx.runs`` does not, so the zip
+    # stopping at the runs is load-bearing: the branch below labels that stack itself.
+    for run, panel_slugs, tiers in zip(ctx.runs, panels_slugs, layers):
         colorbar, format_ticks = colorbar_labels(run.metric)
         labels.append(RasterLabel(
             figure_title=title, axis_title=_title(panel_slugs), footer=foot,
             format_ticks=format_ticks, colorbar=colorbar, distribution_y=unit,
+            coverage_label=_coverage_text(tiers),
         ))
 
     if ctx.type == DELTA:
@@ -534,6 +556,7 @@ def _raster_labels(ctx: PlotContext, layers: list[tuple[RasterLayer, ...]]) -> l
             format_ticks=_count_ticks,
             colorbar=f"Δ {_as_label('metric', ctx.metric.slug)}  (days)",
             distribution_y="Days",   # a difference of two dates is a duration, not a date
+            coverage_label=None,     # the two panels' coverages are the statement, not this one's
         ))
     return labels
 

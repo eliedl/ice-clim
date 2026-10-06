@@ -98,6 +98,9 @@ REGION_KEY_ANCHOR = (0.5, 1.0)   # the key's bottom centre on the map's top edge
                                  # strip below it does not claim
 REGION_FOOTER_PAD = 0.02         # the strip's top below the map's bottom edge, in axes fractions
 REGION_FOOTER_LINESPACING = 1.5  # over matplotlib's 1.2: four 6 pt lines read as a block otherwise
+COVERAGE_PT = PANEL_TICK_PT      # an annotation on the map, not a second title
+COVERAGE_ANCHOR = (0.02, 0.98)   # the map's upper-left in axes fractions: the one corner neither
+                                 # the title above nor the colourbar below claims
 
 # The ground panel's draw order, named: the domain, its lattice, the cells selected out of it,
 # then the basemap over all three — land first, since it covers the dry ground the domain was cut
@@ -124,6 +127,21 @@ def _panel_footer(ax, text: str) -> None:
     """
     ax.text(0.0, -REGION_FOOTER_PAD, text, transform=ax.transAxes, ha="left", va="top",
             fontsize=FOOTER_PT, color=DARK_MUTED, linespacing=REGION_FOOTER_LINESPACING)
+
+
+def draw_coverage_label(ax, text: str | None, *, zorder: int) -> None:
+    """Place a panel's coverage over its map; what it says is ``labels._coverage_text``'s.
+
+    Axes fractions and ``transAxes``, like ``_panel_footer``: the box resolves at draw time, so
+    the label follows the equal-aspect map as it shrinks inside its allotted cell. Drawn in the
+    legend's own panel style, the figure's single way of laying text over geometry. ``None`` is
+    a panel with no ground to quote, and draws nothing.
+    """
+    if text is None:
+        return
+    ax.text(*COVERAGE_ANCHOR, text, transform=ax.transAxes, ha="left", va="top",
+            fontsize=COVERAGE_PT, color=DARK_FG, zorder=zorder,
+            bbox=dict(facecolor=DARK_OCEAN, edgecolor=DARK_LINE, alpha=0.8, pad=2))
 
 
 def _legend(ax, marks: list, names: tuple[str, ...], **opts) -> None:
@@ -183,6 +201,7 @@ def _draw_panel(slot: RasterSlot, layers: tuple[RasterLayer, ...], lab: RasterLa
     draw_basemap_land(ax, tile, zorder=top)
     frame_axes(ax, land, extent, zorder=top + 1, fill=tile is None)
     draw_basemap_labels(ax, tile, zorder=top + 2)   # names ride above the coastline
+    draw_coverage_label(ax, lab.coverage_label, zorder=top + 3)
 
     ax.set_title(lab.axis_title, fontsize=PANEL_TITLE_PT, pad=6, color=DARK_FG)
     ax.tick_params(labelbottom=False, labelleft=False,
