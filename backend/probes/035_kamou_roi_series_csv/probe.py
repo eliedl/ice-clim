@@ -37,7 +37,7 @@ from climatology.utils._types import GRID_CRS
 OUTPUT_DIR = Path(__file__).parent / "output"
 
 REGION = "kamou-roi"
-METRIC = "concentration"
+METRIC = "landfast_concentration"
 PERIOD = "2007-2026"
 SOURCE = "sgrda"
 REDUCTION = "series"
