@@ -14,18 +14,19 @@ a panel the next figure can branch on. ``--cross`` runs the product instead
 over each 30-year normal), where no alignment is intended and none is enforced.
 
 Usage:
-    python -m climatology.main METRIC[:...] REGION [--period YYYY-YYYY[:...]]
+    python -m climatology.main METRIC[:...] --region R [--period YYYY-YYYY[:...]]
         [--source SOURCE[:...]] [--reduction REDUCTION[:...]] [--cross] [--plot] [--dry-run]
 
     # one run, no figure
-    python -m climatology.main freeze_up_date manicouagan --period 2011-2020 --source sgrda
+    python -m climatology.main freeze_up_date --region manicouagan \\
+        --period 2011-2020 --source sgrda
 
     # four reducers over one period and source: four runs, four archives
-    python -m climatology.main first_occurrence_date golfe --period 1991-2020 \\
+    python -m climatology.main first_occurrence_date --region golfe --period 1991-2020 \\
         --source sgrdr --reduction mediantt:ttmedian:meantt:ttmean
 
     # the sweep: two metrics over the three 30-year normals, six runs
-    python -m climatology.main freeze_up_date:breakup_date manicouagan --cross \\
+    python -m climatology.main freeze_up_date:breakup_date --region manicouagan --cross \\
         --period 1971-2000:1981-2010:1991-2020 --source sgrdr
 """
 
@@ -71,7 +72,7 @@ def _parse_args() -> argparse.Namespace:
     p.add_argument("metric", type=axis("metric", tuple(Metric.slugs())), metavar="METRIC[:...]",
                    help=f"Metric slug(s); colon-separated to branch. "
                         f"Choices: {', '.join(Metric.slugs())}.")
-    p.add_argument("region", choices=Region.slugs(), metavar="REGION",
+    p.add_argument("--region", choices=Region.slugs(), required=True, metavar="REGION",
                    help=f"Pinned across the batch. Choices: {', '.join(Region.slugs())}.")
     p.add_argument("--period", type=axis("period"), default=(DEFAULT_PERIOD,),
                    metavar="YYYY-YYYY[:...]",
