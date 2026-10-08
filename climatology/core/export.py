@@ -199,14 +199,24 @@ def archive_product(ctx: RunContext, fetch: FetchResult, result: Result) -> Path
     return npz
 
 def find_archived(ctx: RunContext) -> list[tuple[Path, dict]]:
-    """Newest archived raster per tier for one run identity, coarsest grid first."""
+    """Newest archived raster per tier for one run identity, coarsest grid first; raises when the run was never archived."""
     arch_dir = _product_dir(ctx) / "archive"
     *_, reduction = ctx.describe()
 
     manifests = (json.loads(p.read_text()) for p in arch_dir.glob("*.json"))
     by_age = sorted((m for m in manifests if m["reduction"] == reduction), key=itemgetter("created"))
     newest = {m["tier"]: m for m in by_age}        # overwrite on iteration on manifest
-    
+
+    # A run nobody archived is the one failure every consumer shares — naming the sweep that
+    # would write it here keeps each of them from re-deriving the same message out of an
+    # empty list it did not expect.
+    if not newest:
+        region, metric, period, source, _ = ctx.describe()
+        raise FileNotFoundError(
+            f"No archived product under {arch_dir} for the '{reduction}' order. Archive one "
+            f"first: python -m climatology.main {metric} --region {region} "
+            f"--period {period} --source {source} --reduction {reduction}")
+
     return [(arch_dir / m["raster"], m)
             for m in sorted(newest.values(), key=itemgetter("grid_res_m"), reverse=True)] # coarse first
 
