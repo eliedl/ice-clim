@@ -63,6 +63,10 @@ SERIES_COLORS: dict[str, str] = {
     # The one highlighted winter, deliberately off the ramp: a near-white reads as emphasis
     # laid over the mean rather than as a fifth category competing with it on the same ramp.
     "highlight": "#a05b55",
+    # The phenology strips, off the ramp like the highlight: they annotate the season's timing
+    # rather than measure an area, so they must not read as another band of the envelope.
+    "occurrence": "#9fd3c7",  # first / last occurrence (CT >= 0.1)
+    "freeze":     "#e8d27a",  # freeze-up / break-up (CT >= 0.4)
 }
 
 # A sibling of SERIES_COLORS, not rows in it: those colour marks read against one another on one
@@ -146,6 +150,8 @@ class SeriesPalette:
     spread: str          # the mean ± 0.5 σ patch and the ±σ lines drawn on it
     envelope: str        # the across-season min-max patch
     highlight: str       # the one named winter drawn over the mean, if any
+    occurrence: str      # the first / last occurrence strips
+    freeze: str          # the freeze-up / break-up strips
     ticks: list[float]   # month starts — the positions ``format_ticks`` labels
     highlight_season: int | None = None   # which winter wears ``highlight``; None draws no such mark
 
@@ -245,6 +251,20 @@ def series_months(layer: SeriesLayer) -> list[float]:
     return sorted({month_start(day) for day, keep in zip(layer.days, carries) if keep})
 
 
+# Which phenology events share a strip colour, keyed by ``SeriesPalette`` field like SERIES_COLORS.
+# Table order is row order: occurrence on the bottom row, freeze-up / break-up on the one above.
+PHENOLOGY_GROUPS: dict[str, tuple[str, ...]] = {
+    "occurrence": ("first_occurrence_date", "last_occurrence_date"),
+    "freeze":     ("freeze_up_date", "breakup_date"),
+}
+
+
+def phenology_groups(layer: SeriesLayer) -> list[str]:
+    """The groups with an event some coverage gate kept — the strips a panel draws and its legend names."""
+    return [group for group, events in PHENOLOGY_GROUPS.items()
+            if any(layer.phenology.span(event) for event in events)]
+
+
 def _series_scales(ctx: PlotContext,
                    layers: list[tuple]) -> list[SeriesPalette | RegionPalette]:
     """One palette per series panel, every panel read on the same months.
@@ -260,7 +280,7 @@ def _series_scales(ctx: PlotContext,
     its label join theirs, since it is drawn in colours no series panel uses.
     """
     *stacks, _region = layers
-    ticks = sorted({month for stack in stacks for month in series_months(stack[0])})
+    ticks = sorted({month for (layer,) in stacks for month in series_months(layer)})
     panels = [SeriesPalette(**SERIES_COLORS, ticks=ticks, highlight_season=ctx.highlight)
               for _stack in stacks]
     return [*panels, RegionPalette(**REGION_COLORS)]

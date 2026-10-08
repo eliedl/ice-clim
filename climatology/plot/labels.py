@@ -28,6 +28,7 @@ from climatology.core.reduction.temporal import (
     ThresholdDateDelta,
     ThresholdDuration,
 )
+from climatology.plot.colors import phenology_groups
 from climatology.plot.kinds import DELTA, RASTER, SERIES
 from climatology.plot.layout import lattice_is_legible
 from climatology.services.calendar import SEASON_ORIGIN
@@ -37,6 +38,7 @@ if TYPE_CHECKING:
     from climatology.core.context import RunContext
     from climatology.core.metrics import Metric
     from climatology.core.reduction.spatial import RasterLayer
+    from climatology.core.reduction.temporal import SeriesLayer
     from climatology.core.regions import RegionLayer
     from climatology.plot.build import PlotContext
 
@@ -388,6 +390,19 @@ def _highlighted_legend(season: int | None) -> tuple[str, ...]:
     return SERIES_LEGEND[:2] + (f"{season - 1}-{season}",) + SERIES_LEGEND[2:]
 
 
+# One entry per phenology group, appended after the series marks. Keyed by group, not by
+# position, since a panel whose gates suppressed a group draws no strip there to name.
+PHENOLOGY_LEGEND: dict[str, str] = {
+    "occurrence": "First/last occurrence",
+    "freeze":     "Freeze-up/break-up",
+}
+
+
+def _series_legend(season: int | None, layer: SeriesLayer) -> tuple[str, ...]:
+    """One panel's mark table: the highlighted-winter table, then a name per phenology group it draws."""
+    return _highlighted_legend(season) + tuple(PHENOLOGY_LEGEND[g] for g in phenology_groups(layer))
+
+
 def _region_legend(grid: Grid) -> tuple[str, ...]:
     """The ground panel's mark table, less the two cell entries when the floor drew no cells.
 
@@ -576,7 +591,7 @@ def _series_labels(ctx: PlotContext,
     list where its layer does rather than being zipped over the runs. It is read off the same
     tail, since its surface is the one string here measured from a layer rather than named.
     """
-    (region,) = layers[-1]
+    *stacks, (region,) = layers
     shared_slugs, panels_slugs = branch(ctx.runs)
     title = _title(shared_slugs)
     unit = UNITS[type(ctx.metric.kernel)]
@@ -589,8 +604,8 @@ def _series_labels(ctx: PlotContext,
         format_ticks=unit.format_ticks,
         x_axis=SERIES_X_AXIS,
         y_axis=y_axis,
-        legend=_highlighted_legend(ctx.highlight),
-    ) for panel_slugs in panels_slugs]
+        legend=_series_legend(ctx.highlight, layer),
+    ) for panel_slugs, (layer,) in zip(panels_slugs, stacks, strict=True)]
     labels.append(RegionLabel(_region_legend(region.grid), _region_footer_text(region)))
     return labels
 

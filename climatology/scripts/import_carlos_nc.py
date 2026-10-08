@@ -79,7 +79,7 @@ CODES    = {-1, 0, 1}     # class_ordered: -1 nodata/uncertain, 0 non-ice, 1 ice
 ICE_CODE = 1
 DROPPED  = (2015, 2016)   # too few acquisitions to carry a winter
 
-REGION, METRIC, REDUCTION = "manic-roi", "concentration", "series"
+REGION, METRIC, REDUCTION = "manic-roi", "landfast_concentration", "series"
 PERIOD = "2017-2026"
 
 

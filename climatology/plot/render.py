@@ -30,9 +30,11 @@ from climatology.plot.colors import (
     DARK_LINE,
     DARK_MUTED,
     DARK_OCEAN,
+    PHENOLOGY_GROUPS,
     RasterScale,
     RegionPalette,
     SeriesPalette,
+    phenology_groups,
     style_axes,
     style_colorbar,
 )
@@ -74,6 +76,8 @@ SERIES_MEAN_LW = 1.8
 SERIES_SIGMA_LW = 1.0
 SERIES_HIGHLIGHT_LW = 0.8     # thinner than the mean it is read against, and dashed
 SERIES_YLIM_HEADROOM = 1.08    # value axis top, as a fraction of the tallest mark drawn
+SERIES_STRIP_HEIGHT = 0.025    # one phenology strip's thickness, as a fraction of the axes height
+SERIES_STRIP_GAP = 0.008       # clearance under each strip row, same unit
 REGION_WET_LW = 0.6           # the wet domain's own outline
 REGION_WET_ALPHA = 0.45       # the one translucent mark in the figure, and the only one the
                               # palette cannot pre-blend: what shows through varies with the
@@ -418,12 +422,34 @@ def _draw_highlight(ax, layer: SeriesLayer, values: DataGrid, palette: SeriesPal
     return line
 
 
-def _draw_series_panel(slot: SeriesSlot, layers: tuple[SeriesLayer, ...],
+def _draw_phenology(ax, layer: SeriesLayer, palette: SeriesPalette) -> list:
+    """One strip per event from its earliest to its latest normal across the reduction orders, a row per group; a handle per drawn group.
+
+    Rows sit in axes fraction along the bottom, so only a strip's extent along the season reads.
+    A row keeps its table position when the other group is not drawn, so the same row means the
+    same group on every panel.
+    """
+    drawn = phenology_groups(layer)
+    marks = []
+    for row, (group, events) in enumerate(PHENOLOGY_GROUPS.items()):
+        if group not in drawn:
+            continue
+        ymin = SERIES_STRIP_GAP + row * (SERIES_STRIP_HEIGHT + SERIES_STRIP_GAP)
+        spans = (layer.phenology.span(event) for event in events)
+        strips = [ax.axvspan(*span, ymin, ymin + SERIES_STRIP_HEIGHT,
+                             color=getattr(palette, group), linewidth=0)
+                  for span in spans if span]
+        marks.append(strips[0])   # one key per group, not per event
+    return marks
+
+
+def _draw_series_panel(slot: SeriesSlot, layer: SeriesLayer,
                        lab: SeriesLabel, palette: SeriesPalette) -> None:
     """One series panel: each season's annual maximum, the daily mean, the σ spread about it, the
-    min-max envelope across seasons, and — when one is named — a single winter's own series.
+    min-max envelope across seasons, — when one is named — a single winter's own series, and the
+    phenology strips along the bottom.
 
-    Only the *first* tier is drawn, which for a multi-tier region is the coarsest — the tiers
+    Only the *first* tier is loaded (``load_archived``), which for a multi-tier region is the coarsest — the tiers
     cover the same ground at different resolutions, and a series has already compressed the
     domain away, so there is no extent left to nest one inside the other. On a single-tier
     region (``manic-roi``) that is the whole product and the panel is exact. On an adaptive
@@ -438,8 +464,8 @@ def _draw_series_panel(slot: SeriesSlot, layers: tuple[SeriesLayer, ...],
     # (n_seasons, n_days), in ice-covered cells; scaled here to km² on the grid's *true* cell,
     # which the archive records. The nominal res_m² this used to read by is ~1 % high (-1.223 %
     # on kamou-roi, 14.940 vs 14.757 km² at peak; probe 035), so the axis is now quotable.
-    values = layers[0].values * layers[0].cell_area_m2 / KM2
-    days = layers[0].days
+    values = layer.values * layer.cell_area_m2 / KM2
+    days = layer.days
     # NaN where a season published no chart that day (DEC-056). A column still carries the
     # seasons that did, so the mean over those is a reading rather than a gap — but only
     # where enough of them charted: the mean and the σ about it obey the same WMO
@@ -477,9 +503,10 @@ def _draw_series_panel(slot: SeriesSlot, layers: tuple[SeriesLayer, ...],
     # Drawn in place rather than beside the insert below, because draw order is z order — a named
     # winter belongs over the mean it is read against and under the peaks.
     if palette.highlight_season is not None:
-        highlighted = _draw_highlight(ax, layers[0], values, palette)
+        highlighted = _draw_highlight(ax, layer, values, palette)
     points = ax.scatter(peak_days, peaks,
                         s=SERIES_POINT_SIZE, color=palette.points, linewidths=0)
+    strips = _draw_phenology(ax, layer, palette)
 
     # The min-max envelope is the tallest mark: it contains every point, and mean + σ sits under
     # the per-day maximum for any season count.
@@ -492,10 +519,11 @@ def _draw_series_panel(slot: SeriesSlot, layers: tuple[SeriesLayer, ...],
     marks = [points, line, sigma, half, envelope]
     if palette.highlight_season is not None:
         marks.insert(2, highlighted)   # beside the mean, mirroring ``labels._highlighted_legend``
+    marks.extend(strips)               # after every series mark, as ``labels._series_legend`` names them
     _legend(ax, marks, lab.legend, loc="upper right")
 
 
-def _render_series(layers: list[tuple[SeriesLayer, ...]],
+def _render_series(layers: list[tuple[SeriesLayer]],
                    labels: list[SeriesLabel | RegionLabel],
                    palettes: list[SeriesPalette | RegionPalette],
                    panels: SeriesPanels) -> Figure:
@@ -516,9 +544,9 @@ def _render_series(layers: list[tuple[SeriesLayer, ...]],
     *stacks, (region,) = layers
     *series_labels, region_label = labels
     *series_palettes, region_palette = palettes
-    for slot, stack, lab, palette in zip(panels.slots, stacks, series_labels, series_palettes,
-                                         strict=True):
-        _draw_series_panel(slot, stack, lab, palette)
+    for slot, (layer,), lab, palette in zip(panels.slots, stacks, series_labels, series_palettes,
+                                            strict=True):
+        _draw_series_panel(slot, layer, lab, palette)
 
     tile, land = load_basemap(region.grid.bounds)
     _draw_region_map(panels.map_ax, region, region_label, region_palette, tile=tile, land=land)
