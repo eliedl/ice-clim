@@ -27,15 +27,19 @@ class ChartSource(Enum):
     daily chart's in days; ``step_days`` converts both to days at the product boundary
     (TierProduct), which is what makes durations comparable across sources.
 
-    ``mpo`` is the odd member: an externally computed reference product staged straight
-    into the archive (see ``scripts/import_mpo_climatology.py``), not a chart table. It
-    never reaches the DB fetch, so its ``table`` is nominal; it exists so the MPO layer
-    is addressable as a run coordinate and can be differenced against our own products.
+    ``mpo``, ``sentinel2`` and ``sentinel1`` are the odd members: externally computed
+    products staged straight into the archive (``scripts/import_mpo_climatology.py``,
+    ``scripts/import_carlos_nc.py``), not chart tables. They never reach the DB fetch, so
+    their ``table`` is nominal; they exist so each layer is addressable as a run
+    coordinate and can be compared against our own products. ``step_days`` is 1 for all
+    three: each stands for the single day it observed.
     """
 
     sgrda = ("CIS SIGRID3 daily charts (SGRDA)", 1)
     sgrdr = ("CIS SIGRID3 weekly historical charts (SGRDR)", 7)
     mpo = ("DFO IceGridOccurrence climatology (GEC, 1991-2020)", 1)
+    sentinel2 = ("Sentinel-2 GMM intertidal ice classification (Araújo)", 1)
+    sentinel1 = ("Sentinel-1 SAR Random Forest ice classification (Araújo)", 1)
 
     def __init__(self, display_label: str, step_days: int) -> None:
         self.display_label = display_label   # plot footer source attribution

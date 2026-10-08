@@ -109,39 +109,45 @@ _EGG_FIELDS = ("CT", "CA", "CB", "CC", "CN", "CD", "SA", "SB", "SC")
 # table readable (the registry below stamps each slug).
 M = Metric
 _SPECS: dict[str, Metric] = {
-    "freeze_up_date":          M(ThresholdDate((0.4,), "first_above")),
-    "breakup_date":            M(ThresholdDate((0.4,), "first_below")),
-    "first_occurrence_date":   M(ThresholdDate((0.1,), "first_above")),
-    "last_occurrence_date":    M(ThresholdDate((0.1,), "last_above")),
-    "closing_date":            M(ThresholdDate((0.8,), "first_above")),
-    "opening_date":            M(ThresholdDate((0.8,), "first_below")),
-    "formation_lag":           M(ThresholdDateDelta(ThresholdDate((0.4,), "first_above"),
-                                                    ThresholdDate((0.1,), "first_above"))),
-    "melt_lag":                M(ThresholdDateDelta(ThresholdDate((0.1,), "first_below"),
-                                                    ThresholdDate((0.4,), "first_below"))),
-    "season_duration":         M(ThresholdDuration((0.4,), operator.ge)),
-    "season_duration_10":      M(ThresholdDuration((0.1,), operator.ge)),
-    "storm_exposure_duration": M(ThresholdDuration((0.3,), operator.le)),
-    "landfast_freeze_up_date": M(ThresholdDate((0.5,), "first_above"),
-                                 fields=("FA",), conversion=LANDFAST_CONVERSION),
-    "landfast_breakup_date":   M(ThresholdDate((0.5,), "first_below"),
-                                 fields=("FA",), conversion=LANDFAST_CONVERSION),
-    "landfast_duration":       M(ThresholdDuration((0.5,), operator.ge),
-                                 fields=("FA",), conversion=LANDFAST_CONVERSION),
-    "landfast_exposure":       M(ThresholdDuration((0.5,), operator.lt),
-                                 fields=("FA",), conversion=LANDFAST_CONVERSION),
+
+    # --- standard phenology
+    "freeze_up":                    M(ThresholdDate((0.4,), "first_above")),
+    "breakup":                      M(ThresholdDate((0.4,), "first_below")),
+    "first_occurrence":             M(ThresholdDate((0.1,), "first_above")),
+    "last_occurrence":              M(ThresholdDate((0.1,), "last_above")),
+    "duration":                     M(ThresholdDuration((0.4,), operator.ge)),
+    "duration_10":                  M(ThresholdDuration((0.1,), operator.ge)),
+
+    # --- landfast metrics    
+    "landfast_freeze_up_date":      M(ThresholdDate((0.5,), "first_above"),
+                                        fields=("FA",), conversion=LANDFAST_CONVERSION),
+    "landfast_breakup_date":        M(ThresholdDate((0.5,), "first_below"),
+                                        fields=("FA",), conversion=LANDFAST_CONVERSION),
+    "landfast_duration":            M(ThresholdDuration((0.5,), operator.ge),
+                                        fields=("FA",), conversion=LANDFAST_CONVERSION),
+    "landfast_exposure":            M(ThresholdDuration((0.5,), operator.lt),
+                                        fields=("FA",), conversion=LANDFAST_CONVERSION),
+
+    # --- experimental metrics
     "developed_ice_freeze_up_date": M(ThresholdDate(DEVELOPED_ICE_THRESHOLDS, "first_above"),
-                                      fields=_EGG_FIELDS, conversion=DEVELOPED_ICE_CONVERSION),
+                                        fields=_EGG_FIELDS, conversion=DEVELOPED_ICE_CONVERSION),
     "developed_ice_breakup_date":   M(ThresholdDate(DEVELOPED_ICE_THRESHOLDS, "first_below"),
-                                      fields=_EGG_FIELDS, conversion=DEVELOPED_ICE_CONVERSION),
+                                        fields=_EGG_FIELDS, conversion=DEVELOPED_ICE_CONVERSION),
     "developed_ice_duration":       M(ThresholdDuration(DEVELOPED_ICE_THRESHOLDS, operator.ge),
-                                      fields=_EGG_FIELDS, conversion=DEVELOPED_ICE_CONVERSION),
-    # lt + any: the complement of duration's ge + all (see ThresholdDuration).
-    "developed_ice_exposure":       M(ThresholdDuration(DEVELOPED_ICE_THRESHOLDS, operator.lt,
-                                                        combine=np.any),
-                                      fields=_EGG_FIELDS, conversion=DEVELOPED_ICE_CONVERSION),
-    "concentration":            M(DomainMean(), reduction=DOMAIN_SERIES),
-    "landfast_concentration":   M(DomainMean(), reduction=DOMAIN_SERIES, fields=("FA",), conversion=LANDFAST_CONVERSION),
+                                        fields=_EGG_FIELDS, conversion=DEVELOPED_ICE_CONVERSION),
+    "developed_ice_exposure":       M(ThresholdDuration(DEVELOPED_ICE_THRESHOLDS, operator.lt, combine=np.any),
+                                        fields=_EGG_FIELDS, conversion=DEVELOPED_ICE_CONVERSION),
+    "closing":                      M(ThresholdDate((0.8,), "first_above")),
+    "opening":                      M(ThresholdDate((0.8,), "first_below")),
+    
+    "storm_exposure":               M(ThresholdDuration((0.3,), operator.le)),
+    "formation_lag":                M(ThresholdDateDelta(ThresholdDate((0.4,), "first_above"),
+                                                    ThresholdDate((0.1,), "first_above"))),
+    "melt_lag":                     M(ThresholdDateDelta(ThresholdDate((0.1,), "first_below"),
+                                                    ThresholdDate((0.4,), "first_below"))),
+    # --- timeseries
+    "concentration":                M(DomainMean(), reduction=DOMAIN_SERIES),
+    "landfast_concentration":       M(DomainMean(), reduction=DOMAIN_SERIES, fields=("FA",), conversion=LANDFAST_CONVERSION),
 }
 
 
