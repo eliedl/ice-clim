@@ -513,11 +513,16 @@ def main() -> None:
     report_path.write_text(_report(ctx, layer, n_wet, archive, durations, dates),
                            encoding="utf-8")
     phenology_path = _write_phenology(archive, dates)
-    _figure(ctx, layer.seasons, durations[0], figure_path, archive)
 
     print(report_path.read_text(encoding="utf-8"))
     print(f"written    {report_path}")
-    print(f"written    {figure_path}")
+    # A primary no winter carries (sentinel1 never reaches CT 0.4) leaves the trend figure
+    # nothing to fit or frame.
+    if not durations[0].n_valid:
+        print(f"skipped    trend figure: no winter carries {durations[0].label}")
+    else:
+        _figure(ctx, layer.seasons, durations[0], figure_path, archive)
+        print(f"written    {figure_path}")
     print(f"written    {phenology_path}")
 
 
