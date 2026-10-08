@@ -55,6 +55,7 @@ from climatology.plot.layout import (
     match_map_heights,
 )
 from climatology.core.reduction.spatial import RasterLayer, area_weights
+from climatology.services.calendar import admissible_days
 from climatology.utils._types import KM2, BoolGrid, DataGrid, GridBounds
 
 if TYPE_CHECKING:
@@ -439,9 +440,19 @@ def _draw_series_panel(slot: SeriesSlot, layers: tuple[SeriesLayer, ...],
     # on kamou-roi, 14.940 vs 14.757 km² at peak; probe 035), so the axis is now quotable.
     values = layers[0].values * layers[0].cell_area_m2 / KM2
     days = layers[0].days
-    # NaN where a season published no chart that day (DEC-056); the column still carries
-    # the seasons that did, so the curve is the mean over the charted ones, not a gap.
-    mean, sd = np.nanmean(values, axis=0), np.nanstd(values, axis=0)
+    # NaN where a season published no chart that day (DEC-056). A column still carries the
+    # seasons that did, so the mean over those is a reading rather than a gap — but only
+    # where enough of them charted: the mean and the σ about it obey the same WMO
+    # availability rule the raster climatology runs under (DEC-025/027), and break where a
+    # day is too thinly charted to average, which is typically the season's shoulders.
+    # Computed on the admissible columns alone, so an all-NaN day never reaches ``nanmean``.
+    charted = np.count_nonzero(~np.isnan(values), axis=0)
+    admissible = admissible_days(charted, values.shape[0])
+    mean, sd = (np.full(values.shape[1], np.nan) for _ in range(2))
+    mean[admissible] = np.nanmean(values[:, admissible], axis=0)
+    sd[admissible] = np.nanstd(values[:, admissible], axis=0)
+    # The envelope is a bound, not a statistic: a single season's extreme is the whole claim,
+    # so it is drawn over every charted day, admissible or not — as are the peaks below.
     lo, hi = np.nanmin(values, axis=0), np.nanmax(values, axis=0)
 
     # One dot per season, not per season-day: the date axis is compressed away by a max, so a

@@ -14,6 +14,10 @@ from climatology.utils._types import RawPolygons
 
 SEASON_ORIGIN = date(2000, 9, 1)
 
+# WMO data-availability rule: a day enters the climatology only if observed in at
+# least this fraction of the period's seasons (DEC-025/027).
+WMO_MIN_COVERAGE = 0.8
+
 _PERIOD_RE = re.compile(r"(\d{4})-(\d{4})")
 
 # Fail loudly at import if a future epoch breaks the leap-safe invariant: a leap
@@ -70,12 +74,22 @@ def attach_season_calendar(df: RawPolygons) -> RawPolygons:
     return df
 
 
-def filter_admissible_days(df: RawPolygons, *, coverage: float = 0.8) -> RawPolygons:
+def admissible_days(charted_seasons, n_seasons: int, *, coverage: float = WMO_MIN_COVERAGE):
+    """Per-day boolean: charted in enough seasons to enter the climatology (DEC-025/027).
+
+    The rule itself, over per-day season counts in whatever container the caller holds them
+    in — a ``Series`` keyed by day for the polygon filter below, a column-wise count for the
+    series panel's mean. Both compare against one threshold, so it lives here once.
+    """
+    return charted_seasons >= int(np.ceil(coverage * n_seasons))
+
+
+def filter_admissible_days(df: RawPolygons, *, coverage: float = WMO_MIN_COVERAGE) -> RawPolygons:
     """Keep only days meeting the WMO data-availability rule (>= ``coverage`` of seasons); expects the season-calendar columns (DEC-025/027)."""
-    n_seasons = df["season"].nunique()
-    min_seasons = int(np.ceil(coverage * n_seasons))
     coverage_per_day = df.groupby("day_of_season")["season"].nunique()
-    admissible = coverage_per_day[coverage_per_day >= min_seasons].index
+    admissible = coverage_per_day[
+        admissible_days(coverage_per_day, df["season"].nunique(), coverage=coverage)
+    ].index
     return df[df["day_of_season"].isin(admissible)]
 
 
