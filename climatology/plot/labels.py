@@ -334,6 +334,8 @@ SOURCE_LABELS: dict[str, str] = {
     "sgrda": "Daily ice charts",
     "sgrdr": "Weekly ice charts",
     "mpo": "DFO reference climatology",
+    "sentinel1": "Sentinel-1 SAR Random Forest ice classification (Araújo)",
+    "sentinel2": "Sentinel-2 GMM intertidal ice classification (Araújo)"
 }
 
 # How an order reads in a title; ``REDUCTION_STYLES`` above is the same closed set under the
