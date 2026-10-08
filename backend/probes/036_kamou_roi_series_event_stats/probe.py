@@ -62,6 +62,7 @@ from climatology.core.reduction.temporal import (
     DOMAIN_SERIES,
     MEAN_THEN_THRESHOLD,
     MEDIAN_THEN_THRESHOLD,
+    PHENOLOGY_SUFFIX,
     THRESHOLD_THEN_MEAN,
     THRESHOLD_THEN_MEDIAN,
     Kernel,
@@ -373,7 +374,7 @@ def _report(ctx: RunContext, layer: SeriesLayer, n_wet: int, archive: Path,
 
 def _write_phenology(archive: Path, dates: list[Stat]) -> Path:
     """Each event's normal day of season per reduction order, beside the series it was read off; null where gated."""
-    path = archive.with_suffix(".phenology.json")
+    path = archive.with_suffix(PHENOLOGY_SUFFIX)
     # Rounded to sever the kernels' float32 tail (95.4 -> 95.4000015258789) from the record.
     normals = {stat.label: {slug: None if np.isnan(day) else round(day, 2)
                             for slug, day in stat.normals.items()}
@@ -484,7 +485,7 @@ def _assert_series_reduction(ctx: RunContext) -> None:
 def _archived_series(ctx: RunContext) -> tuple[Path, SeriesLayer]:
     """The newest archived series of this run, on the coarsest tier — the one `tiers[0]` counts the wet cells of."""
     npz, manifest = find_archived(ctx)[0]
-    return npz, SeriesLayer.from_manifest(np.load(npz)["values"], manifest)
+    return npz, SeriesLayer.from_archive(npz, manifest)
 
 
 def main() -> None:

@@ -14,7 +14,7 @@ import rasterio
 from climatology.core.context import RunContext, Result, FetchResult
 from climatology.core.metrics import SERIES_METRICS
 from climatology.core.reduction.spatial import RasterLayer
-from climatology.core.reduction.temporal import SeriesLayer
+from climatology.core.reduction.temporal import Phenology, SeriesLayer
 from climatology.core.regions import Tier
 from climatology.plot.kinds import DELTA
 from climatology.plot.labels import branch
@@ -224,13 +224,13 @@ def find_archived(ctx: RunContext) -> list[tuple[Path, dict]]:
             for m in sorted(newest.values(), key=itemgetter("grid_res_m"), reverse=True)] # coarse first
 
 
-def load_archived(ctx: RunContext) -> tuple[RasterLayer, ...] | tuple[SeriesLayer, ...]:
-    """Every archived tier of one run as layers, coarsest grid first — or its series.
-    """
+def load_archived(ctx: RunContext) -> tuple[RasterLayer, ...] | tuple[SeriesLayer]:
+    """Every archived tier of one run as layers, coarsest grid first — or its series, off the first tier alone."""
     archived = find_archived(ctx)
     if ctx.metric.slug in SERIES_METRICS:
-        return tuple(SeriesLayer.from_manifest(np.load(npz)["values"], m)
-                     for npz, m in archived)
+        # The first tier is the one probe 036 folds and the series panel draws.
+        npz, manifest = archived[0]
+        return (SeriesLayer.from_archive(npz, manifest, Phenology.from_archive(npz)),)
     return tuple(RasterLayer(np.load(npz)["values"], m["bounds"], m["grid_res_m"])
                  for npz, m in archived)
 

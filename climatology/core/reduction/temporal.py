@@ -2,10 +2,12 @@
 
 from __future__ import annotations
 
+import json
 import operator
 from abc import ABC, abstractmethod
 from collections.abc import Callable, Iterator
 from dataclasses import dataclass
+from pathlib import Path
 
 import numpy as np
 
@@ -316,6 +318,31 @@ def _seasons(period_slug: str, n_seasons: int) -> tuple[int, ...]:
     return seasons
 
 
+PHENOLOGY_SUFFIX = ".phenology.json"   # sidecar of an archived series, sharing its stem
+
+
+@dataclass(frozen=True)
+class Phenology:
+    """Normal day of season of each threshold event under each reduction order, read off one series."""
+
+    normals: dict[str, dict[str, float | None]]   # event -> order slug -> day; None where gated
+
+    @classmethod
+    def from_archive(cls, npz: Path) -> Phenology:
+        """The sidecar beside one archived series; raises when it was never computed off that archive."""
+        path = npz.with_suffix(PHENOLOGY_SUFFIX)
+        if not path.exists():
+            raise FileNotFoundError(
+                f"No phenology beside {npz.name}. Compute it off this archive first: "
+                f"backend/probes/036_kamou_roi_series_event_stats/probe.py")
+        return cls(json.loads(path.read_text()))
+
+    def span(self, event: str) -> tuple[float, float] | None:
+        """Earliest and latest normal of one event across the orders; None when every order was gated."""
+        days = [day for day in self.normals[event].values() if day is not None]
+        return (min(days), max(days)) if days else None
+
+
 @dataclass(frozen=True)
 class SeriesLayer:
     """One archived domain-compressed series: its values and the two axes they are read on.
@@ -330,16 +357,20 @@ class SeriesLayer:
     days: np.ndarray          # day-of-season ordinal of each column
     seasons: tuple[int, ...]  # the winter each row holds, named by the year it ends in
     cell_area_m2: float       # true ground area of one cell — what turns the values into an area
+    phenology: Phenology | None = None   # None for the probe that computes it off this series
 
     @classmethod
-    def from_manifest(cls, values: DataGrid, manifest: dict) -> SeriesLayer:
+    def from_archive(cls, npz: Path, manifest: dict,
+                     phenology: Phenology | None = None) -> SeriesLayer:
         """One archived series with both its axes reconstructed from the manifest that located it."""
+        values = np.load(npz)["values"]
         n_seasons, n_days = values.shape
         return cls(values=values,
                    days=series_days(manifest["first_day"], manifest["last_day"],
                                     manifest["day_step"], n_days),
                    seasons=_seasons(manifest["period"], n_seasons),
-                   cell_area_m2=_cell_area(manifest))
+                   cell_area_m2=_cell_area(manifest),
+                   phenology=phenology)
 
     def row_for(self, season: int) -> int:
         """Row index of one winter; raises if the series does not carry it."""
