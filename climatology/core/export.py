@@ -198,12 +198,15 @@ def archive_product(ctx: RunContext, fetch: FetchResult, result: Result) -> Path
 
     return npz
 
+
 def find_archived(ctx: RunContext) -> list[tuple[Path, dict]]:
     """Newest archived raster per tier for one run identity, coarsest grid first; raises when the run was never archived."""
     arch_dir = _product_dir(ctx) / "archive"
     *_, reduction = ctx.describe()
 
-    manifests = (json.loads(p.read_text()) for p in arch_dir.glob("*.json"))
+    # Reached through their raster rather than by extension: sidecars sharing the raster's stem
+    # (``phenology_path``) are JSON too, and would otherwise be read as manifests.
+    manifests = (json.loads(p.with_suffix(".json").read_text()) for p in arch_dir.glob("*.npz"))
     by_age = sorted((m for m in manifests if m["reduction"] == reduction), key=itemgetter("created"))
     newest = {m["tier"]: m for m in by_age}        # overwrite on iteration on manifest
 

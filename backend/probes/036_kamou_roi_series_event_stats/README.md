@@ -108,6 +108,11 @@ questions; a report quoting one must not be read as the other.
 
 - `output/YYYY-MM-DD_HHMMSS_report.txt` — the per-winter tables, the normals, the regression
   and the caveats, as one standalone text report.
+- `climatology/output/<region>/<metric>/<period>/<source>/archive/<series-stem>.phenology.json`
+  — *(added 2026-10-08)* the event-date normals per reduction order, as a sidecar of the series
+  archive, for the series plot to read. From this date on, the probe also acts as the interim
+  producer of that post-processing step and breaks the "no write-back" rule stated in Method.
+  The 2026-09-30 outcome above stays valid.
 - `output/YYYY-MM-DD_HHMMSS_duration_trend.png` — duration per winter, the ttmean normal, the
   least-squares line, annotated with slope, intercept and R².
 

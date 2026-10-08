@@ -21,10 +21,14 @@ What it reports:
     freeze-up, break-up, last occurrence) under each of the four reduction orders, as a day of
     season and MM-DD.
 
-Read-only: one archived .npz + manifest, and the region geometry for the cell count of the
+Reads one archived .npz + manifest, and the region geometry for the cell count of the
 domain the series was summed over — `tier.wet_mask` for a CIS source, `tier.region_polygon`
 for the staged Sentinel series, which were folded over the ROI as drawn
-(`climatology/scripts/import_carlos_nc.py`). No DB, no write-back to `climatology/output/`.
+(`climatology/scripts/import_carlos_nc.py`). No DB. Writes back one file to
+`climatology/output/`: the event-date normals per reduction order, as a `.phenology.json`
+sidecar sharing the series archive's stem — the series plot reads it from there. This makes
+the probe the interim producer of a post-processing step until it is promoted to
+`climatology/`.
 
 Run:
     .venv/bin/python -m backend.probes.036_kamou_roi_series_event_stats.probe concentration \\
@@ -37,6 +41,7 @@ Run:
 from __future__ import annotations
 
 import argparse
+import json
 import operator
 from dataclasses import dataclass
 from datetime import datetime
@@ -74,7 +79,6 @@ from climatology.plot.colors import (
 from climatology.plot.labels import REGION_LABELS
 from climatology.services.calendar import WMO_MIN_COVERAGE, admissible_days, season_day_label
 from climatology.services.sources import ChartSource
-from climatology.utils.arithmetics import _nanmean
 
 OUTPUT_DIR = Path(__file__).parent / "output"
 
@@ -367,6 +371,17 @@ def _report(ctx: RunContext, layer: SeriesLayer, n_wet: int, archive: Path,
     return "\n".join(lines) + "\n"
 
 
+def _write_phenology(archive: Path, dates: list[Stat]) -> Path:
+    """Each event's normal day of season per reduction order, beside the series it was read off; null where gated."""
+    path = archive.with_suffix(".phenology.json")
+    # Rounded to sever the kernels' float32 tail (95.4 -> 95.4000015258789) from the record.
+    normals = {stat.label: {slug: None if np.isnan(day) else round(day, 2)
+                            for slug, day in stat.normals.items()}
+               for stat in dates}
+    path.write_text(json.dumps(normals, indent=2))
+    return path
+
+
 # --- figure ------------------------------------------------------------------
 
 def _figure(ctx: RunContext, seasons: tuple[int, ...], stat: Stat, path: Path,
@@ -497,11 +512,13 @@ def main() -> None:
 
     report_path.write_text(_report(ctx, layer, n_wet, archive, durations, dates),
                            encoding="utf-8")
+    phenology_path = _write_phenology(archive, dates)
     _figure(ctx, layer.seasons, durations[0], figure_path, archive)
 
     print(report_path.read_text(encoding="utf-8"))
     print(f"written    {report_path}")
     print(f"written    {figure_path}")
+    print(f"written    {phenology_path}")
 
 
 if __name__ == "__main__":
