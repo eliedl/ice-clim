@@ -301,6 +301,9 @@ climatology results.
 - e185 · [Cheng pers. comm. 2026b] **Coastal results judged plausible.** On the coastal climatology results shown to her, Cheng considers it « tout à fait possible que ce que [j']observe soit réel » — no first-party reason to suspect an archive artifact behind the signal. #finding #coastal
 - e186 · [Cheng pers. comm. 2026b] **Two comparanda offered** for the coastal signal: **[Patterson 2021]** on landfast-ice breakout phenology at the northern floe edge of Admiralty Inlet, Nunavut, and **[Wang et al. 2025]** on the thermodynamic control of Northern Labrador Sea ice trends and variability. Both added to the Watchlist. → e185 #reference #landfast #forcing
 
+## 2026-10-14
+
+- e187 · [Wang et al. 2025] Uses dot fill patches to shows the regions with "trends not significant at the 5% level". Inspiration for representation of trends' validity with regards to the current PAVICS mean atmospheric surface temperature.   
 ---
 
 ## Watchlist (potentially relevant, not yet read)
