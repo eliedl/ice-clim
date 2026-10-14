@@ -336,6 +336,7 @@ SOURCE_LABELS: dict[str, str] = {
     "sgrda": "Daily ice charts",
     "sgrdr": "Weekly ice charts",
     "mpo": "DFO reference climatology",
+    "cis": "CIS reference climatologies",
     "sentinel1": "Sentinel-1 SAR Random Forest ice classification (Araújo)",
     "sentinel2": "Sentinel-2 GMM intertidal ice classification (Araújo)"
 }

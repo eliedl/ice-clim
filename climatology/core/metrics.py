@@ -119,9 +119,9 @@ _SPECS: dict[str, Metric] = {
     "duration_10":                  M(ThresholdDuration((0.1,), operator.ge)),
 
     # --- landfast metrics    
-    "landfast_freeze_up_date":      M(ThresholdDate((0.5,), "first_above"),
+    "landfast_freeze_up":      M(ThresholdDate((0.5,), "first_above"),
                                         fields=("FA",), conversion=LANDFAST_CONVERSION),
-    "landfast_breakup_date":        M(ThresholdDate((0.5,), "first_below"),
+    "landfast_breakup":        M(ThresholdDate((0.5,), "first_below"),
                                         fields=("FA",), conversion=LANDFAST_CONVERSION),
     "landfast_duration":            M(ThresholdDuration((0.5,), operator.ge),
                                         fields=("FA",), conversion=LANDFAST_CONVERSION),
@@ -129,9 +129,9 @@ _SPECS: dict[str, Metric] = {
                                         fields=("FA",), conversion=LANDFAST_CONVERSION),
 
     # --- experimental metrics
-    "developed_ice_freeze_up_date": M(ThresholdDate(DEVELOPED_ICE_THRESHOLDS, "first_above"),
+    "developed_ice_freeze_up": M(ThresholdDate(DEVELOPED_ICE_THRESHOLDS, "first_above"),
                                         fields=_EGG_FIELDS, conversion=DEVELOPED_ICE_CONVERSION),
-    "developed_ice_breakup_date":   M(ThresholdDate(DEVELOPED_ICE_THRESHOLDS, "first_below"),
+    "developed_ice_breakup":   M(ThresholdDate(DEVELOPED_ICE_THRESHOLDS, "first_below"),
                                         fields=_EGG_FIELDS, conversion=DEVELOPED_ICE_CONVERSION),
     "developed_ice_duration":       M(ThresholdDuration(DEVELOPED_ICE_THRESHOLDS, operator.ge),
                                         fields=_EGG_FIELDS, conversion=DEVELOPED_ICE_CONVERSION),
