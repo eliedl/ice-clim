@@ -115,8 +115,8 @@ _SPECS: dict[str, Metric] = {
     "breakup":                      M(ThresholdDate((0.4,), "first_below")),
     "first_occurrence":             M(ThresholdDate((0.1,), "first_above")),
     "last_occurrence":              M(ThresholdDate((0.1,), "last_above")),
-    "duration":                     M(ThresholdDuration((0.4,), operator.ge)),
-    "duration_10":                  M(ThresholdDuration((0.1,), operator.ge)),
+    "season_duration":                     M(ThresholdDuration((0.4,), operator.ge)),
+    "season_duration_10":                  M(ThresholdDuration((0.1,), operator.ge)),
 
     # --- landfast metrics    
     "landfast_freeze_up":      M(ThresholdDate((0.5,), "first_above"),

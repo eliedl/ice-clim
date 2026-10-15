@@ -317,7 +317,7 @@ METRIC_LABELS: dict[str, str] = {
     "melt_lag":                     "Melt lag",
     "season_duration":              "Season duration (4/10)",
     "season_duration_10":           "Season duration (1/10)",
-    "storm_exposure_duration":      "Storm exposure duration",
+    "storm_exposure":      "Storm exposure duration",
     "landfast_freeze_up":      "Landfast freeze-up",
     "landfast_breakup":        "Landfast break-up",
     "landfast_duration":            "Landfast ice duration",

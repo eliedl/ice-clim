@@ -598,4 +598,45 @@ This log records all scientific decisions, assumptions, and edge-case choices id
 
 ---
 
+## DEC-058 — SGRDR West Arctic (WA) Series Selection: Corrected `CIS_WA` Zips (Historical Dates) Authoritative, Issue-Date Tars Quarantined
+
+- **Context**: Adding the West Arctic regional charts to `sgrdr` requires choosing among three archive series in `~/data/CIS/SGRDR/WA/`. A file-name census (2026-10-15) found:
+  - `CIS_WA_YYYYMMDD_pl_a.zip`: **1850** files, 1968-06-25 → 2020-12-25, **1850/1850 on the HD calendar**, uploaded to the CIS FTP **2026-09-04**.
+  - `CIS_WA_YYYYMMDD_pl_a.tar`: **1773** files, 1968-06-25 → 2020-01-13, **341/1773** on HD, mostly Mondays (924), uploaded **2023-01-06**.
+  - `cis_SGRDRWA_YYYYMMDDT1800Z_pl_?.tar`: **51** files, 2020-01-20 → 2020-12-28, **0/51** on HD, all Mondays, uploaded **2023-01-06**. One b-revision (`20200907`).
+
+  The zip and old-tar series have almost identical per-year counts but share only **341 dates**: they cover the same weeks under two dating conventions, HD versus chart issue date. Because the dates differ, the natural key `(T1, region)` would not deduplicate them, so ingesting all three would double-ingest 1968–2020. This is the DEC-033 failure on a whole record instead of one year.
+- **Options considered**:
+  1. **Keep the tars**: issue-date series, 2023 upload, off the HD calendar.
+  2. **Keep the zips** (HD-dated, complete through 2020-12-25, 2026 upload).
+  3. **Keep both**: rejected, double ingestion as above.
+- **Choice made**: Option 2. All 1824 `.tar` files were moved to `~/data/CIS/SGRDR/WA_superseded/` (quarantine, not deletion). `SGRDR/WA/` holds only the 1850 zips. `backend/ingestion/sources.py` `SGRDR_SOURCE` discovers them: `_SGRDR_OLD_CLEAN_RE` matches `EC|WA`, `WA/` was added to `directories`, and `WA → "wa"` to `region_label_map`. Dry-run `discover()` returns 1850 `wa` charts and leaves `ec` unchanged at 2911.
+- **Rationale**:
+  - (a) Angela Cheng (CIS) told the operator she uploaded the **corrected historical shapefiles** to the FTP at the end of summer 2026. The remote upload dates match: zips 2026-09-04, tars 2023-01-06, before the correction.
+  - (b) HD dating puts WA on the same weekly time axis as the 1968–2020 `CIS_EC` record (DEC-033) and matches the end-of-season historical-chart product (e116, e117).
+  - (c) Same precedent and mechanism as DEC-033: the archive property is enforced at ingestion by keeping the superseded series out of the discovery directory.
+- **Field schema: current state of the codebase**:
+  - The `sgrdr` schema is defined solely by the shared `KEEP_FIELDS` whitelist (`backend/ingestion/sources.py`): `POLY_TYPE`, `CT`, `CA`, `CB`, `CC`, `CN`, `SA`, `SB`, `SC`, `CD`, `FA`, `FB`, `FC`, `geometry`.
+  - `pipeline.transform` keeps only the source columns whose names are in that set.
+  - There is **no `E_`→standard rename** anywhere in `backend/ingestion/`.
+  - The field map and drop list in **DEC-032** (including its `CF` addendum) describe an earlier state and **are outdated**. `KEEP_FIELDS` is authoritative; read the code, not DEC-032, for the ingested field set.
+- **Validation status**: APPROVED (2026-10-15) — series selection and quarantine are user-directed.
+- **Open points and caveats**:
+  - **Ingestion not yet run**; it is deferred until the `SGRDR/EA/` archive is reviewed.
+  - **Climatology region assumption** **[NEEDS REVIEW]**: `climatology/services/sources.py` reads `sgrdr` region-agnostically, and its docstring states it "currently holds ec only". After WA ingestion that is false, and WA and EC charts share `T1` values on the HD calendar. WA also adds dates with no EC chart (1968-06-25 → 1968-11-19). Before ingesting, check that the climatology derives observed days per ROI rather than from the table-wide `T1` set.
+  - **2021+ WA**: no files in the local archive. `_SGRDR_NEW_CLEAN_RE` matches `EC` only, so WA tars pulled later would be skipped silently. Extend the grammar when 2021+ WA is ingested; per the DEC-033 addendum, re-pull post-correction copies first.
+  - **Source of the correction statement** **[NEEDS REVIEW]**: READING_LOG e173 attributes the summer-2026 FTP upload to the **2021+** charts, and e181 expects the historical charts by April 2027. The statement used here (pre-2021 corrected historical shapefiles uploaded late summer 2026) was reported by the operator on 2026-10-15 and is not yet in READING_LOG.
+  - **Unpacked folder**: `SGRDR/WA/CIS_WA_19720709_pl_a/` is not matched by `discover()`, because file globs only match `*.zip`/`*.tar`. It does no harm.
+- **Implementation refs**:
+  - `~/data/CIS/SGRDR/WA_superseded/README.md`: provenance, re-runnable census script and its output.
+  - `~/data/README.md` § "Données mises à l'écart"; `~/data/CIS/README.md`.
+  - `backend/ingestion/sources.py`: `_SGRDR_OLD_CLEAN_RE`, `SGRDR_SOURCE`, `KEEP_FIELDS`.
+  - `backend/ingestion/pipeline.py:transform`: the whitelist filter.
+  - Relates to DEC-030 (version selection), DEC-032 (superseded field map), DEC-033 (EC precedent).
+- **Literature cross-ref**:
+  - [Cheng pers. comm. 2026], reported 2026-10-15; READING_LOG e173, e181.
+  - READING_LOG e116, e117: historical charts compiled on the HD interval.
+
+---
+
 *Decisions are logged with their validation status. Approved entries are confirmed; PENDING entries await human validation.*

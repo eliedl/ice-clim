@@ -33,9 +33,9 @@ _SGRDA_CLEAN_RE = re.compile(
 
 # --- SGRDR ---
 
-# Era 1 (1968–2019): ZIP, date-only, pl_a only, NAD27 → reproject on ingest
+# Era 1 (1968–2020): ZIP, date-only, pl_a only, NAD27 → reproject on ingest
 _SGRDR_OLD_CLEAN_RE = re.compile(
-    r"^CIS_(?P<region>EC)_(?P<date>\d{8})_pl_(?P<rev>a)\.zip$",
+    r"^CIS_(?P<region>EC|WA)_(?P<date>\d{8})_pl_(?P<rev>a)\.zip$",
     re.IGNORECASE,
 )
 # Era 2 (2020–present): TAR, optional timestamp, pl_a/b/c, WGS84 → reproject on ingest
@@ -159,8 +159,8 @@ SGRDR_SOURCE = ChartSource(
     label="SGRDR",
     table="sgrdr",
     keep_fields=KEEP_FIELDS,
-    directories=[DATA_ROOT / "SGRDR" / "EC"],
+    directories=[DATA_ROOT / "SGRDR" / "EC", DATA_ROOT / "SGRDR" / "WA"],
     clean_res=[_SGRDR_OLD_CLEAN_RE, _SGRDR_NEW_CLEAN_RE],
-    region_label_map={"EC": "ec"},
+    region_label_map={"EC": "ec", "WA": "wa"},
     file_globs=("*.tar", "*.zip"),
 )
